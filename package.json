@@ -1,0 +1,17 @@
+{
+  "name": "homeremote-server",
+  "version": "1.0.0",
+  "description": "Home server companion for the Xteink X4 Pro HA Room Remote (spec section 8b) - central profile authoring + mDNS discovery (homeremote.local) so multi-remote households don't re-enter each room's config by hand.",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multicast-dns": "^7.2.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

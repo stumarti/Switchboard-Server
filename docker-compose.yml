@@ -1,0 +1,33 @@
+services:
+  switchboard-server:
+    # Pulls the published image (built + pushed by .github/workflows/release.yml
+    # on every vX.Y.Z tag). Comment this out and uncomment `build: .` below to
+    # build from this source folder instead - see README.md "Releases & the
+    # published image" for when you'd want that.
+    image: ghcr.io/stumarti/switchboard-server:latest
+    # build: .
+    container_name: switchboard-server
+    # REQUIRED for mDNS (switchboard.local) to resolve on the LAN - multicast
+    # does not cross Docker's default bridge network. See README.md.
+    network_mode: host
+    environment:
+      - PORT=45678
+      - DATA_DIR=/data
+      - MDNS_HOSTNAME=switchboard.local
+      # DNS-SD service type (advertised as _switchboard._tcp.local) - this
+      # is the record that actually carries the port, so a client doing a
+      # real service query (not just resolving the hostname) gets host
+      # AND port with nothing hardcoded. See README.md's "mDNS: is the
+      # port really needed?" section.
+      - MDNS_SERVICE_TYPE=switchboard
+      # Uncomment to force the advertised IP/interface if auto-detection
+      # picks the wrong NIC (e.g. a multi-homed Unraid box):
+      # - MDNS_IP=192.168.1.50
+      # - MDNS_INTERFACE=br0
+    volumes:
+      # Profiles persist here across container recreation/updates. This is
+      # real household data (WiFi password, Home Assistant tokens) - back
+      # it up, and never point this at a folder that's inside a git repo
+      # you intend to commit. See README.md "Secrets & .gitignore".
+      - ./data:/data
+    restart: unless-stopped

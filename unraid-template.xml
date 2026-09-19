@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<!--
+  Unraid Community Applications-style template for Switchboard Server.
+
+  Repository points at the published image on GitHub Container Registry,
+  built and pushed by .github/workflows/release.yml on every vX.Y.Z tag
+  (see README.md "Releases & the published image"). Unraid pulls it like
+  any other registry image - no local build step needed.
+
+  If the GHCR package is private (the default for a private GitHub repo),
+  Unraid needs to be logged in to ghcr.io first: Docker tab -> "add a
+  registry" (or `docker login ghcr.io` from an Unraid terminal) with a
+  GitHub Personal Access Token that has `read:packages` scope. Or make the
+  package public from its GitHub page if you don't mind that - see the
+  README for both options.
+
+  Use this template with Unraid's "Add Container" -> "Template" -> browse
+  to this file, or ignore it and just `docker compose up -d` (docker-
+  compose.yml) if you have the Compose Manager plugin - either path
+  produces the same container.
+-->
+<Container version="2">
+  <Name>switchboard-server</Name>
+  <Repository>ghcr.io/stumarti/switchboard-server:latest</Repository>
+  <Registry>https://github.com/stumarti/Switchboard-Server/pkgs/container/switchboard-server</Registry>
+  <Network>host</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/stumarti/Switchboard-Server</Support>
+  <Project>https://github.com/stumarti/Switchboard-Server</Project>
+  <Overview>Home server companion for Switchboard, the X4 Pro smart-home remote firmware (github.com/stumarti/Switchboard). One instance per household: stores every room's profile centrally (lighting, climate, blinds, media, TV, HA connection) and serves a browser-friendly admin UI, so a multi-remote home authors each room's config in one place instead of on every physical unit. Advertises itself on the LAN as switchboard.local via mDNS, which is how each X4 Pro remote finds it automatically. REQUIRES Host networking - mDNS multicast does not cross Docker's default bridge network.</Overview>
+  <Category>HomeAutomation:</Category>
+  <WebUI>http://[IP]:[PORT:45678]/</WebUI>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI Port" Target="PORT" Default="45678" Mode="" Description="Port the admin web UI/API listens on inside the container. Networking is Host, so this is the actual port on the Unraid box too - pick something that doesn't collide with the Unraid GUI (80/443) or other host services." Type="Variable" Display="always" Required="true" Mask="false">45678</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/switchboard-server/data" Mode="rw" Description="Where room profiles (JSON files) are stored persistently - includes Home Assistant tokens and your WiFi password (see Globals), so back this path up like any other credential store, not just for disaster recovery. If you're migrating from an older locally-built homeremote-server container, point this at that same existing data path instead of a fresh one." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/switchboard-server/data</Config>
+  <Config Name="mDNS Hostname" Target="MDNS_HOSTNAME" Default="switchboard.local" Mode="" Description="Hostname this container advertises via mDNS (plain A record), and the hostname X4 Pro remotes look for from Settings -> Select room / SWITCHBOARD_SERVER_HOST in the firmware config." Type="Variable" Display="always" Required="false" Mask="false">switchboard.local</Config>
+  <Config Name="mDNS Service Type" Target="MDNS_SERVICE_TYPE" Default="switchboard" Mode="" Description="DNS-SD service type advertised (becomes _&lt;value&gt;._tcp.local). This is the record that carries the port - a proper DNS-SD/Bonjour query for this service returns host and port together, so devices don't need the port hardcoded." Type="Variable" Display="advanced" Required="false" Mask="false">switchboard</Config>
+  <Config Name="mDNS Force IP" Target="MDNS_IP" Default="" Mode="" Description="Optional. Force the advertised IP if auto-detection picks the wrong NIC (common on a multi-homed Unraid box). Leave blank to auto-detect." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="mDNS Interface" Target="MDNS_INTERFACE" Default="" Mode="" Description="Optional. Prefer this host network interface name (e.g. br0) when auto-detecting the LAN IP. Leave blank to auto-detect." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+</Container>

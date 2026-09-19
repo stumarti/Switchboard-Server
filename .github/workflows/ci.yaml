@@ -1,0 +1,44 @@
+name: CI
+
+# Build-check on every push/PR — catches a broken `npm install`, a JS syntax
+# error, or a Dockerfile that stopped building, before it reaches the box.
+# Never pushes an image; see release.yml for that.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax-check every source file
+        run: |
+          set -e
+          for f in server.js lib/*.js; do
+            echo "node --check $f"
+            node --check "$f"
+          done
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          build-args: |
+            VERSION=ci-${{ github.sha }}
+          tags: switchboard-server:ci

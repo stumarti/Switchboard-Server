@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Switchboard Server — Room Profiles</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiByeD0iNSIgZmlsbD0iIzRmOGNmZiIvPjxwYXRoIGZpbGw9IiNmZmZmZmYiIGQ9Ik0xMiwwQzguOTYsMCA2LjIxLDEuMjMgNC4yMiwzLjIyTDUuNjMsNC42M0M3LjI2LDMgOS41LDIgMTIsMkMxNC41LDIgMTYuNzQsMyAxOC4zNiw0LjY0TDE5Ljc3LDMuMjNDMTcuNzksMS4yMyAxNS4wNCwwIDEyLDBNNy4wNSw2LjA1TDguNDYsNy40NkM5LjM3LDYuNTYgMTAuNjIsNiAxMiw2QzEzLjM4LDYgMTQuNjMsNi41NiAxNS41NCw3LjQ2TDE2Ljk1LDYuMDVDMTUuNjgsNC43OCAxMy45Myw0IDEyLDRDMTAuMDcsNCA4LjMyLDQuNzggNy4wNSw2LjA1TTEyLDE1QTIsMiAwIDAsMSAxMCwxM0EyLDIgMCAwLDEgMTIsMTFBMiwyIDAgMCwxIDE0LDEzQTIsMiAwIDAsMSAxMiwxNU0xNSw5SDlBMSwxIDAgMCwwIDgsMTBWMjJBMSwxIDAgMCwwIDksMjNIMTVBMSwxIDAgMCwwIDE2LDIyVjEwQTEsMSAwIDAsMCAxNSw5WiIvPjwvc3ZnPg==" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <svg class="brand-logo" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12,0C8.96,0 6.21,1.23 4.22,3.22L5.63,4.63C7.26,3 9.5,2 12,2C14.5,2 16.74,3 18.36,4.64L19.77,3.23C17.79,1.23 15.04,0 12,0M7.05,6.05L8.46,7.46C9.37,6.56 10.62,6 12,6C13.38,6 14.63,6.56 15.54,7.46L16.95,6.05C15.68,4.78 13.93,4 12,4C10.07,4 8.32,4.78 7.05,6.05M12,15A2,2 0 0,1 10,13A2,2 0 0,1 12,11A2,2 0 0,1 14,13A2,2 0 0,1 12,15M15,9H9A1,1 0 0,0 8,10V22A1,1 0 0,0 9,23H15A1,1 0 0,0 16,22V10A1,1 0 0,0 15,9Z" />
+          </svg>
+          <h1>Switchboard Server</h1>
+        </div>
+        <p class="subtitle">Room profiles for your X4 Pro remotes</p>
+      </div>
+
+      <button id="globals-nav-btn" class="btn btn-secondary btn-block globals-nav-btn">Globals — WiFi &amp; Home Assistant</button>
+
+      <button id="new-profile-btn" class="btn btn-primary btn-block">+ New room profile</button>
+
+      <ul id="profile-list" class="profile-list"></ul>
+
+      <div class="sidebar-footer">
+        <label class="btn btn-secondary btn-block file-btn">
+          Upload profile JSON
+          <input type="file" id="upload-input" accept="application/json" hidden />
+        </label>
+        <p class="hint" id="mdns-hint">switchboard.local</p>
+        <p class="hint" id="version-hint"></p>
+        <a class="hint flasher-link" href="https://stumarti.github.io/Switchboard/" target="_blank" rel="noopener noreferrer">⚡ Flash an X4 Pro remote</a>
+      </div>
+    </aside>
+
+    <main class="editor">
+      <div id="empty-state" class="empty-state">
+        <p>Select a room profile on the left, or create a new one.</p>
+        <p class="hint">
+          Each profile covers a room's name, description, Home Assistant
+          connection, Standby screen settings, Climate sensors, Lighting,
+          Blinds, Media, and TV. Any X4 Pro remote on this network can pull
+          one of these profiles from Settings → Configuration → Load
+          from home server, instead of entering it by hand.
+        </p>
+        <p class="hint">
+          WiFi and a default Home Assistant connection live under
+          <strong>Globals</strong> in the sidebar and are shared by every
+          room — a room only needs its own Home Assistant connection if it
+          switches that on for itself.
+        </p>
+      </div>
+
+      <form id="profile-form" class="profile-form" hidden>
+        <div class="form-toolbar">
+          <input type="text" id="field-name" class="name-input" placeholder="Room name (e.g. Living Room)" required />
+          <div class="toolbar-actions">
+            <span id="save-status" class="save-status"></span>
+            <button type="button" id="download-btn" class="btn btn-secondary">Download JSON</button>
+            <button type="button" id="delete-btn" class="btn btn-danger">Delete</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+
+        <p class="slug-line">Slug: <code id="field-slug"></code> — mDNS hostname for this container: <code id="field-mdns-host"></code></p>
+
+        <label class="description-field">Description
+          <textarea id="field-description" rows="2" placeholder="Optional notes about this room (e.g. where it is, which device is installed)"></textarea>
+        </label>
+
+        <div class="form-main">
+          <section class="card">
+            <h2>Active screens</h2>
+            <p class="card-hint">
+              Which on-device carousel screens this room actually has —
+              unchecked ones are skipped instead of showing up empty or
+              non-functional. Just an on/off flag for each; Climate and
+              Xbox aren't configured here (still on-device only), and
+              this doesn't hide or affect the Lighting/Blinds/Media/TV
+              cards below.
+            </p>
+            <div class="control-checkboxes" id="screens-controls">
+              <label class="checkbox-label"><input type="checkbox" data-screen="lighting" /> Lighting</label>
+              <label class="checkbox-label"><input type="checkbox" data-screen="climate" /> Climate</label>
+              <label class="checkbox-label"><input type="checkbox" data-screen="blinds" /> Blinds</label>
+              <label class="checkbox-label"><input type="checkbox" data-screen="music" /> Music</label>
+              <label class="checkbox-label"><input type="checkbox" data-screen="tv" /> TV</label>
+              <label class="checkbox-label"><input type="checkbox" data-screen="xbox" /> Xbox</label>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-header-row">
+              <h2>Home Assistant connection</h2>
+              <label class="checkbox-label">
+                <input type="checkbox" id="ha-use-global" />
+                Use global connection
+              </label>
+            </div>
+            <p class="card-hint">
+              This room uses the connection configured under
+              <button type="button" id="ha-global-link" class="link-btn">Globals</button>.
+              Switch off "Use global connection" to give this room its own
+              Home Assistant host, port, and token instead.
+            </p>
+            <div class="row">
+              <label>Host<input type="text" id="ha-host" placeholder="192.168.1.10" /></label>
+              <label class="narrow">Port<input type="number" id="ha-port" placeholder="8123" /></label>
+            </div>
+            <label>Long-lived access token
+              <div class="token-row">
+                <input type="password" id="ha-token" autocomplete="new-password" />
+                <button type="button" id="ha-token-toggle" class="btn btn-secondary btn-small">Show</button>
+              </div>
+            </label>
+          </section>
+
+          <section class="card">
+            <h2>Standby</h2>
+            <p class="card-hint">
+              The deep-sleep dashboard screen — date, weather, and indoor
+              temperature, shown on wake and refreshed on a timer.
+            </p>
+            <div class="row">
+              <label>Weather entity<input type="text" id="standby-weather-entity" placeholder="weather.home" /></label>
+              <label>Indoor climate entity<input type="text" id="standby-climate-entity" placeholder="climate.living_room" /></label>
+            </div>
+            <label class="narrow">Refresh interval
+              <select id="standby-refresh">
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+                <option value="60">60 min</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="card">
+            <h2>Climate</h2>
+            <p class="card-hint">
+              The main temperature sensor for this room's Climate screen,
+              plus any additional ones to show alongside it (one per
+              floor, one near a window, and so on). Read-only display
+              data, so there's nothing else to configure per sensor.
+            </p>
+            <div class="climate-subsection">
+              <div class="row">
+                <label>Climate sensor<input type="text" id="climate-entity" placeholder="sensor.living_room_temp" /></label>
+              </div>
+            </div>
+            <div class="climate-subsection">
+              <div class="card-header-row">
+                <h3>Additional temperatures</h3>
+                <button type="button" id="climate-add-sensor" class="btn btn-secondary btn-small">+ Add sensor</button>
+              </div>
+              <div id="climate-sensors-list" class="climate-list"></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Lighting</h2>
+            <p class="card-hint">
+              A whole-room group control, any number of individual lights,
+              and one-tap Home Assistant scene shortcuts. On/off is always
+              available — tick only the extra controls each light or the
+              group actually supports.
+            </p>
+
+            <div class="lighting-subsection">
+              <div class="card-header-row">
+                <h3>Whole-room group</h3>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="lighting-group-enabled" />
+                  Enable
+                </label>
+              </div>
+              <div class="row">
+                <label>Name<input type="text" id="lighting-group-name" placeholder="All lights" /></label>
+                <label>Entity<input type="text" id="lighting-group-entity" placeholder="light.living_room_group" /></label>
+              </div>
+              <div class="control-checkboxes" id="lighting-group-controls">
+                <label class="checkbox-label"><input type="checkbox" data-control="brightness" /> Brightness</label>
+                <label class="checkbox-label"><input type="checkbox" data-control="colorTemp" /> Color temperature</label>
+                <label class="checkbox-label"><input type="checkbox" data-control="color" /> RGB color</label>
+                <label class="checkbox-label"><input type="checkbox" data-control="effects" /> Effects</label>
+              </div>
+            </div>
+
+            <div class="lighting-subsection">
+              <div class="card-header-row">
+                <h3>Individual lights</h3>
+                <button type="button" id="lighting-add-light" class="btn btn-secondary btn-small">+ Add light</button>
+              </div>
+              <div id="lighting-lights-list" class="lighting-list"></div>
+            </div>
+
+            <div class="lighting-subsection">
+              <div class="card-header-row">
+                <h3>Scenes</h3>
+                <button type="button" id="lighting-add-scene" class="btn btn-secondary btn-small">+ Add scene</button>
+              </div>
+              <div id="lighting-scenes-list" class="lighting-list"></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Blinds</h2>
+            <p class="card-hint">
+              A whole-room group control plus any number of individual
+              blinds. Every blind (and the group) gets Open / Close /
+              Stop — no extra controls to set up here, since Stop already
+              doubles as "go to favorite position" on real cover
+              hardware/Home Assistant once the blind isn't moving.
+            </p>
+
+            <div class="blinds-subsection">
+              <div class="card-header-row">
+                <h3>Whole-room group</h3>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="blinds-group-enabled" />
+                  Enable
+                </label>
+              </div>
+              <div class="row">
+                <label>Name<input type="text" id="blinds-group-name" placeholder="All blinds" /></label>
+                <label>Entity<input type="text" id="blinds-group-entity" placeholder="cover.living_room_group" /></label>
+              </div>
+            </div>
+
+            <div class="blinds-subsection">
+              <div class="card-header-row">
+                <h3>Individual blinds</h3>
+                <button type="button" id="blinds-add-item" class="btn btn-secondary btn-small">+ Add blind</button>
+              </div>
+              <div id="blinds-items-list" class="blinds-list"></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Media</h2>
+            <p class="card-hint">
+              The entity behind this room's on-device Music screen —
+              usually the household's Spotify Connect player. Its own Home
+              Assistant capabilities (play/pause, next/previous, volume,
+              and so on) carry over automatically; nothing else to
+              configure here.
+            </p>
+            <div class="card-header-row">
+              <h3>Player</h3>
+              <label class="checkbox-label">
+                <input type="checkbox" id="media-enabled" />
+                Enable
+              </label>
+            </div>
+            <div class="row">
+              <label>Name<input type="text" id="media-name" placeholder="Media player" /></label>
+              <label>Entity<input type="text" id="media-entity" placeholder="media_player.spotify" /></label>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>TV</h2>
+            <p class="card-hint">
+              This room's Android TV device. Standard controls — D-pad,
+              Home/Back, volume, play/pause — come from the two entities'
+              own Home Assistant capabilities, nothing to configure here;
+              just wire up where to launch YouTube, Netflix, and TV mate.
+            </p>
+            <div class="row">
+              <label>Media player entity<input type="text" id="tv-media-player-entity" placeholder="media_player.living_room_tv" /></label>
+              <label>Remote entity<input type="text" id="tv-remote-entity" placeholder="remote.living_room_tv" /></label>
+            </div>
+
+            <div class="tv-subsection">
+              <h3>Apps</h3>
+              <p class="card-hint">
+                Each app's launch value is whatever the remote entity's
+                launch/activity command expects — usually an Android
+                package name (e.g. <code>com.google.android.youtube.tv</code>).
+              </p>
+              <div class="row">
+                <label>YouTube<input type="text" id="tv-app-youtube" placeholder="com.google.android.youtube.tv" /></label>
+                <label>Netflix<input type="text" id="tv-app-netflix" placeholder="com.netflix.ninja" /></label>
+                <label>TV mate<input type="text" id="tv-app-tvmate" placeholder="com.example.tvmate" /></label>
+              </div>
+            </div>
+          </section>
+        </div>
+      </form>
+
+      <form id="globals-form" class="profile-form" hidden>
+        <div class="form-toolbar">
+          <div class="name-input globals-title">Globals</div>
+          <div class="toolbar-actions">
+            <span id="globals-save-status" class="save-status"></span>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+
+        <p class="slug-line">Shared by every room profile on this server.</p>
+
+        <div class="form-main">
+          <section class="card">
+            <h2>WiFi</h2>
+            <p class="card-hint">
+              The household network every X4 Pro remote should join.
+            </p>
+            <div class="row">
+              <label>Network name (SSID)<input type="text" id="wifi-ssid" placeholder="MyHomeWiFi" /></label>
+            </div>
+            <label>Password
+              <div class="token-row">
+                <input type="password" id="wifi-password" autocomplete="new-password" />
+                <button type="button" id="wifi-password-toggle" class="btn btn-secondary btn-small">Show</button>
+              </div>
+            </label>
+          </section>
+
+          <section class="card">
+            <h2>WiFi networks</h2>
+            <p class="card-hint">
+              Networks to show/share from an on-device WiFi screen (e.g. a
+              main network and a guest network) — separate from the single
+              network above, which is just for this container's own
+              provisioning flow.
+            </p>
+            <div class="wifi-subsection">
+              <div class="card-header-row">
+                <h3>Networks</h3>
+                <button type="button" id="wifi-networks-add" class="btn btn-secondary btn-small">+ Add network</button>
+              </div>
+              <div id="wifi-networks-list" class="wifi-list"></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Home Assistant connection</h2>
+            <p class="card-hint">
+              Used by every room, unless a room switches on its own
+              connection instead.
+            </p>
+            <div class="row">
+              <label>Host<input type="text" id="global-ha-host" placeholder="192.168.1.10" /></label>
+              <label class="narrow">Port<input type="number" id="global-ha-port" placeholder="8123" /></label>
+            </div>
+            <label>Long-lived access token
+              <div class="token-row">
+                <input type="password" id="global-ha-token" autocomplete="new-password" />
+                <button type="button" id="global-ha-token-toggle" class="btn btn-secondary btn-small">Show</button>
+              </div>
+            </label>
+          </section>
+
+          <section class="card">
+            <h2>Clock</h2>
+            <p class="card-hint">
+              The live clock shown in every Active screen's status bar
+              comes from the device's own onboard clock, not from Home
+              Assistant — this is the NTP server it syncs against over
+              WiFi to stay accurate.
+            </p>
+            <div class="row">
+              <label>NTP server<input type="text" id="ntp-server" placeholder="pool.ntp.org" /></label>
+            </div>
+          </section>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
