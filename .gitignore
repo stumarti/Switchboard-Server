@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Switchboard Server — .gitignore
+# ---------------------------------------------------------------------------
+# The important line in this file is the `data/` block below. Everything in
+# that folder is live household data — every room's Home Assistant
+# long-lived access token, the household WiFi password(s), and the shared
+# Home Assistant connection — written there by the app itself (the default
+# DATA_DIR, when nothing overrides it, is this repo's own data/ folder; see
+# lib/store.js). None of it belongs in git, ever. See README.md's
+# "Secrets & .gitignore" section before your first commit.
+
+# ---- Runtime data (the important one) --------------------------------------
+data/*
+!data/.gitkeep
+
+# ---- Dependencies -----------------------------------------------------------
+node_modules/
+
+# ---- Logs --------------------------------------------------------------------
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# ---- Env files (none exist yet, but if one gets added later) ----------------
+.env
+.env.*
+!.env.example
+
+# ---- Editor / OS cruft --------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- Docker build artifacts ---------------------------------------------------
+*.tar
