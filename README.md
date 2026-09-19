@@ -4,6 +4,14 @@ The home server companion for [Switchboard](https://github.com/stumarti/Switchbo
 
 **[⚡ Flash an X4 Pro remote](https://stumarti.github.io/Switchboard/)**
 
+## How this fits together
+
+This is step one. Get this running and set up at least one room *before* you flash a remote — the device pulls its whole setup from here, so there's nothing useful for it to show until a room exists.
+
+1. **Run this** (below) and create a room.
+2. **Flash a remote** — see the [Switchboard README](https://github.com/stumarti/Switchboard) for that half.
+3. On the remote: join Wi-Fi, then **Settings → Select room** to attach it to the room you just created here.
+
 ## Screenshots
 
 <table>
@@ -15,6 +23,10 @@ The home server companion for [Switchboard](https://github.com/stumarti/Switchbo
   <td colspan="2"><img src="screenshots/globals.png" width="360" alt="Globals page"><br><sub>Globals — shared WiFi & Home Assistant</sub></td>
 </tr>
 </table>
+
+- **Room list** (left sidebar) — every room you've set up, plus buttons to add a new one or jump to Globals.
+- **Room profile** — one room's whole setup: its Home Assistant connection (or "use the shared one"), the Standby weather/temperature entities, and cards for Lighting, Blinds, Media, Climate and TV. The **Active screens** checkboxes at the top control which of these actually show up on that room's remote.
+- **Globals** — the household-wide WiFi network, a list of WiFi networks to show as join-QR codes on remotes, and the default Home Assistant connection every room uses unless it opts out.
 
 ## Quick start (Docker Compose)
 
