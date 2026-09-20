@@ -110,7 +110,8 @@ app.post('/api/devices/:slug/config', (req, res) => {
     media: normalized.media,
     climate: normalized.climate,
     tv: normalized.tv,
-    xbox: normalized.xbox
+    xbox: normalized.xbox,
+    hub: normalized.hub
   };
 
   store.saveProfile(slug, profile);

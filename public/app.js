@@ -12,8 +12,11 @@
  * on-device Music screen, but named `media` rather than `music`), TV (an
  * Android TV's media_player + remote entities, plus three fixed app-
  * launch shortcuts), Xbox (the same media_player + remote split, plus an
- * unbounded games list), and which on-device carousel screens the room
- * has enabled, plus one household-wide Globals record (WiFi + a default Home
+ * unbounded games list), the Quick Access hub (a global enable flag plus
+ * an unbounded, ordered list of launcher buttons, each opening a screen
+ * and firing an optional quick action), and which on-device carousel
+ * screens the room has enabled, plus one household-wide Globals record
+ * (WiFi + a default Home
  * Assistant connection every room uses unless it switches on its own,
  * the clock's NTP server, and an unbounded list of WiFi networks for a
  * shared on-device WiFi screen). See lib/store.js's defaultProfile /
@@ -83,6 +86,9 @@ const els = {
   xboxListSource: document.getElementById('xbox-list-source'),
   xboxGamesList: document.getElementById('xbox-games-list'),
   xboxAddGame: document.getElementById('xbox-add-game'),
+  hubQuickActionsEnabled: document.getElementById('hub-quick-actions-enabled'),
+  hubItemsList: document.getElementById('hub-items-list'),
+  hubAddItem: document.getElementById('hub-add-item'),
   globalsForm: document.getElementById('globals-form'),
   globalsSaveStatus: document.getElementById('globals-save-status'),
   wifiSsid: document.getElementById('wifi-ssid'),
@@ -298,6 +304,104 @@ function readXbox() {
     remoteEntity: els.xboxRemoteEntity.value.trim(),
     listSource: els.xboxListSource.value,
     games: readGamesList()
+  };
+}
+
+// --- Quick Access hub (device home/launcher screen) ---------------------
+//
+// An unbounded, ordered list of buttons - each one's top two-thirds opens
+// a `target` screen, its bottom third fires a quick `action`. Same
+// row-per-item, read-straight-from-the-DOM treatment as Lighting/Blinds/
+// Climate/Xbox. `target` is a free-form string server-side, but the row
+// offers a select of the currently-known screens; if a stored item's
+// target isn't one of those (a newer screen this admin UI doesn't know
+// about yet), an extra option is added so the value isn't silently
+// changed out from under it just by opening the row. The entity/service/
+// data fields are only shown once an action type is picked - same
+// show/hide-by-value idea as the "Use global connection" checkbox above,
+// just hiding rather than disabling since there's nothing to fill in at
+// all when the action type is "None".
+
+const HUB_TARGETS = ['media', 'climate', 'lighting', 'tv', 'xbox', 'guestwifi', 'vacuum'];
+
+function hubTargetOptionsHtml(current) {
+  const targets = HUB_TARGETS.includes(current) || !current
+    ? HUB_TARGETS
+    : [...HUB_TARGETS, current];
+  return targets
+    .map((t) => `<option value="${escapeAttr(t)}" ${t === current ? 'selected' : ''}>${escapeAttr(t)}</option>`)
+    .join('');
+}
+
+function applyHubRowActionState(row) {
+  const type = row.querySelector('.hub-item-action-type').value;
+  row.querySelector('.hub-item-action-fields').hidden = type === 'none';
+}
+
+function createHubRow(item) {
+  const it = item || {};
+  const action = it.action || {};
+  const row = document.createElement('div');
+  row.className = 'hub-item';
+  row.dataset.id = it.id || '';
+  row.innerHTML = `
+    <div class="row">
+      <label>Name<input type="text" class="hub-item-name" value="${escapeAttr(it.name)}" placeholder="Movie Mode" /></label>
+      <label>Icon<input type="text" class="hub-item-icon" value="${escapeAttr(it.icon)}" placeholder="icon name, e.g. movie" /></label>
+      <button type="button" class="btn btn-danger btn-small remove-item">Remove</button>
+    </div>
+    <div class="row">
+      <label>Opens screen
+        <select class="hub-item-target">${hubTargetOptionsHtml(it.target)}</select>
+      </label>
+      <label class="narrow">Quick action
+        <select class="hub-item-action-type">
+          <option value="toggle" ${action.type === 'toggle' ? 'selected' : ''}>Toggle</option>
+          <option value="run" ${action.type === 'run' ? 'selected' : ''}>Run</option>
+          <option value="none" ${!action.type || action.type === 'none' ? 'selected' : ''}>None</option>
+        </select>
+      </label>
+    </div>
+    <div class="row hub-item-action-fields">
+      <label>Entity<input type="text" class="hub-item-action-entity" value="${escapeAttr(action.entity)}" placeholder="light.lamp" /></label>
+      <label>Service (optional)<input type="text" class="hub-item-action-service" value="${escapeAttr(action.service)}" placeholder="light.turn_on" /></label>
+      <label>Data (optional, JSON)<input type="text" class="hub-item-action-data" value="${escapeAttr(action.data)}" placeholder='{"brightness": 200}' /></label>
+    </div>
+  `;
+  applyHubRowActionState(row);
+  return row;
+}
+
+function renderHubList(items) {
+  els.hubItemsList.innerHTML = '';
+  (items || []).forEach((item) => els.hubItemsList.appendChild(createHubRow(item)));
+}
+
+function readHubList() {
+  return Array.from(els.hubItemsList.querySelectorAll('.hub-item')).map((row) => ({
+    id: row.dataset.id || undefined,
+    name: row.querySelector('.hub-item-name').value.trim(),
+    icon: row.querySelector('.hub-item-icon').value.trim(),
+    target: row.querySelector('.hub-item-target').value,
+    action: {
+      type: row.querySelector('.hub-item-action-type').value,
+      entity: row.querySelector('.hub-item-action-entity').value.trim(),
+      service: row.querySelector('.hub-item-action-service').value.trim(),
+      data: row.querySelector('.hub-item-action-data').value.trim()
+    }
+  }));
+}
+
+function fillHub(hub) {
+  const h = hub || {};
+  els.hubQuickActionsEnabled.checked = h.quickActionsEnabled !== false;
+  renderHubList(h.items);
+}
+
+function readHub() {
+  return {
+    quickActionsEnabled: els.hubQuickActionsEnabled.checked,
+    items: readHubList()
   };
 }
 
@@ -571,6 +675,7 @@ function fillForm(profile) {
   fillMedia(profile.media);
   fillTv(profile.tv);
   fillXbox(profile.xbox);
+  fillHub(profile.hub);
 
   els.saveStatus.textContent = '';
 }
@@ -596,7 +701,8 @@ function readForm() {
     media: readMedia(),
     climate: readClimate(),
     tv: readTv(),
-    xbox: readXbox()
+    xbox: readXbox(),
+    hub: readHub()
   };
 }
 
@@ -835,6 +941,22 @@ els.xboxAddGame.addEventListener('click', () => {
 els.xboxGamesList.addEventListener('click', (e) => {
   if (e.target.classList.contains('remove-item')) {
     e.target.closest('.xbox-item').remove();
+  }
+});
+
+els.hubAddItem.addEventListener('click', () => {
+  els.hubItemsList.appendChild(createHubRow(null));
+});
+
+els.hubItemsList.addEventListener('click', (e) => {
+  if (e.target.classList.contains('remove-item')) {
+    e.target.closest('.hub-item').remove();
+  }
+});
+
+els.hubItemsList.addEventListener('change', (e) => {
+  if (e.target.classList.contains('hub-item-action-type')) {
+    applyHubRowActionState(e.target.closest('.hub-item'));
   }
 });
 
