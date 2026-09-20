@@ -395,6 +395,7 @@ button:disabled {
 .blinds-subsection,
 .climate-subsection,
 .tv-subsection,
+.xbox-subsection,
 .wifi-subsection {
   padding-top: 16px;
   margin-top: 16px;
@@ -405,6 +406,7 @@ button:disabled {
 .blinds-subsection:first-of-type,
 .climate-subsection:first-of-type,
 .tv-subsection:first-of-type,
+.xbox-subsection:first-of-type,
 .wifi-subsection:first-of-type {
   padding-top: 0;
   margin-top: 0;
@@ -415,6 +417,7 @@ button:disabled {
 .blinds-subsection h3,
 .climate-subsection h3,
 .tv-subsection h3,
+.xbox-subsection h3,
 .wifi-subsection h3 {
   margin: 0;
   font-size: 13px;
@@ -424,6 +427,7 @@ button:disabled {
 .lighting-list,
 .blinds-list,
 .climate-list,
+.xbox-list,
 .wifi-list {
   display: flex;
   flex-direction: column;
@@ -434,6 +438,7 @@ button:disabled {
 .lighting-list:empty::before,
 .blinds-list:empty::before,
 .climate-list:empty::before,
+.xbox-list:empty::before,
 .wifi-list:empty::before {
   content: "None yet.";
   font-size: 12px;
@@ -443,6 +448,7 @@ button:disabled {
 .lighting-item,
 .blinds-item,
 .climate-item,
+.xbox-item,
 .wifi-item {
   background: var(--panel-2);
   border: 1px solid var(--border);
@@ -453,6 +459,7 @@ button:disabled {
 .lighting-item .row,
 .blinds-item .row,
 .climate-item .row,
+.xbox-item .row,
 .wifi-item .row {
   align-items: flex-end;
 }
@@ -460,6 +467,7 @@ button:disabled {
 .lighting-item .remove-item,
 .blinds-item .remove-item,
 .climate-item .remove-item,
+.xbox-item .remove-item,
 .wifi-item .remove-item {
   flex: 0 0 auto;
 }

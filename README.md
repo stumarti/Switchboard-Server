@@ -25,7 +25,7 @@ This is step one. Get this running and set up at least one room *before* you fla
 </table>
 
 - **Room list** (left sidebar) — every room you've set up, plus buttons to add a new one or jump to Globals.
-- **Room profile** — one room's whole setup: its Home Assistant connection (or "use the shared one"), the Standby weather/temperature entities, and cards for Lighting, Blinds, Media, Climate and TV. The **Active screens** checkboxes at the top control which of these actually show up on that room's remote.
+- **Room profile** — one room's whole setup: its Home Assistant connection (or "use the shared one"), the Standby weather/temperature entities, and cards for Lighting, Blinds, Media, Climate, TV and Xbox. The **Active screens** checkboxes at the top control which of these actually show up on that room's remote.
 - **Globals** — the household-wide WiFi network, a list of WiFi networks to show as join-QR codes on remotes, and the default Home Assistant connection every room uses unless it opts out.
 
 ## Quick start (Docker Compose)
@@ -65,7 +65,7 @@ If this repo is private, GHCR images are private by default too — `docker logi
 
 ## What it does
 
-- One JSON profile per room (lighting, blinds, media, climate, TV, which carousel screens are on) — edit them from a browser instead of the on-device form.
+- One JSON profile per room (lighting, blinds, media, climate, TV, Xbox, which carousel screens are on) — edit them from a browser instead of the on-device form.
 - A shared **Globals** page for WiFi and your Home Assistant connection, so you only enter those once.
 - Advertises itself on the LAN (`switchboard.local`) so remotes find it with zero configuration.
 
@@ -143,7 +143,15 @@ Each room profile, in full:
   "screens": { "lighting": true, "climate": true, "blinds": true, "music": true, "tv": false, "xbox": false },
   "media": { "enabled": true, "name": "Living Room Speaker", "entity": "media_player.spotify" },
   "climate": { "entity": "sensor.living_room_temp", "additionalSensors": [] },
-  "tv": { "mediaPlayerEntity": "media_player.tv", "remoteEntity": "remote.tv", "apps": { "youtube": "...", "netflix": "...", "tvMate": "..." } }
+  "tv": { "mediaPlayerEntity": "media_player.tv", "remoteEntity": "remote.tv", "apps": { "youtube": "...", "netflix": "...", "tvMate": "..." } },
+  "xbox": {
+    "enabled": true,
+    "name": "Xbox",
+    "mediaPlayerEntity": "media_player.xbox_series_x",
+    "remoteEntity": "remote.xbox_series_x",
+    "listSource": "configured",
+    "games": [ { "id": "...", "name": "Halo Infinite", "productId": "9PP5TF5D0S0X", "art": "https://.../halo.jpg" } ]
+  }
 }
 ```
 
@@ -151,7 +159,8 @@ A few things worth knowing:
 
 - `homeAssistant.useGlobal: true` (the default for a new room) means this room uses the Globals connection instead of its own host/port/token.
 - `screens` just turns carousel pages on/off per room — a bedroom with no Xbox unchecks it.
-- `lighting.lights`, `lighting.scenes`, `blinds.items`, `climate.additionalSensors` are all open-ended lists — add/remove as many as the room needs.
-- `tv.apps` is fixed to three slots (YouTube / Netflix / tvMate).
+- `lighting.lights`, `lighting.scenes`, `blinds.items`, `climate.additionalSensors`, `xbox.games` are all open-ended lists — add/remove as many as the room needs.
+- `tv.apps` is fixed to three slots (YouTube / Netflix / tvMate); `xbox.games` isn't — a console's library keeps growing.
+- `xbox.listSource` picks whether the device shows the `games` list below or browses the console live via Home Assistant's `browse_media`. Either way, the now-playing hero art isn't stored here — the device reads that live from the media player entity's own `entity_picture`/`media_image_url`. A game's `art` field is only for its library row, and only used when `listSource` is `"configured"`.
 
 The Globals record (`/data/_globals.json`) is the same shape minus the room-specific fields, plus `wifi` (this container's own provisioning network) and `wifiNetworks` (a household list shown as join-QR codes on the remote's WiFi screen).
