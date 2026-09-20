@@ -95,6 +95,30 @@
 
           <section class="card">
             <div class="card-header-row">
+              <h2>Quick Access hub</h2>
+              <label class="checkbox-label">
+                <input type="checkbox" id="hub-quick-actions-enabled" />
+                Quick actions
+              </label>
+            </div>
+            <p class="card-hint">
+              The device's home/launcher screen. Each button's top two-thirds
+              opens a screen below; its bottom third fires a quick action
+              without leaving the hub — turn "Quick actions" off to hide that
+              bottom-third zone everywhere on this device. Up to 10 items
+              show per hub screen.
+            </p>
+            <div class="hub-subsection">
+              <div class="card-header-row">
+                <h3>Items</h3>
+                <button type="button" id="hub-add-item" class="btn btn-secondary btn-small">+ Add item</button>
+              </div>
+              <div id="hub-items-list" class="hub-list"></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-header-row">
               <h2>Home Assistant connection</h2>
               <label class="checkbox-label">
                 <input type="checkbox" id="ha-use-global" />
