@@ -11,8 +11,9 @@
  * Media (an enable flag, a name, and its media_player entity - backs the
  * on-device Music screen, but named `media` rather than `music`), TV (an
  * Android TV's media_player + remote entities, plus three fixed app-
- * launch shortcuts), and which on-device carousel screens the room has
- * enabled, plus one household-wide Globals record (WiFi + a default Home
+ * launch shortcuts), Xbox (the same media_player + remote split, plus an
+ * unbounded games list), and which on-device carousel screens the room
+ * has enabled, plus one household-wide Globals record (WiFi + a default Home
  * Assistant connection every room uses unless it switches on its own,
  * the clock's NTP server, and an unbounded list of WiFi networks for a
  * shared on-device WiFi screen). See lib/store.js's defaultProfile /
@@ -75,6 +76,13 @@ const els = {
   tvAppYoutube: document.getElementById('tv-app-youtube'),
   tvAppNetflix: document.getElementById('tv-app-netflix'),
   tvAppTvMate: document.getElementById('tv-app-tvmate'),
+  xboxEnabled: document.getElementById('xbox-enabled'),
+  xboxName: document.getElementById('xbox-name'),
+  xboxMediaPlayerEntity: document.getElementById('xbox-media-player-entity'),
+  xboxRemoteEntity: document.getElementById('xbox-remote-entity'),
+  xboxListSource: document.getElementById('xbox-list-source'),
+  xboxGamesList: document.getElementById('xbox-games-list'),
+  xboxAddGame: document.getElementById('xbox-add-game'),
   globalsForm: document.getElementById('globals-form'),
   globalsSaveStatus: document.getElementById('globals-save-status'),
   wifiSsid: document.getElementById('wifi-ssid'),
@@ -228,6 +236,68 @@ function readTv() {
       netflix: els.tvAppNetflix.value.trim(),
       tvMate: els.tvAppTvMate.value.trim()
     }
+  };
+}
+
+// --- Xbox (media_player + remote, plus an unbounded games list) ---------
+//
+// Same two-entity split as TV, no controls checkboxes for the same reason
+// (the media_player's and remote's own Home Assistant capabilities already
+// cover launch and power). Games are an unbounded list, not TV's fixed
+// trio, so they get the same row-per-item, read-straight-from-the-DOM
+// treatment as Lighting/Blinds/Climate. Each game's `art` field is only
+// for its library row - the now-playing hero art is read live from the
+// media_player entity on-device, never stored here.
+
+function createGameRow(game) {
+  const row = document.createElement('div');
+  row.className = 'xbox-item';
+  row.dataset.id = (game && game.id) || '';
+  row.innerHTML = `
+    <div class="row">
+      <label>Name<input type="text" class="game-name" value="${escapeAttr(game && game.name)}" placeholder="Halo Infinite" /></label>
+      <label>Product ID<input type="text" class="game-product-id" value="${escapeAttr(game && game.productId)}" placeholder="9PP5TF5D0S0X or Home" /></label>
+      <button type="button" class="btn btn-danger btn-small remove-item">Remove</button>
+    </div>
+    <div class="row">
+      <label>Box art URL (optional)<input type="text" class="game-art" value="${escapeAttr(game && game.art)}" placeholder="https://... or /api/..." /></label>
+    </div>
+  `;
+  return row;
+}
+
+function renderGamesList(games) {
+  els.xboxGamesList.innerHTML = '';
+  (games || []).forEach((game) => els.xboxGamesList.appendChild(createGameRow(game)));
+}
+
+function readGamesList() {
+  return Array.from(els.xboxGamesList.querySelectorAll('.xbox-item')).map((row) => ({
+    id: row.dataset.id || undefined,
+    name: row.querySelector('.game-name').value.trim(),
+    productId: row.querySelector('.game-product-id').value.trim(),
+    art: row.querySelector('.game-art').value.trim()
+  }));
+}
+
+function fillXbox(xbox) {
+  const x = xbox || {};
+  els.xboxEnabled.checked = Boolean(x.enabled);
+  els.xboxName.value = x.name || '';
+  els.xboxMediaPlayerEntity.value = x.mediaPlayerEntity || '';
+  els.xboxRemoteEntity.value = x.remoteEntity || '';
+  els.xboxListSource.value = x.listSource || 'configured';
+  renderGamesList(x.games);
+}
+
+function readXbox() {
+  return {
+    enabled: els.xboxEnabled.checked,
+    name: els.xboxName.value.trim(),
+    mediaPlayerEntity: els.xboxMediaPlayerEntity.value.trim(),
+    remoteEntity: els.xboxRemoteEntity.value.trim(),
+    listSource: els.xboxListSource.value,
+    games: readGamesList()
   };
 }
 
@@ -500,6 +570,7 @@ function fillForm(profile) {
   fillBlinds(profile.blinds);
   fillMedia(profile.media);
   fillTv(profile.tv);
+  fillXbox(profile.xbox);
 
   els.saveStatus.textContent = '';
 }
@@ -524,7 +595,8 @@ function readForm() {
     screens: readScreens(),
     media: readMedia(),
     climate: readClimate(),
-    tv: readTv()
+    tv: readTv(),
+    xbox: readXbox()
   };
 }
 
@@ -753,6 +825,16 @@ els.blindsAddItem.addEventListener('click', () => {
 els.blindsItemsList.addEventListener('click', (e) => {
   if (e.target.classList.contains('remove-item')) {
     e.target.closest('.blinds-item').remove();
+  }
+});
+
+els.xboxAddGame.addEventListener('click', () => {
+  els.xboxGamesList.appendChild(createGameRow(null));
+});
+
+els.xboxGamesList.addEventListener('click', (e) => {
+  if (e.target.classList.contains('remove-item')) {
+    e.target.closest('.xbox-item').remove();
   }
 });
 

@@ -78,10 +78,10 @@
             <p class="card-hint">
               Which on-device carousel screens this room actually has —
               unchecked ones are skipped instead of showing up empty or
-              non-functional. Just an on/off flag for each; Climate and
-              Xbox aren't configured here (still on-device only), and
-              this doesn't hide or affect the Lighting/Blinds/Media/TV
-              cards below.
+              non-functional. Just an on/off flag for each; Climate isn't
+              configured here (still on-device only), and this doesn't
+              hide or affect the Lighting/Blinds/Media/TV/Xbox cards
+              below.
             </p>
             <div class="control-checkboxes" id="screens-controls">
               <label class="checkbox-label"><input type="checkbox" data-screen="lighting" /> Lighting</label>
@@ -286,6 +286,55 @@
                 <label>Netflix<input type="text" id="tv-app-netflix" placeholder="com.netflix.ninja" /></label>
                 <label>TV mate<input type="text" id="tv-app-tvmate" placeholder="com.example.tvmate" /></label>
               </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Xbox</h2>
+            <p class="card-hint">
+              This room's Xbox console. Power and now-playing state come
+              from the two entities' own Home Assistant capabilities,
+              nothing to configure here — just wire up the console and
+              its game library. The now-playing hero art on-device is
+              read live from the media player entity, not stored here;
+              each game's own art below is only for its library row, and
+              only used when the list source is "Configured list" (in
+              "Browse from console" mode, row thumbnails come from Home
+              Assistant's browse_media instead).
+            </p>
+            <div class="card-header-row">
+              <h3>Console</h3>
+              <label class="checkbox-label">
+                <input type="checkbox" id="xbox-enabled" />
+                Enable
+              </label>
+            </div>
+            <div class="row">
+              <label>Name<input type="text" id="xbox-name" placeholder="Xbox" /></label>
+            </div>
+            <div class="row">
+              <label>Media player entity<input type="text" id="xbox-media-player-entity" placeholder="media_player.xbox_series_x" /></label>
+              <label>Remote entity<input type="text" id="xbox-remote-entity" placeholder="remote.xbox_series_x" /></label>
+            </div>
+            <label class="narrow">Game library
+              <select id="xbox-list-source">
+                <option value="configured">Configured list</option>
+                <option value="browse">Browse from console</option>
+              </select>
+            </label>
+
+            <div class="xbox-subsection">
+              <div class="card-header-row">
+                <h3>Games</h3>
+                <button type="button" id="xbox-add-game" class="btn btn-secondary btn-small">+ Add game</button>
+              </div>
+              <p class="card-hint">
+                Games are just apps to Xbox — product ID is whatever
+                <code>media_content_id</code> launches it via
+                <code>play_media</code> (or the literal <code>Home</code>
+                to return to the dashboard).
+              </p>
+              <div id="xbox-games-list" class="xbox-list"></div>
             </div>
           </section>
         </div>
