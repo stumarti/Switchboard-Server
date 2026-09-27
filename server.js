@@ -189,6 +189,23 @@ app.get('/api/theme/fonts.pack', auth.requireAdminOrDevice, (req, res) => {
   res.send(buf);
 });
 
+// Single-icon fetch for a per-item picker (Quick Access hub buttons,
+// individual lights/scenes, individual blinds items - see the admin UI's
+// shared icon-picker widget and the firmware's include/mdi_icon.h). Device-
+// reachable, unlike the rest of /api/assets/* below, since the device is
+// what actually needs this bitmap - the admin UI only needs the PNG preview
+// (icons/search, icons/preview) to build the picker.
+app.get('/api/icons/mdi/:name', auth.requireAdminOrDevice, async (req, res) => {
+  const size = Math.min(Math.max(Number(req.query.size) || 40, 8), 128);
+  try {
+    const buf = await iconsCompiler.compileSingleIcon(req.params.name, size);
+    res.set('Content-Type', 'application/octet-stream');
+    res.send(buf);
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
 // --- Asset compiler (admin only) -----------------------------------------
 
 app.get('/api/assets/icon-slots', auth.requireAdminSession, (req, res) => {
