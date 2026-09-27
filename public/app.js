@@ -208,10 +208,11 @@ els.authForm.addEventListener('submit', async (e) => {
       method: 'POST',
       body: JSON.stringify({ password })
     });
-    els.authForm.reset();
-    document.querySelector('.app').hidden = false;
-    els.authGate.hidden = true;
-    await init();
+    // Full reload rather than toggling state in place - same reasoning as
+    // the logout handler below: guarantees a clean re-fetch of everything
+    // against the now-authenticated session, no risk of any DOM state
+    // (nav highlights, cached lists) left over from the logged-out gate.
+    location.reload();
   } catch (err) {
     els.authError.textContent = err.message;
     els.authError.hidden = false;

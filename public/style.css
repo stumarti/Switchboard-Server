@@ -16,6 +16,16 @@
   box-sizing: border-box;
 }
 
+/* Wins over any later same-specificity `display` rule (e.g. `label {
+   display: flex }` below) that would otherwise fight the [hidden] attribute
+   and keep an element visible - see the .hub-item .row[hidden] override
+   further down for the same bug pattern on a narrower selector; this makes
+   [hidden] just work everywhere, including the auth form's confirm-password
+   field. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
