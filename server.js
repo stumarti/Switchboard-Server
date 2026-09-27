@@ -57,6 +57,7 @@ const { normalizeProfile, normalizeGlobals } = require('./lib/validate');
 const { startMdnsResponder } = require('./lib/mdns');
 const auth = require('./lib/auth');
 const pairing = require('./lib/pairing');
+const haState = require('./lib/ha-state');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
 const fontsCompiler = require('./lib/assets/fonts');
@@ -346,6 +347,51 @@ app.get('/api/devices/:slug/config', auth.requireAdminOrDevice, (req, res) => {
     return res.status(404).json({ error: 'no such profile' });
   }
   res.json(profile);
+});
+
+// Everything a remote needs to know about its room, in one response: the
+// room config, the shared globals (HA connection, Wi-Fi networks) and the
+// theme pack versions — what /config + /api/globals + /api/theme return
+// separately. Express's ETag handling answers an unchanged bundle with a
+// bodyless 304 when the device sends If-None-Match, so a routine refresh
+// with nothing new costs a few hundred bytes.
+app.get('/api/devices/:slug/bundle', auth.requireAdminOrDevice, (req, res) => {
+  const profile = store.getProfile(req.params.slug);
+  if (!profile) {
+    return res.status(404).json({ error: 'no such profile' });
+  }
+  const theme = store.getTheme();
+  res.json({
+    config: profile,
+    globals: store.getGlobals(),
+    theme: {
+      iconsVersion: theme.iconsVersion || '',
+      fontsVersion: theme.fontsVersion || ''
+    }
+  });
+});
+
+// Live Home Assistant state for every entity this room's pages show,
+// fetched in parallel here and trimmed to what the firmware reads (see
+// lib/ha-state.js) — one request per device refresh instead of a dozen-plus.
+// 502 when HA can't be reached from the server at all: the device then
+// falls back to asking HA directly, entity by entity.
+app.get('/api/devices/:slug/state', auth.requireAdminOrDevice, async (req, res) => {
+  const profile = store.getProfile(req.params.slug);
+  if (!profile) {
+    return res.status(404).json({ error: 'no such profile' });
+  }
+  try {
+    const result = await haState.fetchRoomState(profile, store.getGlobals());
+    const total = Object.keys(result.states).length;
+    const failed = Object.keys(result.errors).length;
+    if (total === 0 && failed > 0) {
+      return res.status(502).json({ error: 'Home Assistant unreachable', errors: result.errors });
+    }
+    res.json(result);
+  } catch (e) {
+    res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
+  }
 });
 
 app.post('/api/devices/:slug/config', auth.requireAdminSession, (req, res) => {

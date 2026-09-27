@@ -73,12 +73,14 @@ If this repo is private, GHCR images are private by default too — `docker logi
 - A shared **Globals** page for WiFi and your Home Assistant connection, so you only enter those once.
 - Advertises itself on the LAN (`switchboard.local`) so remotes find it with zero configuration.
 
-Every Switchboard remote already talks to this: `Settings → Select room` calls `GET /api/devices`, then pulls that room's full config from `GET /api/devices/<slug>/config`. `GET /api/globals` supplies the shared WiFi/HA connection. Every one of these three now requires the remote to be paired (see "Pairing" below) — the admin UI's own browser session works too, so nothing changes for you in the UI itself.
+Every Switchboard remote already talks to this: `Settings → Select room` calls `GET /api/devices`, and each data refresh makes two requests — `GET /api/devices/<slug>/bundle` (its room's config, the shared WiFi/HA connection and theme versions; a bodyless `304` when nothing changed) and `GET /api/devices/<slug>/state` (the room's live Home Assistant state, which the server fetches from HA in parallel). Older firmware uses `GET /api/devices/<slug>/config` and `GET /api/globals` and talks to HA directly; those still work. For `/state` the server must be able to reach Home Assistant at the host in Globals — if it can't, the remote falls back to asking HA itself. Every one of these three now requires the remote to be paired (see "Pairing" below) — the admin UI's own browser session works too, so nothing changes for you in the UI itself.
 
 | Method | Path | Purpose | Auth |
 |---|---|---|---|
 | GET | `/api/devices` | List rooms | session or device |
 | GET | `/api/devices/<slug>/config` | One room's full config | session or device |
+| GET | `/api/devices/<slug>/bundle` | Room config + globals + theme versions in one response (`304` when unchanged, via `If-None-Match`) | session or device |
+| GET | `/api/devices/<slug>/state` | Live Home Assistant state for every entity the room's pages show, fetched in parallel by the server and trimmed to what the remote reads (`502` if HA is unreachable from the server) | session or device |
 | POST | `/api/devices/<slug>/config` | Create/update a room | session |
 | POST | `/api/devices` | Create a room from just a name | session |
 | DELETE | `/api/devices/<slug>` | Remove a room | session |
