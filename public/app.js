@@ -267,6 +267,7 @@ async function selectProfile(slug) {
   state.showingTheme = false;
   renderProfileList();
   const profile = await api(`/api/devices/${encodeURIComponent(slug)}/config`);
+  await preloadIconPreviews(profile);
   fillForm(profile);
   hideAllViews();
   els.form.hidden = false;
@@ -458,7 +459,7 @@ function createHubRow(item) {
   row.innerHTML = `
     <div class="row">
       <label>Name<input type="text" class="hub-item-name" value="${escapeAttr(it.name)}" placeholder="Movie Mode" /></label>
-      <label>Icon<input type="text" class="hub-item-icon" value="${escapeAttr(it.icon)}" placeholder="icon name, e.g. movie" /></label>
+      ${iconPickerHtml(it.icon)}
       <button type="button" class="btn btn-danger btn-small remove-item">Remove</button>
     </div>
     <div class="row">
@@ -492,7 +493,7 @@ function readHubList() {
   return Array.from(els.hubItemsList.querySelectorAll('.hub-item')).map((row) => ({
     id: row.dataset.id || undefined,
     name: row.querySelector('.hub-item-name').value.trim(),
-    icon: row.querySelector('.hub-item-icon').value.trim(),
+    icon: row.querySelector('.icon-picker-value').value.trim(),
     target: row.querySelector('.hub-item-target').value,
     action: {
       type: row.querySelector('.hub-item-action-type').value,
@@ -533,6 +534,101 @@ function escapeAttr(s) {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+// --- Shared icon picker (Hub buttons, Lighting lights/scenes, Blinds items)
+//
+// Type in a row's own search box, click one of the results to assign it -
+// same two-step search-then-pick idea as the Theme page's slot picker, just
+// scoped to each row's own DOM (`.icon-picker-wrap`) instead of a shared
+// "active slot" state, since these rows are an unbounded, independent list
+// rather than the Theme page's fixed, known set of ~107 slots. Reuses
+// state.iconPreviews as a cross-page cache so an icon already looked up
+// anywhere (Theme page, another row) doesn't refetch its preview.
+// wireIconPicker(container) attaches once per list container (hub items,
+// lighting lights, lighting scenes, blinds items) - event delegation, so it
+// keeps working for rows added later via "+ Add".
+
+function iconPickerHtml(iconName) {
+  const preview = iconName && state.iconPreviews[iconName];
+  return `
+    <div class="icon-picker-wrap">
+      <span class="icon-picker-label">Icon</span>
+      <div class="icon-picker-row">
+        <div class="icon-picker-preview">${preview ? `<img src="${preview}" width="24" height="24" alt="" />` : ''}</div>
+        <input type="text" class="icon-picker-search" placeholder="search, e.g. movie (optional)" />
+      </div>
+      <input type="hidden" class="icon-picker-value" value="${escapeAttr(iconName)}" />
+      <div class="icon-picker-results"></div>
+    </div>
+  `;
+}
+
+function wireIconPicker(container) {
+  let searchTimer = null;
+  container.addEventListener('input', (e) => {
+    if (!e.target.classList.contains('icon-picker-search')) return;
+    const wrap = e.target.closest('.icon-picker-wrap');
+    const results = wrap.querySelector('.icon-picker-results');
+    const q = e.target.value.trim();
+    clearTimeout(searchTimer);
+    if (!q) {
+      results.innerHTML = '';
+      return;
+    }
+    searchTimer = setTimeout(async () => {
+      try {
+        const matches = await api(`/api/assets/icons/search?q=${encodeURIComponent(q)}`);
+        results.innerHTML = matches
+          .map(
+            (m) =>
+              `<button type="button" class="icon-search-result" data-name="${escapeAttr(m.name)}" title="${escapeAttr(m.name)}"><img src="${m.preview}" width="24" height="24" alt="" /></button>`
+          )
+          .join('');
+        for (const m of matches) state.iconPreviews[m.name] = m.preview;
+      } catch (err) {
+        /* best-effort search, ignore */
+      }
+    }, 250);
+  });
+
+  container.addEventListener('click', (e) => {
+    const btn = e.target.closest('.icon-search-result');
+    if (!btn) return;
+    const wrap = btn.closest('.icon-picker-wrap');
+    wrap.querySelector('.icon-picker-value').value = btn.dataset.name;
+    wrap.querySelector('.icon-picker-preview').innerHTML =
+      `<img src="${state.iconPreviews[btn.dataset.name]}" width="24" height="24" alt="" />`;
+    wrap.querySelector('.icon-picker-search').value = '';
+    wrap.querySelector('.icon-picker-results').innerHTML = '';
+  });
+}
+
+// Batch-fetches previews for every non-empty icon name already set on the
+// profile being opened (hub items + lighting lights/scenes + blinds items),
+// BEFORE the lists render - so existing picks show their glyph immediately
+// instead of just a bare name. One round trip regardless of how many items
+// reference icons; a name already cached (e.g. from an earlier profile,
+// or the Theme page) is skipped.
+async function preloadIconPreviews(profile) {
+  const names = new Set();
+  const collect = (list) => (list || []).forEach((it) => it && it.icon && names.add(it.icon));
+  collect(profile.hub && profile.hub.items);
+  collect(profile.lighting && profile.lighting.lights);
+  collect(profile.lighting && profile.lighting.scenes);
+  collect(profile.blinds && profile.blinds.items);
+
+  const missing = Array.from(names).filter((n) => !state.iconPreviews[n]);
+  if (!missing.length) return;
+  try {
+    const results = await api('/api/assets/icons/preview', {
+      method: 'POST',
+      body: JSON.stringify({ names: missing })
+    });
+    for (const r of results) state.iconPreviews[r.name] = r.preview;
+  } catch (err) {
+    /* best-effort - rows just show without a preview image if this fails */
+  }
 }
 
 function controlCheckboxesHtml(controls) {
@@ -579,6 +675,7 @@ function createLightRow(light) {
     <div class="row">
       <label>Name<input type="text" class="light-name" value="${escapeAttr(light && light.name)}" placeholder="Lamp" /></label>
       <label>Entity<input type="text" class="light-entity" value="${escapeAttr(light && light.entity)}" placeholder="light.lamp" /></label>
+      ${iconPickerHtml(light && light.icon)}
       <button type="button" class="btn btn-danger btn-small remove-item">Remove</button>
     </div>
     <div class="control-checkboxes light-controls">${controlCheckboxesHtml(light && light.controls)}</div>
@@ -594,6 +691,7 @@ function createSceneRow(scene) {
     <div class="row">
       <label>Name<input type="text" class="scene-name" value="${escapeAttr(scene && scene.name)}" placeholder="Movie Night" /></label>
       <label>Entity<input type="text" class="scene-entity" value="${escapeAttr(scene && scene.entity)}" placeholder="scene.movie_night" /></label>
+      ${iconPickerHtml(scene && scene.icon)}
       <button type="button" class="btn btn-danger btn-small remove-item">Remove</button>
     </div>
   `;
@@ -615,6 +713,7 @@ function readLightsList() {
     id: row.dataset.id || undefined,
     name: row.querySelector('.light-name').value.trim(),
     entity: row.querySelector('.light-entity').value.trim(),
+    icon: row.querySelector('.icon-picker-value').value.trim(),
     controls: readControlCheckboxes(row.querySelector('.light-controls'))
   }));
 }
@@ -623,7 +722,8 @@ function readScenesList() {
   return Array.from(els.lightingScenesList.querySelectorAll('.lighting-item')).map((row) => ({
     id: row.dataset.id || undefined,
     name: row.querySelector('.scene-name').value.trim(),
-    entity: row.querySelector('.scene-entity').value.trim()
+    entity: row.querySelector('.scene-entity').value.trim(),
+    icon: row.querySelector('.icon-picker-value').value.trim()
   }));
 }
 
@@ -668,6 +768,7 @@ function createBlindRow(item) {
     <div class="row">
       <label>Name<input type="text" class="blind-name" value="${escapeAttr(item && item.name)}" placeholder="Living Room Blind" /></label>
       <label>Entity<input type="text" class="blind-entity" value="${escapeAttr(item && item.entity)}" placeholder="cover.living_room_blind" /></label>
+      ${iconPickerHtml(item && item.icon)}
       <button type="button" class="btn btn-danger btn-small remove-item">Remove</button>
     </div>
   `;
@@ -683,7 +784,8 @@ function readBlindsList() {
   return Array.from(els.blindsItemsList.querySelectorAll('.blinds-item')).map((row) => ({
     id: row.dataset.id || undefined,
     name: row.querySelector('.blind-name').value.trim(),
-    entity: row.querySelector('.blind-entity').value.trim()
+    entity: row.querySelector('.blind-entity').value.trim(),
+    icon: row.querySelector('.icon-picker-value').value.trim()
   }));
 }
 
@@ -1352,6 +1454,13 @@ els.hubItemsList.addEventListener('change', (e) => {
     applyHubRowActionState(e.target.closest('.hub-item'));
   }
 });
+
+// Icon picker (search + click a result) - one wiring per list container,
+// works for rows added later via "+ Add" through event delegation.
+wireIconPicker(els.hubItemsList);
+wireIconPicker(els.lightingLightsList);
+wireIconPicker(els.lightingScenesList);
+wireIconPicker(els.blindsItemsList);
 
 els.haGlobalLink.addEventListener('click', () => {
   selectGlobals();

@@ -683,3 +683,57 @@ button:disabled {
 .icon-slot-name {
   font-size: 13px;
 }
+
+/* ---------- Per-item icon picker (Hub buttons, Lighting lights/scenes,
+   Blinds items) - a compact search+preview widget dropped into an existing
+   item row alongside its Name/Entity fields, reusing .icon-search-result(s)
+   from the Theme page's picker for the dropdown results. ---------- */
+
+.icon-picker-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 0 0 150px;
+}
+
+.icon-picker-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.icon-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-picker-preview {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.icon-picker-preview img {
+  filter: invert(1);
+}
+
+.icon-picker-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.icon-picker-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.icon-picker-results:empty {
+  display: none;
+}
