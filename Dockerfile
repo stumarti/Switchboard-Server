@@ -1,8 +1,10 @@
 # Switchboard Server - home server companion for Switchboard, the X4 Pro
 # smart-home remote firmware (github.com/stumarti/Switchboard). One instance
 # per household; stores every room's profile and serves the admin UI every
-# remote's Settings -> Select room talks to. Small Node/Express app, no
-# native deps, so alpine keeps the image small.
+# remote's Settings -> Select room talks to. Mostly a small Node/Express app;
+# the one native dependency is `sharp` (SVG/font rasterization for the Theme
+# page's icon/font compiler - see lib/assets/), which ships prebuilt
+# musl/alpine binaries, so alpine still keeps the image small.
 
 FROM node:20-alpine
 

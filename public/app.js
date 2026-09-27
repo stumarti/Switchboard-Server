@@ -26,7 +26,14 @@
 const state = {
   profiles: [],
   currentSlug: null,
-  showingGlobals: false
+  showingGlobals: false,
+  showingDevices: false,
+  showingTheme: false,
+  devices: [],
+  iconSlots: null,
+  iconOverrides: {},
+  iconPreviews: {},
+  activeIconSlot: null
 };
 
 const els = {
@@ -100,7 +107,35 @@ const els = {
   globalHaPort: document.getElementById('global-ha-port'),
   globalHaToken: document.getElementById('global-ha-token'),
   globalHaTokenToggle: document.getElementById('global-ha-token-toggle'),
-  ntpServer: document.getElementById('ntp-server')
+  ntpServer: document.getElementById('ntp-server'),
+
+  authGate: document.getElementById('auth-gate'),
+  authForm: document.getElementById('auth-form'),
+  authHeading: document.getElementById('auth-heading'),
+  authPassword: document.getElementById('auth-password'),
+  authConfirmLabel: document.getElementById('auth-confirm-label'),
+  authPasswordConfirm: document.getElementById('auth-password-confirm'),
+  authError: document.getElementById('auth-error'),
+  authSubmit: document.getElementById('auth-submit'),
+  logoutBtn: document.getElementById('logout-btn'),
+
+  devicesNavBtn: document.getElementById('devices-nav-btn'),
+  devicesView: document.getElementById('devices-view'),
+  devicesList: document.getElementById('devices-list'),
+
+  themeNavBtn: document.getElementById('theme-nav-btn'),
+  themeView: document.getElementById('theme-view'),
+  themeFontFile: document.getElementById('theme-font-file'),
+  themeGoogleFont: document.getElementById('theme-google-font'),
+  themeFontCompile: document.getElementById('theme-font-compile'),
+  themeFontStatus: document.getElementById('theme-font-status'),
+  themeFontsVersion: document.getElementById('theme-fonts-version'),
+  themeIconSearch: document.getElementById('theme-icon-search'),
+  themeIconSearchResults: document.getElementById('theme-icon-search-results'),
+  themeIconSlots: document.getElementById('theme-icon-slots'),
+  themeIconsCompile: document.getElementById('theme-icons-compile'),
+  themeIconsStatus: document.getElementById('theme-icons-status'),
+  themeIconsVersion: document.getElementById('theme-icons-version')
 };
 
 // --- API helpers ---------------------------------------------------------
@@ -110,6 +145,10 @@ async function api(path, options) {
     headers: { 'Content-Type': 'application/json' },
     ...options
   });
+  if (res.status === 401 && path !== '/api/auth/login' && path !== '/api/auth/setup') {
+    showAuthGate();
+    throw new Error('not authenticated');
+  }
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
     try {
@@ -123,6 +162,66 @@ async function api(path, options) {
   if (res.status === 204) return null;
   return res.json();
 }
+
+// --- Auth (single shared admin password, session cookie) -----------------
+//
+// The auth gate is a full-screen overlay, not a separate page - simplest
+// thing that works given this file's no-router, flip-.hidden style. api()
+// above redirects here on any 401 (an expired/missing session, or an
+// admin-only endpoint hit without one). setupRequired (no password set yet)
+// swaps the form to a one-time "set a password" mode with a confirm field.
+
+function showAuthGate() {
+  document.querySelector('.app').hidden = true;
+  els.authGate.hidden = false;
+}
+
+async function checkAuth() {
+  const status = await fetch('/api/auth/status').then((r) => r.json());
+  if (!status.authenticated) {
+    els.authHeading.textContent = status.setupRequired
+      ? 'Set an admin password'
+      : 'Sign in';
+    els.authConfirmLabel.hidden = !status.setupRequired;
+    els.authSubmit.textContent = status.setupRequired ? 'Set password' : 'Sign in';
+    els.authForm.dataset.mode = status.setupRequired ? 'setup' : 'login';
+    showAuthGate();
+    return false;
+  }
+  document.querySelector('.app').hidden = false;
+  els.authGate.hidden = true;
+  return true;
+}
+
+els.authForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  els.authError.hidden = true;
+  const mode = els.authForm.dataset.mode;
+  const password = els.authPassword.value;
+  if (mode === 'setup' && password !== els.authPasswordConfirm.value) {
+    els.authError.textContent = 'Passwords do not match.';
+    els.authError.hidden = false;
+    return;
+  }
+  try {
+    await api(mode === 'setup' ? '/api/auth/setup' : '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ password })
+    });
+    els.authForm.reset();
+    document.querySelector('.app').hidden = false;
+    els.authGate.hidden = true;
+    await init();
+  } catch (err) {
+    els.authError.textContent = err.message;
+    els.authError.hidden = false;
+  }
+});
+
+els.logoutBtn.addEventListener('click', async () => {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  location.reload();
+});
 
 // --- Profile list ----------------------------------------------------------
 
@@ -149,15 +248,26 @@ function renderProfileList() {
   }
 }
 
+function hideAllViews() {
+  els.emptyState.hidden = true;
+  els.form.hidden = true;
+  els.globalsForm.hidden = true;
+  els.devicesView.hidden = true;
+  els.themeView.hidden = true;
+  els.globalsNavBtn.classList.remove('active');
+  els.devicesNavBtn.classList.remove('active');
+  els.themeNavBtn.classList.remove('active');
+}
+
 async function selectProfile(slug) {
   state.currentSlug = slug;
   state.showingGlobals = false;
-  els.globalsNavBtn.classList.remove('active');
+  state.showingDevices = false;
+  state.showingTheme = false;
   renderProfileList();
   const profile = await api(`/api/devices/${encodeURIComponent(slug)}/config`);
   fillForm(profile);
-  els.emptyState.hidden = true;
-  els.globalsForm.hidden = true;
+  hideAllViews();
   els.form.hidden = false;
 }
 
@@ -710,13 +820,14 @@ function readForm() {
 
 async function selectGlobals() {
   state.showingGlobals = true;
+  state.showingDevices = false;
+  state.showingTheme = false;
   state.currentSlug = null;
-  els.globalsNavBtn.classList.add('active');
   renderProfileList();
   const globals = await api('/api/globals');
   fillGlobalsForm(globals);
-  els.emptyState.hidden = true;
-  els.form.hidden = true;
+  hideAllViews();
+  els.globalsNavBtn.classList.add('active');
   els.globalsForm.hidden = false;
 }
 
@@ -793,6 +904,287 @@ function readGlobalsForm() {
     ntpServer: els.ntpServer.value.trim()
   };
 }
+
+// --- Devices (every remote that has contacted this server) ---------------
+//
+// Approving a pending device is also how its default room gets assigned
+// (the "room" select below doubles as both). Same row-per-item DOM
+// approach as everywhere else in this file, but read-and-acted-on
+// individually (each button posts immediately) rather than batched behind
+// one form Save button, since these are independent admin actions on
+// independent devices, not one record being edited.
+
+function roomOptionsHtml(selected) {
+  const opts = ['<option value="">— none —</option>'];
+  for (const p of state.profiles) {
+    opts.push(`<option value="${escapeAttr(p.slug)}" ${p.slug === selected ? 'selected' : ''}>${escapeAttr(p.name)}</option>`);
+  }
+  return opts.join('');
+}
+
+function createDeviceRow(device) {
+  const row = document.createElement('div');
+  row.className = 'device-item';
+  row.dataset.mac = device.mac;
+  const lastSeen = device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : 'never';
+  row.innerHTML = `
+    <div class="row">
+      <label>Name<input type="text" class="device-name" value="${escapeAttr(device.name)}" /></label>
+      <label class="narrow">Status<span class="device-status-badge device-status-${escapeAttr(device.status)}">${escapeAttr(device.status)}</span></label>
+      <label>Room<select class="device-room">${roomOptionsHtml(device.assignedSlug)}</select></label>
+    </div>
+    <p class="hint device-meta">MAC ${escapeAttr(device.mac)} · last seen ${lastSeen} · IP ${escapeAttr(device.lastIp || '—')}</p>
+    <div class="row device-actions">
+      ${device.status === 'pending' ? '<button type="button" class="btn btn-primary btn-small device-approve">Approve</button>' : ''}
+      <button type="button" class="btn btn-secondary btn-small device-save-name">Save name</button>
+      ${device.status === 'approved' ? '<button type="button" class="btn btn-secondary btn-small device-assign">Save room</button>' : ''}
+      ${device.status === 'approved' ? '<button type="button" class="btn btn-danger btn-small device-revoke">Revoke</button>' : ''}
+      <button type="button" class="btn btn-danger btn-small device-delete">Delete</button>
+    </div>
+  `;
+  return row;
+}
+
+function renderDevicesList() {
+  els.devicesList.innerHTML = '';
+  state.devices.forEach((d) => els.devicesList.appendChild(createDeviceRow(d)));
+}
+
+async function loadDevices() {
+  if (!state.profiles.length) await loadProfileList();
+  state.devices = await api('/api/pairing/devices');
+  renderDevicesList();
+}
+
+async function selectDevices() {
+  state.showingGlobals = false;
+  state.showingDevices = true;
+  state.showingTheme = false;
+  state.currentSlug = null;
+  renderProfileList();
+  await loadDevices();
+  hideAllViews();
+  els.devicesNavBtn.classList.add('active');
+  els.devicesView.hidden = false;
+}
+
+els.devicesNavBtn.addEventListener('click', () => selectDevices());
+
+els.devicesList.addEventListener('click', async (e) => {
+  const row = e.target.closest('.device-item');
+  if (!row) return;
+  const mac = row.dataset.mac;
+  try {
+    if (e.target.classList.contains('device-approve')) {
+      const slug = row.querySelector('.device-room').value;
+      await api(`/api/pairing/${encodeURIComponent(mac)}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ slug })
+      });
+      await loadDevices();
+    } else if (e.target.classList.contains('device-save-name')) {
+      const name = row.querySelector('.device-name').value.trim();
+      await api(`/api/pairing/${encodeURIComponent(mac)}/rename`, {
+        method: 'POST',
+        body: JSON.stringify({ name })
+      });
+      await loadDevices();
+    } else if (e.target.classList.contains('device-assign')) {
+      const slug = row.querySelector('.device-room').value;
+      await api(`/api/pairing/${encodeURIComponent(mac)}/assign`, {
+        method: 'POST',
+        body: JSON.stringify({ slug })
+      });
+      await loadDevices();
+    } else if (e.target.classList.contains('device-revoke')) {
+      if (!confirm(`Revoke "${row.querySelector('.device-name').value}"? It will need to be re-approved before it can fetch config again.`)) return;
+      await api(`/api/pairing/${encodeURIComponent(mac)}/revoke`, { method: 'POST' });
+      await loadDevices();
+    } else if (e.target.classList.contains('device-delete')) {
+      if (!confirm(`Delete "${row.querySelector('.device-name').value}"? This cannot be undone.`)) return;
+      await api(`/api/pairing/${encodeURIComponent(mac)}`, { method: 'DELETE' });
+      await loadDevices();
+    }
+  } catch (err) {
+    alert(`Could not update device: ${err.message}`);
+  }
+});
+
+// --- Theme (runtime icon/font pack the firmware downloads) ---------------
+//
+// Icons: pick a slot (click its row), then search-and-click a replacement
+// MDI icon - same "select a target, then act on it" two-step as nothing
+// else in this file needs, since there's no free-form alias field (see
+// lib/assets/icon-slots.js's doc comment for why: slots are fixed, named,
+// and firmware-defined). Fonts: one uploaded/fetched file produces every
+// face at once, so there's no per-slot picking at all.
+
+function effectiveIconFor(slot) {
+  return state.iconOverrides[slot.key] || slot.defaultMdi;
+}
+
+function iconSlotRowHtml(slot) {
+  const mdi = effectiveIconFor(slot);
+  const preview = state.iconPreviews[mdi];
+  const active = state.activeIconSlot === slot.key;
+  return `
+    <div class="icon-slot-row ${active ? 'active' : ''}" data-key="${escapeAttr(slot.key)}">
+      <div class="icon-slot-preview">${preview ? `<img src="${preview}" width="28" height="28" alt="" />` : ''}</div>
+      <div class="icon-slot-label">
+        <div class="icon-slot-name">${escapeAttr(slot.label)}</div>
+        <div class="hint">${escapeAttr(slot.key)} · currently ${escapeAttr(mdi)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderIconSlots() {
+  const byCategory = new Map();
+  for (const slot of state.iconSlots) {
+    if (!byCategory.has(slot.category)) byCategory.set(slot.category, []);
+    byCategory.get(slot.category).push(slot);
+  }
+  let html = '';
+  for (const [category, slots] of byCategory) {
+    html += `<div class="icon-slot-category">${escapeAttr(category)}</div>`;
+    html += slots.map(iconSlotRowHtml).join('');
+  }
+  els.themeIconSlots.innerHTML = html;
+}
+
+async function fetchIconPreviews(mdiNames) {
+  const missing = mdiNames.filter((n) => !state.iconPreviews[n]);
+  if (!missing.length) return;
+  const results = await api('/api/assets/icons/preview', {
+    method: 'POST',
+    body: JSON.stringify({ names: missing })
+  });
+  for (const r of results) state.iconPreviews[r.name] = r.preview;
+}
+
+async function loadThemeData() {
+  const theme = await api('/api/theme');
+  els.themeIconsVersion.textContent = theme.iconsVersion ? `published: ${theme.iconsVersion}` : 'not published yet';
+  els.themeFontsVersion.textContent = theme.fontsVersion ? `published: ${theme.fontsVersion}` : 'not published yet';
+
+  if (!state.iconSlots) state.iconSlots = await api('/api/assets/icon-slots');
+  await fetchIconPreviews(state.iconSlots.map(effectiveIconFor));
+  renderIconSlots();
+}
+
+async function selectTheme() {
+  state.showingGlobals = false;
+  state.showingDevices = false;
+  state.showingTheme = true;
+  state.currentSlug = null;
+  renderProfileList();
+  await loadThemeData();
+  hideAllViews();
+  els.themeNavBtn.classList.add('active');
+  els.themeView.hidden = false;
+}
+
+els.themeNavBtn.addEventListener('click', () => selectTheme());
+
+els.themeIconSlots.addEventListener('click', (e) => {
+  const row = e.target.closest('.icon-slot-row');
+  if (!row) return;
+  state.activeIconSlot = row.dataset.key;
+  els.themeIconSlots.querySelectorAll('.icon-slot-row').forEach((r) => {
+    r.classList.toggle('active', r === row);
+  });
+  els.themeIconSearch.focus();
+});
+
+let iconSearchTimer = null;
+els.themeIconSearch.addEventListener('input', () => {
+  clearTimeout(iconSearchTimer);
+  const q = els.themeIconSearch.value.trim();
+  if (!q) {
+    els.themeIconSearchResults.innerHTML = '';
+    return;
+  }
+  iconSearchTimer = setTimeout(async () => {
+    try {
+      const results = await api(`/api/assets/icons/search?q=${encodeURIComponent(q)}`);
+      els.themeIconSearchResults.innerHTML = results
+        .map(
+          (r) => `
+        <button type="button" class="icon-search-result" data-name="${escapeAttr(r.name)}" title="${escapeAttr(r.name)}">
+          <img src="${r.preview}" width="28" height="28" alt="" />
+        </button>
+      `
+        )
+        .join('');
+      for (const r of results) state.iconPreviews[r.name] = r.preview;
+    } catch (err) {
+      els.themeIconSearchResults.innerHTML = '';
+    }
+  }, 250);
+});
+
+els.themeIconSearchResults.addEventListener('click', (e) => {
+  const btn = e.target.closest('.icon-search-result');
+  if (!btn) return;
+  if (!state.activeIconSlot) {
+    alert('Click an icon slot below first, then pick its replacement.');
+    return;
+  }
+  state.iconOverrides[state.activeIconSlot] = btn.dataset.name;
+  renderIconSlots();
+});
+
+els.themeIconsCompile.addEventListener('click', async () => {
+  els.themeIconsStatus.textContent = 'Compiling…';
+  try {
+    const result = await api('/api/assets/icons/compile', {
+      method: 'POST',
+      body: JSON.stringify({ overrides: state.iconOverrides })
+    });
+    els.themeIconsVersion.textContent = `published: ${result.version}`;
+    els.themeIconsStatus.textContent = 'Published ✓';
+    setTimeout(() => {
+      if (els.themeIconsStatus.textContent === 'Published ✓') els.themeIconsStatus.textContent = '';
+    }, 2500);
+  } catch (err) {
+    els.themeIconsStatus.textContent = '';
+    alert(`Could not compile icons: ${err.message}`);
+  }
+});
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+els.themeFontCompile.addEventListener('click', async () => {
+  const file = els.themeFontFile.files[0];
+  const googleFont = els.themeGoogleFont.value.trim();
+  if (!file && !googleFont) {
+    alert('Upload a font file or enter a Google Font name.');
+    return;
+  }
+  els.themeFontStatus.textContent = 'Compiling…';
+  try {
+    const body = file ? { ttfBase64: await readFileAsBase64(file) } : { googleFont };
+    const result = await api('/api/assets/fonts/compile', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+    els.themeFontsVersion.textContent = `published: ${result.version}`;
+    els.themeFontStatus.textContent = 'Published ✓';
+    setTimeout(() => {
+      if (els.themeFontStatus.textContent === 'Published ✓') els.themeFontStatus.textContent = '';
+    }, 2500);
+  } catch (err) {
+    els.themeFontStatus.textContent = '';
+    alert(`Could not compile font: ${err.message}`);
+  }
+});
 
 // --- Actions ---------------------------------------------------------------
 
@@ -1019,6 +1411,9 @@ els.globalHaTokenToggle.addEventListener('click', () => {
 // --- Init --------------------------------------------------------------
 
 async function init() {
+  const authenticated = await checkAuth();
+  if (!authenticated) return;
+
   try {
     const health = await api('/api/health');
     els.mdnsHint.textContent = health.mdnsHostname;
