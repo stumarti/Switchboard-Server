@@ -33,7 +33,8 @@ const state = {
   iconSlots: null,
   iconOverrides: {},
   iconPreviews: {},
-  activeIconSlot: null
+  activeIconSlot: null,
+  devicePreviewIndex: 0
 };
 
 const els = {
@@ -131,11 +132,19 @@ const els = {
   themeFontStatus: document.getElementById('theme-font-status'),
   themeFontsVersion: document.getElementById('theme-fonts-version'),
   themeIconSearch: document.getElementById('theme-icon-search'),
+  themeIconUpload: document.getElementById('theme-icon-upload'),
   themeIconSearchResults: document.getElementById('theme-icon-search-results'),
+  themeCustomIconsList: document.getElementById('theme-custom-icons-list'),
   themeIconSlots: document.getElementById('theme-icon-slots'),
   themeIconsCompile: document.getElementById('theme-icons-compile'),
   themeIconsStatus: document.getElementById('theme-icons-status'),
-  themeIconsVersion: document.getElementById('theme-icons-version')
+  themeIconsVersion: document.getElementById('theme-icons-version'),
+
+  devicePreview: document.getElementById('device-preview'),
+  devicePreviewPrev: document.getElementById('device-preview-prev'),
+  devicePreviewNext: document.getElementById('device-preview-next'),
+  devicePreviewLabel: document.getElementById('device-preview-label'),
+  devicePreviewScreen: document.getElementById('device-preview-screen')
 };
 
 // --- API helpers ---------------------------------------------------------
@@ -258,9 +267,11 @@ function hideAllViews() {
   els.globalsNavBtn.classList.remove('active');
   els.devicesNavBtn.classList.remove('active');
   els.themeNavBtn.classList.remove('active');
+  stopDevicesPolling();
 }
 
 async function selectProfile(slug) {
+  const switchingRooms = state.currentSlug !== slug;
   state.currentSlug = slug;
   state.showingGlobals = false;
   state.showingDevices = false;
@@ -271,6 +282,11 @@ async function selectProfile(slug) {
   fillForm(profile);
   hideAllViews();
   els.form.hidden = false;
+  if (switchingRooms) {
+    state.devicePreviewIndex = 0;
+    state.devicePreviewLightingTab = 'scenes';
+  }
+  renderDevicePreview();
 }
 
 // --- Form <-> profile object ---------------------------------------------
@@ -557,11 +573,66 @@ function iconPickerHtml(iconName) {
       <div class="icon-picker-row">
         <div class="icon-picker-preview">${preview ? `<img src="${preview}" width="24" height="24" alt="" />` : ''}</div>
         <input type="text" class="icon-picker-search" placeholder="search, e.g. movie (optional)" />
+        <label class="icon-picker-upload-btn" title="Upload a custom SVG icon">
+          +
+          <input type="file" class="icon-picker-upload" accept=".svg,image/svg+xml" hidden />
+        </label>
       </div>
       <input type="hidden" class="icon-picker-value" value="${escapeAttr(iconName)}" />
       <div class="icon-picker-results"></div>
     </div>
   `;
+}
+
+// Turns an uploaded filename into a valid icon id: lowercase, non-alnum
+// runs collapsed to one hyphen, trimmed of leading/trailing hyphens, capped
+// at the 64-char limit store.isValidCustomIconName enforces server-side.
+function sanitizeIconName(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/\.[a-z0-9]+$/, '') // strip a file extension, if any
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
+// Reads `file` as an SVG, asks for a name (prefilled from the filename),
+// and uploads it - shared by the per-item icon pickers and the Theme
+// page's own upload button. Returns {name, preview} on success (and caches
+// the preview into state.iconPreviews), or null if the admin cancelled the
+// name prompt or the upload failed (alerted already). The newly uploaded
+// icon is immediately usable and, since it's now stored server-side,
+// findable again later from any picker's search box without re-uploading.
+async function promptAndUploadCustomIcon(file) {
+  if (!file) return null;
+  const svg = await file.text();
+  const suggested = sanitizeIconName(file.name) || 'icon';
+  const name = prompt('Name this icon (letters, digits, hyphens only):', suggested);
+  if (!name) return null;
+  const cleaned = sanitizeIconName(name);
+  if (!cleaned) {
+    alert('That name has no usable letters/digits.');
+    return null;
+  }
+  try {
+    const result = await api('/api/assets/icons/custom', {
+      method: 'POST',
+      body: JSON.stringify({ name: cleaned, svg })
+    });
+    state.iconPreviews[result.name] = result.preview;
+    return result;
+  } catch (err) {
+    alert(`Could not upload icon: ${err.message}`);
+    return null;
+  }
+}
+
+async function uploadCustomIconInto(wrap, file) {
+  const result = await promptAndUploadCustomIcon(file);
+  if (!result) return;
+  wrap.querySelector('.icon-picker-value').value = result.name;
+  wrap.querySelector('.icon-picker-preview').innerHTML =
+    `<img src="${result.preview}" width="24" height="24" alt="" />`;
 }
 
 function wireIconPicker(container) {
@@ -582,7 +653,7 @@ function wireIconPicker(container) {
         results.innerHTML = matches
           .map(
             (m) =>
-              `<button type="button" class="icon-search-result" data-name="${escapeAttr(m.name)}" title="${escapeAttr(m.name)}"><img src="${m.preview}" width="24" height="24" alt="" /></button>`
+              `<button type="button" class="icon-search-result ${m.source === 'custom' ? 'icon-search-result-custom' : ''}" data-name="${escapeAttr(m.name)}" title="${escapeAttr(m.name)}${m.source === 'custom' ? ' (custom)' : ''}"><img src="${m.preview}" width="24" height="24" alt="" /></button>`
           )
           .join('');
         for (const m of matches) state.iconPreviews[m.name] = m.preview;
@@ -590,6 +661,15 @@ function wireIconPicker(container) {
         /* best-effort search, ignore */
       }
     }, 250);
+  });
+
+  container.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('icon-picker-upload')) return;
+    const wrap = e.target.closest('.icon-picker-wrap');
+    const file = e.target.files[0];
+    uploadCustomIconInto(wrap, file).finally(() => {
+      e.target.value = '';
+    });
   });
 
   container.addEventListener('click', (e) => {
@@ -1059,6 +1139,31 @@ async function loadDevices() {
   renderDevicesList();
 }
 
+// A device shows up here the moment it registers (POST /api/pairing/
+// register) - typically while an admin is sitting on this exact page
+// waiting to approve it. Without polling, that only ever showed up after a
+// manual nav-away-and-back; a physical remote pairing was invisible until
+// then. Skips the re-render (but still refreshes state.devices) while a
+// field in the list has focus, so a poll tick can't wipe out an in-progress
+// rename.
+let devicesPollTimer = null;
+function startDevicesPolling() {
+  stopDevicesPolling();
+  devicesPollTimer = setInterval(async () => {
+    if (!state.showingDevices) return;
+    try {
+      state.devices = await api('/api/pairing/devices');
+      if (!els.devicesList.contains(document.activeElement)) renderDevicesList();
+    } catch (err) {
+      /* best-effort - a transient fetch failure just skips this tick */
+    }
+  }, 4000);
+}
+function stopDevicesPolling() {
+  clearInterval(devicesPollTimer);
+  devicesPollTimer = null;
+}
+
 async function selectDevices() {
   state.showingGlobals = false;
   state.showingDevices = true;
@@ -1069,6 +1174,7 @@ async function selectDevices() {
   hideAllViews();
   els.devicesNavBtn.classList.add('active');
   els.devicesView.hidden = false;
+  startDevicesPolling();
 }
 
 els.devicesNavBtn.addEventListener('click', () => selectDevices());
@@ -1165,6 +1271,25 @@ async function fetchIconPreviews(mdiNames) {
   for (const r of results) state.iconPreviews[r.name] = r.preview;
 }
 
+// The admin's own uploaded icon library - findable from any picker's search
+// box (see lib/assets/icons.js's resolveIconSvg()), managed here since the
+// Theme page is where every other named/reusable asset (fonts, the icon
+// slots themselves) already lives.
+async function renderCustomIconsList() {
+  const icons = await api('/api/assets/icons/custom');
+  await fetchIconPreviews(icons.map((i) => i.name));
+  els.themeCustomIconsList.innerHTML = icons
+    .map(
+      (i) => `
+      <div class="custom-icon-item" data-name="${escapeAttr(i.name)}">
+        <img src="${state.iconPreviews[i.name] || ''}" width="24" height="24" alt="" />
+        <span>${escapeAttr(i.name)}</span>
+        <button type="button" class="btn btn-danger btn-small custom-icon-delete">Delete</button>
+      </div>`
+    )
+    .join('');
+}
+
 async function loadThemeData() {
   const theme = await api('/api/theme');
   els.themeIconsVersion.textContent = theme.iconsVersion ? `published: ${theme.iconsVersion}` : 'not published yet';
@@ -1173,6 +1298,7 @@ async function loadThemeData() {
   if (!state.iconSlots) state.iconSlots = await api('/api/assets/icon-slots');
   await fetchIconPreviews(state.iconSlots.map(effectiveIconFor));
   renderIconSlots();
+  await renderCustomIconsList();
 }
 
 async function selectTheme() {
@@ -1213,7 +1339,7 @@ els.themeIconSearch.addEventListener('input', () => {
       els.themeIconSearchResults.innerHTML = results
         .map(
           (r) => `
-        <button type="button" class="icon-search-result" data-name="${escapeAttr(r.name)}" title="${escapeAttr(r.name)}">
+        <button type="button" class="icon-search-result ${r.source === 'custom' ? 'icon-search-result-custom' : ''}" data-name="${escapeAttr(r.name)}" title="${escapeAttr(r.name)}${r.source === 'custom' ? ' (custom)' : ''}">
           <img src="${r.preview}" width="28" height="28" alt="" />
         </button>
       `
@@ -1235,6 +1361,36 @@ els.themeIconSearchResults.addEventListener('click', (e) => {
   }
   state.iconOverrides[state.activeIconSlot] = btn.dataset.name;
   renderIconSlots();
+});
+
+els.themeIconUpload.addEventListener('change', async () => {
+  const file = els.themeIconUpload.files[0];
+  els.themeIconUpload.value = '';
+  const result = await promptAndUploadCustomIcon(file);
+  if (!result) return;
+  if (state.activeIconSlot) {
+    state.iconOverrides[state.activeIconSlot] = result.name;
+    renderIconSlots();
+  }
+  await renderCustomIconsList();
+});
+
+els.themeCustomIconsList.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.custom-icon-delete');
+  if (!btn) return;
+  const name = btn.closest('.custom-icon-item').dataset.name;
+  if (
+    !confirm(
+      `Delete the custom icon "${name}"? Anything still overridden to it (a Theme slot, a hub button, a light/scene/blind) won't find it next time it's compiled or fetched.`
+    )
+  )
+    return;
+  try {
+    await api(`/api/assets/icons/custom/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    await renderCustomIconsList();
+  } catch (err) {
+    alert(`Could not delete: ${err.message}`);
+  }
 });
 
 els.themeIconsCompile.addEventListener('click', async () => {
@@ -1288,6 +1444,353 @@ els.themeFontCompile.addEventListener('click', async () => {
     alert(`Could not compile font: ${err.message}`);
   }
 });
+
+// --- Device preview (live mockup, navigable screen by screen) ------------
+//
+// Not pixel-accurate to the firmware's real layout - just visually
+// recognizable enough to navigate by. Renders from the SAME read*()
+// functions the form's own Save button uses (readLighting/readBlinds/
+// readHub/readMedia/readClimate/readTv/readXbox/readScreens), so it always
+// reflects what you're about to save, not a separate parallel data model.
+// Clicking an icon in the mockup scrolls the real form to that item's row
+// and focuses its icon-picker search box; clicking anything else just
+// scrolls/highlights the relevant field(s) - see jumpTo() below.
+
+function dvIconHtml(iconName) {
+  const preview = iconName && state.iconPreviews[iconName];
+  return preview ? `<img src="${preview}" width="18" height="18" alt="" />` : '';
+}
+
+// Each render*() below follows the real screen_*.h draw() order/shape (see
+// include/screen_lighting.h, screen_blinds.h, screen_music.h,
+// screen_climate.h, screen_tv.h, screen_xbox.h, screen_status.h, and
+// main.cpp's drawHubGrid() in the Switchboard firmware repo) - not
+// pixel-accurate (this is auto-flowed HTML, the real thing is absolute-
+// positioned), but the same elements in the same order: a toggle row here
+// is a toggle row there, a 3-segment action bar here is CLOSE/STOP/OPEN or
+// PREV/PLAY/NEXT there, etc.
+
+function dvIconHtml(iconName) {
+  const preview = iconName && state.iconPreviews[iconName];
+  return preview ? `<img src="${preview}" width="18" height="18" alt="" />` : '';
+}
+
+function dvToggleRow(jumpKind, name, placeholder, on) {
+  return `
+    <div class="dv-toggle-row" data-jump="${jumpKind}">
+      <span class="dv-chip-bulb" style="${on ? 'background:#000;' : ''}"></span>
+      <div class="dv-toggle-row-name">${escapeAttr(name || placeholder)}</div>
+      <div class="dv-toggle ${on ? 'on' : ''}"></div>
+    </div>`;
+}
+
+// col0/col1 icon buttons flanking a level bar - Lighting's DARKER/bar/
+// BRIGHTER and Music's VOL-/blocks/VOL+ are the same shape.
+function dvStepRow(leftGlyph, rightGlyph, pct) {
+  return `
+    <div class="dv-step-row">
+      <div class="dv-icon-btn">${leftGlyph}</div>
+      <div class="dv-bar-track"><div class="dv-bar-fill" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>
+      <div class="dv-icon-btn">${rightGlyph}</div>
+    </div>`;
+}
+
+// The real device's recurring 3-equal-segment bottom bar shape - WARM/DAY/
+// COOL, CLOSE/STOP/OPEN, PREV/PLAY/NEXT, BACK/HOME/POWER.
+function dvPresetRow(labels) {
+  return `<div class="dv-preset-row">${labels.map((l) => `<div class="dv-preset-seg">${escapeAttr(l)}</div>`).join('')}</div>`;
+}
+
+function dvChipGrid(items, kind, fallbackBulb) {
+  if (!items.length) return `<div class="dv-empty">None yet</div>`;
+  return `<div class="dv-chip-grid">${items
+    .map(
+      (item, i) => `
+      <div class="dv-chip" data-jump="${kind}" data-index="${i}">
+        <div class="dv-chip-icon" data-jump-icon="${kind}" data-index="${i}">
+          ${dvIconHtml(item.icon) || (fallbackBulb ? '<span class="dv-chip-bulb"></span>' : '')}
+        </div>
+        <div class="dv-chip-label">${escapeAttr(item.name || '(unnamed)')}</div>
+      </div>`
+    )
+    .join('')}</div>`;
+}
+
+function renderLightingScreen() {
+  const l = readLighting();
+  // Real device order: Scenes tab first, then Lights (screen_lighting.h's
+  // `tab` 0 = Scenes, 1 = Lights) - kept the same here.
+  const tab = state.devicePreviewLightingTab || 'scenes';
+  let html = `<div class="dv-statusbar">Lighting</div>`;
+  html += dvToggleRow('lightingGroup', l.group.name, 'All lights', l.group.enabled);
+  html += dvStepRow('−', '+', l.group.enabled ? 60 : 0);
+  html += dvPresetRow(['WARM', 'DAY', 'COOL']);
+  html += `<div class="dv-rule"></div>`;
+  html += `<div class="dv-tabs">
+    <span class="${tab === 'scenes' ? 'active' : ''}" data-tab="scenes">Scenes</span>
+    <span class="${tab === 'lights' ? 'active' : ''}" data-tab="lights">Lights</span>
+  </div>`;
+  html += tab === 'scenes' ? dvChipGrid(l.scenes, 'scene', false) : dvChipGrid(l.lights, 'light', true);
+  return html;
+}
+
+function renderBlindsScreen() {
+  const b = readBlinds();
+  let html = `<div class="dv-statusbar">Blinds</div>`;
+  html += `<div class="dv-now-title" style="text-align:center;margin-top:10px;" data-jump="blindsGroup">${escapeAttr(b.group.name || 'All blinds')}</div>`;
+  html += `<div class="dv-hero">OPEN/CLOSED icon</div>`;
+  html += `<div class="dv-rule"></div>`;
+  html += dvChipGrid(b.items, 'blind', false);
+  html += dvPresetRow(['CLOSE', 'STOP', 'OPEN']);
+  return html;
+}
+
+function renderHubScreenPreview() {
+  const h = readHub();
+  let html = `<div class="dv-statusbar">Quick Access</div>`;
+  if (!h.items.length) {
+    html += `<div class="dv-empty">No custom buttons - the device shows its built-in jump grid instead</div>`;
+    return html;
+  }
+  html += `<div class="dv-hub-grid">${h.items
+    .map(
+      (item, i) => `
+      <div class="dv-tile" data-jump="hub" data-index="${i}">
+        <div class="dv-tile-icon" data-jump-icon="hub" data-index="${i}">${dvIconHtml(item.icon)}</div>
+        <div class="dv-tile-label">${escapeAttr(item.name || '(unnamed)')}</div>
+      </div>`
+    )
+    .join('')}</div>`;
+  return html;
+}
+
+function renderMediaScreenPreview() {
+  const m = readMedia();
+  let html = `<div class="dv-statusbar">Music</div>`;
+  html += dvToggleRow('media', m.name, 'Music', false);
+  html += `<div class="dv-hero" data-jump="media">album art</div>`;
+  html += `<div class="dv-now-playing" data-jump="media">
+      <div class="dv-now-title">${m.enabled ? 'Now playing' : 'Not configured'}</div>
+      <div class="dv-now-artist">${escapeAttr(m.entity || 'no entity set')}</div>
+    </div>`;
+  html += dvStepRow('−', '+', 50);
+  html += dvPresetRow(['PREV', '▶', 'NEXT']);
+  return html;
+}
+
+function renderClimateScreenPreview() {
+  const c = readClimate();
+  let html = `<div class="dv-statusbar">Climate</div>`;
+  html += `<div class="dv-dial-wrap">
+      <div class="dv-dial">
+        <div class="dv-dial-center" data-jump="climate">
+          <div class="dv-dial-mode">AUTO</div>
+          <div class="dv-dial-temp">21°</div>
+        </div>
+      </div>
+    </div>`;
+  html += `<div class="dv-now-artist" style="text-align:center;" data-jump="climate">${escapeAttr(c.entity || 'no main sensor entity set')}</div>`;
+  html += dvMinusPlusRow();
+  html += dvModeRow();
+  if (c.additionalSensors.length) {
+    html += `<div class="dv-rule"></div><div class="dv-list">`;
+    c.additionalSensors.forEach((s) => {
+      html += `<div class="dv-list-row">${escapeAttr(s.name || s.entity || '(unnamed)')}</div>`;
+    });
+    html += `</div>`;
+  }
+  return html;
+}
+
+// MINUS/PLUS circular step buttons sitting in the dial's open gap.
+function dvMinusPlusRow() {
+  return `<div class="dv-step-row" style="justify-content:center;">
+    <div class="dv-icon-btn" style="border-radius:50%;">−</div>
+    <div class="dv-icon-btn" style="border-radius:50%;">+</div>
+  </div>`;
+}
+
+function dvModeRow() {
+  const modes = [
+    ['power', 'Off'],
+    ['fire', 'Heat'],
+    ['snowflake', 'Cool'],
+    ['fan', 'Fan']
+  ];
+  return `<div class="dv-mode-row">${modes
+    .map(([, label], i) => `<div class="dv-mode-btn ${i === 1 ? 'active' : ''}">${escapeAttr(label)}</div>`)
+    .join('')}</div>`;
+}
+
+function renderTvScreenPreview() {
+  const t = readTv();
+  let html = `<div class="dv-statusbar">TV</div>`;
+  html += `<div class="dv-now-artist" style="text-align:center;margin-top:8px;" data-jump="tv">${escapeAttr(t.mediaPlayerEntity || 'no media player entity')} / ${escapeAttr(t.remoteEntity || 'no remote entity')}</div>`;
+  html += `<div class="dv-dpad">
+      <span class="dv-dpad-empty"></span><div class="dv-dpad-btn">▲</div><span class="dv-dpad-empty"></span>
+      <div class="dv-dpad-btn">◀</div><div class="dv-dpad-btn center">OK</div><div class="dv-dpad-btn">▶</div>
+      <span class="dv-dpad-empty"></span><div class="dv-dpad-btn">▼</div><span class="dv-dpad-empty"></span>
+    </div>`;
+  html += dvPresetRow(['YouTube', 'Netflix', 'TV mate']);
+  html += dvStepRow('−', '+', 50);
+  html += dvPresetRow(['BACK', 'HOME', 'POWER']);
+  html += `<p class="hint" style="padding: 4px 12px;">App icons are shared across every room - re-skin them from the Theme page.</p>`;
+  return html;
+}
+
+function renderXboxScreenPreview() {
+  const x = readXbox();
+  let html = `<div class="dv-statusbar">Xbox</div>`;
+  html += `<div class="dv-hero" data-jump="xbox">hero art</div>`;
+  html += `<div class="dv-now-playing" data-jump="xbox">
+      <div class="dv-now-title">${escapeAttr(x.name || 'Xbox')}</div>
+      <div class="dv-now-artist">${x.enabled ? 'Enabled' : 'Disabled, won’t show on device'}</div>
+    </div>`;
+  if (x.games.length) {
+    html += `<div class="dv-rule"></div><div class="dv-list">`;
+    x.games.slice(0, 8).forEach((g) => {
+      html += `<div class="dv-list-row">${escapeAttr(g.name || g.productId || '(unnamed)')}</div>`;
+    });
+    html += `</div>`;
+  }
+  return html;
+}
+
+function renderStatusScreenPreview() {
+  return `<div class="dv-statusbar">Status</div>
+    <div class="dv-standby" data-jump="standby">
+      <div class="dv-standby-temp">72°</div>
+      <div class="dv-standby-sub">Weather &amp; indoor temperature</div>
+    </div>
+    <div class="dv-rule"></div>
+    <div class="dv-now-artist" style="text-align:center;">Wind · Humidity · 3-day outlook</div>`;
+}
+
+const DEVICE_SCREENS = [
+  { id: 'status', flag: null, label: 'Status', render: renderStatusScreenPreview },
+  { id: 'lighting', flag: 'lighting', label: 'Lighting', render: renderLightingScreen },
+  { id: 'blinds', flag: 'blinds', label: 'Blinds', render: renderBlindsScreen },
+  { id: 'media', flag: 'music', label: 'Music', render: renderMediaScreenPreview },
+  { id: 'climate', flag: 'climate', label: 'Climate', render: renderClimateScreenPreview },
+  { id: 'tv', flag: 'tv', label: 'TV', render: renderTvScreenPreview },
+  { id: 'xbox', flag: 'xbox', label: 'Xbox', render: renderXboxScreenPreview },
+  { id: 'hub', flag: null, label: 'Quick Access', render: renderHubScreenPreview }
+];
+
+function visibleDeviceScreens() {
+  const screens = readScreens();
+  return DEVICE_SCREENS.filter((s) => !s.flag || screens[s.flag] !== false);
+}
+
+function renderDevicePreview() {
+  if (!state.currentSlug || state.showingGlobals || state.showingDevices || state.showingTheme) return;
+  const screens = visibleDeviceScreens();
+  if (!screens.length) {
+    els.devicePreviewLabel.textContent = '—';
+    els.devicePreviewScreen.innerHTML = '<div class="dv-empty">Every screen is turned off for this room.</div>';
+    return;
+  }
+  if (state.devicePreviewIndex >= screens.length) state.devicePreviewIndex = 0;
+  const screen = screens[state.devicePreviewIndex];
+  els.devicePreviewLabel.textContent = screen.label;
+  els.devicePreviewScreen.innerHTML = screen.render();
+}
+
+function jumpToRow(listEl, rowSelector, index, focusIcon) {
+  const rows = listEl.querySelectorAll(rowSelector);
+  const row = rows[index];
+  if (!row) return;
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.classList.add('jump-highlight');
+  setTimeout(() => row.classList.remove('jump-highlight'), 1100);
+  if (focusIcon) {
+    const search = row.querySelector('.icon-picker-search');
+    if (search) search.focus();
+  }
+}
+
+function jumpToField(el) {
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('jump-highlight');
+  setTimeout(() => el.classList.remove('jump-highlight'), 1100);
+  el.focus();
+}
+
+function devicePreviewJump(kind, index, focusIcon) {
+  switch (kind) {
+    case 'light':
+      return jumpToRow(els.lightingLightsList, '.lighting-item', index, focusIcon);
+    case 'scene':
+      return jumpToRow(els.lightingScenesList, '.lighting-item', index, focusIcon);
+    case 'blind':
+      return jumpToRow(els.blindsItemsList, '.blinds-item', index, focusIcon);
+    case 'hub':
+      return jumpToRow(els.hubItemsList, '.hub-item', index, focusIcon);
+    case 'lightingGroup':
+      return jumpToField(els.lightingGroupName);
+    case 'blindsGroup':
+      return jumpToField(els.blindsGroupName);
+    case 'media':
+      return jumpToField(els.mediaName);
+    case 'climate':
+      return jumpToField(els.climateEntity);
+    case 'tv':
+      return jumpToField(els.tvMediaPlayerEntity);
+    case 'xbox':
+      return jumpToField(els.xboxName);
+    case 'standby':
+      return jumpToField(els.standbyWeatherEntity);
+    default:
+      return undefined;
+  }
+}
+
+els.devicePreviewScreen.addEventListener('click', (e) => {
+  const tab = e.target.closest('[data-tab]');
+  if (tab) {
+    state.devicePreviewLightingTab = tab.dataset.tab;
+    renderDevicePreview();
+    return;
+  }
+  const iconTarget = e.target.closest('[data-jump-icon]');
+  if (iconTarget) {
+    devicePreviewJump(iconTarget.dataset.jumpIcon, Number(iconTarget.dataset.index), true);
+    return;
+  }
+  const target = e.target.closest('[data-jump]');
+  if (target) {
+    const index = target.dataset.index ? Number(target.dataset.index) : null;
+    devicePreviewJump(target.dataset.jump, index, false);
+  }
+});
+
+els.devicePreviewPrev.addEventListener('click', () => {
+  const screens = visibleDeviceScreens();
+  if (!screens.length) return;
+  state.devicePreviewIndex = (state.devicePreviewIndex - 1 + screens.length) % screens.length;
+  renderDevicePreview();
+});
+
+els.devicePreviewNext.addEventListener('click', () => {
+  const screens = visibleDeviceScreens();
+  if (!screens.length) return;
+  state.devicePreviewIndex = (state.devicePreviewIndex + 1) % screens.length;
+  renderDevicePreview();
+});
+
+// Live-updates on any change anywhere in the form - add/remove item clicks,
+// icon picks, text edits, checkbox toggles - without tracking every
+// individual field. Debounced slightly since typing fires many 'input'
+// events in a row.
+let devicePreviewRenderTimer = null;
+function scheduleDevicePreviewRender() {
+  clearTimeout(devicePreviewRenderTimer);
+  devicePreviewRenderTimer = setTimeout(renderDevicePreview, 120);
+}
+els.form.addEventListener('input', scheduleDevicePreviewRender);
+els.form.addEventListener('change', scheduleDevicePreviewRender);
+els.form.addEventListener('click', scheduleDevicePreviewRender);
 
 // --- Actions ---------------------------------------------------------------
 

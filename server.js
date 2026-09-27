@@ -195,6 +195,11 @@ app.get('/api/theme/fonts.pack', auth.requireAdminOrDevice, (req, res) => {
 // reachable, unlike the rest of /api/assets/* below, since the device is
 // what actually needs this bitmap - the admin UI only needs the PNG preview
 // (icons/search, icons/preview) to build the picker.
+//
+// The path/param name predate custom icon uploads - `:name` is resolved
+// against custom uploads first, then the bundled MDI library (see
+// iconsCompiler.compileSingleIcon -> resolveIconSvg), so this one route
+// already serves both without the firmware needing to know which is which.
 app.get('/api/icons/mdi/:name', auth.requireAdminOrDevice, async (req, res) => {
   const size = Math.min(Math.max(Number(req.query.size) || 40, 8), 128);
   try {
@@ -216,12 +221,54 @@ app.get('/api/assets/icons/search', auth.requireAdminSession, async (req, res) =
   const matches = iconsCompiler.searchMdiIcons(req.query.q, 40);
   try {
     const results = await Promise.all(
-      matches.map(async (name) => ({ name, preview: await iconsCompiler.renderPreviewPng(name) }))
+      matches.map(async (m) => ({
+        name: m.name,
+        source: m.source,
+        preview: await iconsCompiler.renderPreviewPng(m.name)
+      }))
     );
     res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Custom icon uploads (admin-provided SVG, alongside the bundled MDI
+// library) - see lib/assets/icons.js's resolveIconSvg() doc comment for how
+// these become usable anywhere an MDI name already is, with zero changes to
+// any consumer (the Theme page's slot picker, every per-item icon picker,
+// and the device-facing single-icon endpoint below).
+app.get('/api/assets/icons/custom', auth.requireAdminSession, (req, res) => {
+  res.json(store.listCustomIcons());
+});
+
+app.post('/api/assets/icons/custom', auth.requireAdminSession, async (req, res) => {
+  const name = req.body && req.body.name;
+  const svg = req.body && req.body.svg;
+  if (!store.isValidCustomIconName(name)) {
+    return res
+      .status(400)
+      .json({ error: 'name must be lowercase letters, digits, and hyphens only (max 64 chars)' });
+  }
+  if (!svg || typeof svg !== 'string' || svg.length > 200 * 1024) {
+    return res.status(400).json({ error: 'svg is required (max 200KB)' });
+  }
+  try {
+    // Rasterize once up front so a malformed SVG fails the upload instead of
+    // silently sitting in the library until the first thing that tries to
+    // use it (a Theme compile, or a device's own icon fetch) breaks instead.
+    const preview = await iconsCompiler.validateAndPreviewCustomSvg(svg);
+    store.saveCustomIcon(name, svg);
+    res.json({ ok: true, name, preview });
+  } catch (err) {
+    res.status(400).json({ error: `not a usable SVG: ${err.message}` });
+  }
+});
+
+app.delete('/api/assets/icons/custom/:name', auth.requireAdminSession, (req, res) => {
+  const ok = store.deleteCustomIcon(req.params.name);
+  if (!ok) return res.status(404).json({ error: 'no such custom icon' });
+  res.status(204).end();
 });
 
 // Batch preview - the Theme page's slot list renders a "currently" preview
