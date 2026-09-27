@@ -35,7 +35,7 @@ body {
 
 .app {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
 }
 
 /* ---------- Sidebar ---------- */
@@ -393,10 +393,29 @@ button:disabled {
   flex: 1;
 }
 
-/* ---------- Form main (single column - no more preview rail) ---------- */
+/* ---------- Form layout (main column + device preview rail) ---------- */
+
+.form-layout {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
 
 .form-main {
   max-width: 640px;
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .form-layout {
+    flex-direction: column;
+  }
+  .device-preview {
+    position: static;
+    width: 100%;
+    max-width: 320px;
+  }
 }
 
 /* ---- Lighting / Blinds / Climate / TV / WiFi (shared list styling) ---- */
@@ -629,6 +648,16 @@ button:disabled {
   filter: invert(1);
 }
 
+/* A custom-uploaded icon (vs. the bundled MDI library) in search results -
+   same shape, just a distinct border color so it reads as "yours". */
+.icon-search-result-custom {
+  border-color: #6bd67a;
+}
+
+.icon-search-result-custom:hover {
+  border-color: #6bd67a;
+}
+
 .icon-slot-list {
   max-height: 480px;
   overflow-y: auto;
@@ -728,6 +757,59 @@ button:disabled {
   min-width: 0;
 }
 
+.icon-picker-upload-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-dim);
+}
+
+.icon-picker-upload-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ---------- Custom icons management list (Theme page) ---------- */
+
+.custom-icon-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.custom-icon-list:empty::before {
+  content: "None uploaded yet.";
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.custom-icon-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.custom-icon-item img {
+  filter: invert(1);
+}
+
+.custom-icon-item span {
+  font-size: 12px;
+}
+
 .icon-picker-results {
   display: flex;
   flex-wrap: wrap;
@@ -736,4 +818,450 @@ button:disabled {
 
 .icon-picker-results:empty {
   display: none;
+}
+
+/* ---------- Device preview (live mockup of the physical remote) ----------
+   A scaled-down stand-in for the X4 Pro's 480x800 portrait e-ink panel -
+   not pixel-accurate to the firmware's real layout, just visually
+   recognizable enough to navigate by. Renders live from the same read*()
+   functions the form's own Save button uses (see app.js's
+   renderDevicePreview()), so it always reflects what you're about to save,
+   not what's currently stored. */
+
+.device-preview {
+  position: sticky;
+  top: 16px;
+  width: 260px;
+  flex-shrink: 0;
+}
+
+.device-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.device-frame {
+  width: 260px;
+  height: 433px;
+  background: #fff;
+  border: 6px solid #000;
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.device-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  color: #000;
+  font-family: inherit;
+}
+
+.device-screen::-webkit-scrollbar {
+  width: 4px;
+}
+
+/* ---- mockup content (dv- prefix, scoped to .device-screen) ---- */
+
+.dv-statusbar {
+  padding: 10px 12px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  border-bottom: 2px solid #000;
+}
+
+/* A dotted rule, matching the firmware's drawDottedLine() convention used
+   throughout (between the top controls and a chip grid, above a sensor
+   list, etc). Real device draws actual dots; a dashed border reads the
+   same at this scale for far less markup. */
+.dv-rule {
+  margin: 8px 12px;
+  border-top: 2px dashed #000;
+}
+
+/* Row 1 on Lighting/Music: an icon (the page's own on/off indicator) + the
+   configured name + a toggle switch on the right - NOT a bordered card on
+   the real device, just three items directly on the background. */
+.dv-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 12px;
+  cursor: pointer;
+}
+
+.dv-toggle-row-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dv-toggle {
+  width: 30px;
+  height: 16px;
+  border: 2px solid #000;
+  border-radius: 8px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.dv-toggle.on {
+  background: #000;
+}
+
+.dv-toggle::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #000;
+}
+
+.dv-toggle.on::after {
+  background: #fff;
+  left: auto;
+  right: 1px;
+}
+
+/* Row 2 on Lighting/Music/TV: an icon button | a level bar or step blocks |
+   another icon button - DARKER/bar/BRIGHTER, VOL-/blocks/VOL+. */
+.dv-step-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px;
+}
+
+.dv-icon-btn {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: 2px solid #000;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dv-icon-btn:hover {
+  background: #f0f0f0;
+}
+
+.dv-bar-track {
+  flex: 1;
+  height: 12px;
+  border: 2px solid #000;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.dv-bar-fill {
+  height: 100%;
+  background: #000;
+}
+
+/* A row of equal-width outlined segments - WARM/DAY/COOL, CLOSE/STOP/OPEN,
+   PREV/PLAY/NEXT, BACK/HOME/POWER - all the same "3-segment action bar"
+   shape on the real device, just different glyphs/labels each time. */
+.dv-preset-row {
+  display: flex;
+  gap: 6px;
+  margin: 8px 12px;
+}
+
+.dv-preset-seg {
+  flex: 1;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 8px 2px;
+  border: 2px solid #000;
+  border-radius: 8px;
+  cursor: default;
+}
+
+.dv-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 12px 8px;
+}
+
+.dv-tabs span {
+  flex: 1;
+  text-align: center;
+  font-size: 10px;
+  padding: 4px;
+  border-bottom: 2px solid transparent;
+  color: #999;
+  cursor: pointer;
+}
+
+.dv-tabs span.active {
+  color: #000;
+  border-bottom-color: #000;
+  font-weight: 700;
+}
+
+.dv-chip-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 0 12px 12px;
+}
+
+.dv-chip,
+.dv-tile {
+  border: 2px solid #000;
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.dv-chip:hover,
+.dv-tile:hover {
+  background: #f0f0f0;
+}
+
+.dv-chip-icon,
+.dv-tile-icon {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.dv-chip-icon:hover,
+.dv-tile-icon:hover {
+  background: #ddd;
+}
+
+/* No invert filter here (unlike .icon-slot-preview/.icon-picker-preview
+   elsewhere) - the mockup's background is white like the real e-ink panel,
+   and these previews are already black-on-transparent, so they're correct
+   as-is. */
+
+.dv-chip-bulb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #000;
+  display: block;
+}
+
+.dv-chip-label,
+.dv-tile-label {
+  font-size: 10px;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.dv-hub-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px;
+}
+
+.dv-list {
+  margin: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dv-list-row {
+  font-size: 10px;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+/* Climate's circular thermostat dial - the real device plots the track as a
+   dense dot band (no arc primitive); a conic-gradient ring reads the same
+   at this scale for far less markup. Center holds the mode pill + target
+   temp, matching the real screen's center readout. */
+.dv-dial-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0 6px;
+}
+
+.dv-dial {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: conic-gradient(#000 0deg 270deg, transparent 270deg 360deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.dv-dial::before {
+  content: '';
+  position: absolute;
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.dv-dial-center {
+  position: relative;
+  text-align: center;
+  cursor: pointer;
+}
+
+.dv-dial-mode {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  border: 2px solid #000;
+  border-radius: 10px;
+  padding: 2px 10px;
+  margin-bottom: 6px;
+}
+
+.dv-dial-temp {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dv-mode-row {
+  display: flex;
+  gap: 6px;
+  margin: 10px 12px;
+}
+
+.dv-mode-btn {
+  flex: 1;
+  text-align: center;
+  font-size: 8px;
+  padding: 8px 2px;
+  border: 2px solid #000;
+  border-radius: 8px;
+}
+
+.dv-mode-btn.active {
+  background: #000;
+  color: #fff;
+}
+
+/* TV's D-pad: a plus-shape in a 3x3 grid, corners empty - same shape the
+   real device draws. */
+.dv-dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 32px);
+  grid-template-rows: repeat(3, 32px);
+  gap: 4px;
+  justify-content: center;
+  margin: 14px 0;
+}
+
+.dv-dpad-btn {
+  border: 2px solid #000;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dv-dpad-btn.center {
+  background: #000;
+  color: #fff;
+}
+
+.dv-dpad-empty {
+  visibility: hidden;
+}
+
+/* Music's album art / Xbox's hero art square. */
+.dv-hero {
+  width: 90px;
+  height: 90px;
+  margin: 10px auto;
+  border: 2px solid #000;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #999;
+  text-align: center;
+}
+
+.dv-now-playing {
+  text-align: center;
+  margin: 0 12px 8px;
+}
+
+.dv-now-title {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dv-now-artist {
+  font-size: 10px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.dv-standby {
+  text-align: center;
+  padding: 60px 12px;
+}
+
+.dv-standby-temp {
+  font-size: 40px;
+  font-weight: 700;
+}
+
+.dv-standby-sub {
+  font-size: 11px;
+  color: #666;
+  margin-top: 6px;
+}
+
+.dv-empty {
+  padding: 30px 16px;
+  text-align: center;
+  font-size: 11px;
+  color: #999;
+}
+
+/* Brief flash when a device-preview click jumps to a real form field. */
+@keyframes jumpHighlight {
+  0%, 100% { box-shadow: none; }
+  30% { box-shadow: 0 0 0 3px var(--accent); }
+}
+
+.jump-highlight {
+  animation: jumpHighlight 1.1s ease-out;
 }

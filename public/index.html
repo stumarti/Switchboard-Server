@@ -91,6 +91,7 @@
           <textarea id="field-description" rows="2" placeholder="Optional notes about this room (e.g. where it is, which device is installed)"></textarea>
         </label>
 
+        <div class="form-layout">
         <div class="form-main">
           <section class="card">
             <h2>Active screens</h2>
@@ -381,6 +382,19 @@
             </div>
           </section>
         </div>
+
+        <aside class="device-preview" id="device-preview">
+          <div class="device-preview-header">
+            <button type="button" id="device-preview-prev" class="btn btn-secondary btn-small" aria-label="Previous screen">‹</button>
+            <span id="device-preview-label">Lighting</span>
+            <button type="button" id="device-preview-next" class="btn btn-secondary btn-small" aria-label="Next screen">›</button>
+          </div>
+          <div class="device-frame">
+            <div class="device-screen" id="device-preview-screen"></div>
+          </div>
+          <p class="hint">Click an icon to change it, or a name to jump to its fields.</p>
+        </aside>
+        </div>
       </form>
 
       <form id="globals-form" class="profile-form" hidden>
@@ -514,11 +528,16 @@
             </div>
             <p class="card-hint">
               Every icon the firmware draws, grouped by where it shows up.
-              Search and click a replacement to override a slot; unmodified
-              slots keep their current look.
+              Search and click a replacement to override a slot, or upload
+              your own SVG if the right one isn't in the search results;
+              unmodified slots keep their current look.
             </p>
             <div class="row">
               <label>Search icons<input type="text" id="theme-icon-search" placeholder="e.g. lightbulb, xbox, cog" /></label>
+              <label class="icon-picker-upload-btn" style="align-self: flex-end;" title="Upload a custom SVG icon">
+                +
+                <input type="file" id="theme-icon-upload" accept=".svg,image/svg+xml" hidden />
+              </label>
             </div>
             <div id="theme-icon-search-results" class="icon-search-results"></div>
             <div id="theme-icon-slots" class="icon-slot-list"></div>
@@ -526,6 +545,17 @@
               <span id="theme-icons-status" class="save-status"></span>
               <button type="button" id="theme-icons-compile" class="btn btn-primary">Compile &amp; publish icons</button>
             </div>
+          </section>
+
+          <section class="card">
+            <h2>Custom icons</h2>
+            <p class="card-hint">
+              SVGs you've uploaded from any icon picker in this app - usable
+              anywhere an icon can be picked. Deleting one here doesn't
+              change anything already compiled/published; it just stops
+              showing up in search.
+            </p>
+            <div id="theme-custom-icons-list" class="custom-icon-list"></div>
           </section>
         </div>
       </section>
