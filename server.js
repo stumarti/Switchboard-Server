@@ -58,6 +58,7 @@ const { startMdnsResponder } = require('./lib/mdns');
 const auth = require('./lib/auth');
 const pairing = require('./lib/pairing');
 const haState = require('./lib/ha-state');
+const clients = require('./lib/clients');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
 const fontsCompiler = require('./lib/assets/fonts');
@@ -128,7 +129,7 @@ app.post('/api/auth/logout', (req, res) => {
 // No auth: this is a device's very first-ever contact, before it has a
 // token. Also polled (still unauthenticated) while pending/revoked.
 app.post('/api/pairing/register', (req, res) => {
-  const result = pairing.register(req.body && req.body.mac, req.ip);
+  const result = pairing.register(req.body && req.body.mac, req.ip, req.body && req.body.type);
   if (result.error) return res.status(400).json(result);
   res.json(result);
 });
@@ -165,6 +166,75 @@ app.delete('/api/pairing/:mac', auth.requireAdminSession, (req, res) => {
   const result = pairing.remove(req.params.mac);
   if (result.error) return res.status(404).json(result);
   res.status(204).end();
+});
+
+// --- Home Assistant lookups for the admin UI (entity pickers) -----------
+//
+// The server holds the HA token, so the browser never needs it: these proxy
+// HA's own entity list, trimmed to what the pickers show.
+
+app.get('/api/ha/status', auth.requireAdminSession, async (req, res) => {
+  res.json(await haState.checkConnection(store.getGlobals()));
+});
+
+app.get('/api/ha/entities', auth.requireAdminSession, async (req, res) => {
+  try {
+    const domains = String(req.query.domains || '')
+      .split(',')
+      .map((d) => d.trim())
+      .filter(Boolean);
+    res.json(
+      await haState.searchEntities(store.getGlobals(), {
+        domains,
+        q: String(req.query.q || ''),
+        deviceClass: String(req.query.deviceClass || ''),
+        limit: Math.min(Number(req.query.limit) || 50, 500)
+      })
+    );
+  } catch (e) {
+    res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
+  }
+});
+
+app.post('/api/ha/lookup', auth.requireAdminSession, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.filter((i) => typeof i === 'string') : [];
+    res.json(await haState.lookupEntities(store.getGlobals(), ids.slice(0, 500)));
+  } catch (e) {
+    res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
+  }
+});
+
+// --- Clients (remotes + viewports: every paired device, with its layout) --
+
+// Every device, each with its effective layout (its own, or the default
+// derived from its room / type) — what the Remotes and Viewports pages list.
+app.get('/api/clients', auth.requireAdminSession, (req, res) => {
+  res.json(
+    pairing.list().map((d) => ({
+      ...d,
+      type: clients.normalizeType(d.type),
+      layout: clients.layoutFor(d, d.assignedSlug ? store.getProfile(d.assignedSlug) : null),
+      layoutCustomized: Boolean(d.layout)
+    }))
+  );
+});
+
+app.put('/api/clients/:mac', auth.requireAdminSession, (req, res) => {
+  const result = pairing.update(req.params.mac, req.body);
+  if (result.error) return res.status(404).json(result);
+  res.json(result);
+});
+
+// The option lists the admin UI's builders offer.
+app.get('/api/clients/schema', auth.requireAdminSession, (req, res) => {
+  res.json({
+    types: clients.CLIENT_TYPES,
+    remotePages: clients.REMOTE_PAGES.map((p) => p.id),
+    viewportTileTypes: clients.VIEWPORT_TILE_TYPES,
+    viewportTileSizes: clients.VIEWPORT_TILE_SIZES,
+    refreshChoices: clients.REFRESH_CHOICES
+  });
 });
 
 // --- Theme (compiled icon/font packs a paired device downloads) ---------
@@ -341,12 +411,14 @@ app.post('/api/devices', auth.requireAdminSession, (req, res) => {
   res.status(201).json(profile);
 });
 
+// A device gets the room with its own layout folded in (lib/clients.js's
+// composeDeviceConfig); the admin UI gets the room exactly as stored.
 app.get('/api/devices/:slug/config', auth.requireAdminOrDevice, (req, res) => {
   const profile = store.getProfile(req.params.slug);
   if (!profile) {
     return res.status(404).json({ error: 'no such profile' });
   }
-  res.json(profile);
+  res.json(req.device ? clients.composeDeviceConfig(profile, req.device) : profile);
 });
 
 // Everything a remote needs to know about its room, in one response: the
@@ -362,7 +434,7 @@ app.get('/api/devices/:slug/bundle', auth.requireAdminOrDevice, (req, res) => {
   }
   const theme = store.getTheme();
   res.json({
-    config: profile,
+    config: req.device ? clients.composeDeviceConfig(profile, req.device) : profile,
     globals: store.getGlobals(),
     theme: {
       iconsVersion: theme.iconsVersion || '',
