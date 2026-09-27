@@ -490,3 +490,186 @@ button:disabled {
   gap: 6px 16px;
   margin-top: 4px;
 }
+
+/* ---------- Auth gate ---------- */
+
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  z-index: 100;
+}
+
+.auth-card {
+  width: 320px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-card .brand {
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.auth-card .subtitle {
+  text-align: center;
+  margin: 0;
+}
+
+.auth-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin: -6px 0 0;
+}
+
+/* ---------- Devices ---------- */
+
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.device-list:empty::before {
+  content: "No remotes have contacted this server yet.";
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.device-item {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.device-item .row {
+  align-items: flex-end;
+}
+
+.device-meta {
+  margin: 6px 0 0;
+}
+
+.device-actions {
+  margin-top: 10px;
+  gap: 8px;
+}
+
+.device-status-badge {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.device-status-approved {
+  color: #6bd67a;
+  border-color: #6bd67a;
+}
+
+.device-status-pending {
+  color: #e8b84f;
+  border-color: #e8b84f;
+}
+
+.device-status-revoked {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* ---------- Theme (icon slot picker) ---------- */
+
+.icon-search-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px 0 14px;
+}
+
+.icon-search-results:empty {
+  margin: 0;
+}
+
+.icon-search-result {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+}
+
+.icon-search-result:hover {
+  border-color: var(--accent);
+}
+
+.icon-search-result img {
+  display: block;
+  filter: invert(1);
+}
+
+.icon-slot-list {
+  max-height: 480px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.icon-slot-category {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  padding: 6px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+.icon-slot-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+
+.icon-slot-row:hover {
+  background: var(--panel-2);
+}
+
+.icon-slot-row.active {
+  background: var(--panel-2);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.icon-slot-preview {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-slot-preview img {
+  filter: invert(1);
+}
+
+.icon-slot-name {
+  font-size: 13px;
+}

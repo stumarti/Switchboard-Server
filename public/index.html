@@ -8,7 +8,23 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="app">
+  <div id="auth-gate" class="auth-gate" hidden>
+    <form id="auth-form" class="auth-card">
+      <div class="brand">
+        <svg class="brand-logo" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12,0C8.96,0 6.21,1.23 4.22,3.22L5.63,4.63C7.26,3 9.5,2 12,2C14.5,2 16.74,3 18.36,4.64L19.77,3.23C17.79,1.23 15.04,0 12,0M7.05,6.05L8.46,7.46C9.37,6.56 10.62,6 12,6C13.38,6 14.63,6.56 15.54,7.46L16.95,6.05C15.68,4.78 13.93,4 12,4C10.07,4 8.32,4.78 7.05,6.05M12,15A2,2 0 0,1 10,13A2,2 0 0,1 12,11A2,2 0 0,1 14,13A2,2 0 0,1 12,15M15,9H9A1,1 0 0,0 8,10V22A1,1 0 0,0 9,23H15A1,1 0 0,0 16,22V10A1,1 0 0,0 15,9Z" />
+        </svg>
+        <h1>Switchboard Server</h1>
+      </div>
+      <p id="auth-heading" class="subtitle">Sign in</p>
+      <label>Admin password<input type="password" id="auth-password" autocomplete="current-password" required /></label>
+      <label id="auth-confirm-label" hidden>Confirm password<input type="password" id="auth-password-confirm" autocomplete="new-password" /></label>
+      <p id="auth-error" class="auth-error" hidden></p>
+      <button type="submit" class="btn btn-primary btn-block" id="auth-submit">Sign in</button>
+    </form>
+  </div>
+
+  <div class="app" hidden>
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="brand">
@@ -21,6 +37,8 @@
       </div>
 
       <button id="globals-nav-btn" class="btn btn-secondary btn-block globals-nav-btn">Globals — WiFi &amp; Home Assistant</button>
+      <button id="devices-nav-btn" class="btn btn-secondary btn-block globals-nav-btn">Devices</button>
+      <button id="theme-nav-btn" class="btn btn-secondary btn-block globals-nav-btn">Theme — Fonts &amp; Icons</button>
 
       <button id="new-profile-btn" class="btn btn-primary btn-block">+ New room profile</button>
 
@@ -34,6 +52,7 @@
         <p class="hint" id="mdns-hint">switchboard.local</p>
         <p class="hint" id="version-hint"></p>
         <a class="hint flasher-link" href="https://stumarti.github.io/Switchboard/" target="_blank" rel="noopener noreferrer">⚡ Flash an X4 Pro remote</a>
+        <button id="logout-btn" class="btn btn-secondary btn-block file-btn">Log out</button>
       </div>
     </aside>
 
@@ -441,6 +460,75 @@
           </section>
         </div>
       </form>
+
+      <section id="devices-view" class="profile-form" hidden>
+        <div class="form-toolbar">
+          <div class="name-input globals-title">Devices</div>
+        </div>
+        <p class="slug-line">
+          Every physical remote that has ever contacted this server. Approving
+          a pending device is also how you assign its default room — see
+          README.md's "Pairing" section.
+        </p>
+        <div class="form-main devices-main">
+          <section class="card">
+            <div id="devices-list" class="device-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="theme-view" class="profile-form" hidden>
+        <div class="form-toolbar">
+          <div class="name-input globals-title">Theme — Fonts &amp; Icons</div>
+        </div>
+        <p class="slug-line">
+          One household-wide look, downloaded automatically by every paired
+          remote. Publishing recompiles and immediately becomes what every
+          device shows.
+        </p>
+        <div class="form-main">
+          <section class="card">
+            <div class="card-header-row">
+              <h2>Font</h2>
+              <span id="theme-fonts-version" class="hint"></span>
+            </div>
+            <p class="card-hint">
+              Upload a TTF/OTF, or name a Google Font — one font produces
+              every size the firmware uses (body text, status-bar chrome,
+              and the large temperature readout).
+            </p>
+            <div class="row">
+              <label>Upload a font file<input type="file" id="theme-font-file" accept=".ttf,.otf" /></label>
+              <label>...or a Google Font name<input type="text" id="theme-google-font" placeholder="Roboto" /></label>
+            </div>
+            <div class="row">
+              <span id="theme-font-status" class="save-status"></span>
+              <button type="button" id="theme-font-compile" class="btn btn-primary">Compile &amp; publish font</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-header-row">
+              <h2>Icons</h2>
+              <span id="theme-icons-version" class="hint"></span>
+            </div>
+            <p class="card-hint">
+              Every icon the firmware draws, grouped by where it shows up.
+              Search and click a replacement to override a slot; unmodified
+              slots keep their current look.
+            </p>
+            <div class="row">
+              <label>Search icons<input type="text" id="theme-icon-search" placeholder="e.g. lightbulb, xbox, cog" /></label>
+            </div>
+            <div id="theme-icon-search-results" class="icon-search-results"></div>
+            <div id="theme-icon-slots" class="icon-slot-list"></div>
+            <div class="row">
+              <span id="theme-icons-status" class="save-status"></span>
+              <button type="button" id="theme-icons-compile" class="btn btn-primary">Compile &amp; publish icons</button>
+            </div>
+          </section>
+        </div>
+      </section>
     </main>
   </div>
 
