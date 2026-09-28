@@ -13,6 +13,7 @@ import {
 } from './lib.js';
 import { EntityPicker, IconPicker, useHaStatus, useEntity } from './pickers.js';
 import { CarouselBuilder, HubBuilder } from './clients.js';
+import { RemotePreviews } from './remote-preview.js';
 
 // --- A reorderable list of items (lights, scenes, blinds, sensors, games) ---
 
@@ -497,6 +498,13 @@ function RoomEditor({ slug, clients, reloadRooms }) {
       subtitle="What every remote in this room shows (a remote can be customised on its own page). Click a page to set it up; drag to reorder; switch pages off to skip them." />
     <div class="page-editor">
       ${pageEditor(page, cardProps, room, set)}
+    </div>
+    <div class="page-editor">
+      <${RemotePreviews} slug=${slug} room=${room} carousel=${carouselFromScreens(room.screens)} selected=${page}
+        onSelect=${(p) => {
+          selectPage(p);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }} />
     </div>
   </div>`;
 }

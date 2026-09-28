@@ -86,3 +86,11 @@ test('mask1: a logo is thresholded, not dithered', () => {
   assert.deepEqual(flat, [0, 0]);
   assert.deepEqual([...art.toMask1(Buffer.alloc(8, 240), 8, 1, { threshold: true })], [0xff]);
 });
+
+test('art: the remote’s 1-bit picture as a black-and-white PNG, for the screen previews', async () => {
+  const sharp = require('sharp');
+  const png = await art.mask1ToPng(Buffer.from([0b01010101, 0b01111111]), 10, 1);
+  const { data, info } = await sharp(png).greyscale().raw().toBuffer({ resolveWithObject: true });
+  assert.equal(info.width, 10);
+  assert.deepEqual([...data], [0, 255, 0, 255, 0, 255, 0, 255, 0, 255]); // 0 = ink (black), 1 = paper
+});
