@@ -1,13 +1,14 @@
 name: Release
 
-# Tagging a version (vX.Y.Z) builds the container image and publishes it to
+# Tagging a version (vX.Y.Z, or VX.Y.Z — tag filters are case-sensitive, so
+# both are listed) builds the container image and publishes it to
 # GHCR as both :latest and :X.Y.Z, then creates a GitHub Release. This is
 # what a `docker pull` / Unraid template on the published image points at —
 # see README.md's "Releases & the published image" section.
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', 'V*']
 
 permissions:
   contents: write
@@ -31,7 +32,9 @@ jobs:
 
       - name: Derive version from the tag
         id: meta
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          v="${GITHUB_REF_NAME#[vV]}"
+          echo "version=${v}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
