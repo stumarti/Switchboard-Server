@@ -27,7 +27,11 @@ This is step one. Get this running and set up at least one room *before* you fla
 
 - **Rooms** — every room's entities, one card per function (status page, lighting, climate, blinds, music, TV, Xbox, and an optional room-specific Home Assistant connection). Entity fields search Home Assistant as you type and show each entity's live state.
 - **Remotes** — every handheld remote, in a list beside the menu. Pick one to choose its room and refresh interval, build its carousel (drag the page cards into order, switch pages on or off) and its Quick Access hub. New devices waiting for approval appear at the top; approve one as a remote or a viewport, with its name and room, in one step. See "Pairing" below.
-- **Viewports** — colour wall-mounted e-ink displays (the reTerminal E1002 kitchen panel). Pick one to build its dashboard: which of its four screens (Main, Climate, Presence, Security) it pages through and in what order, then each screen's sections — weather, energy, home battery, a row of status icons with a colour per state, alert lines, calendars, heat pump and rooms, people, now playing, departures, doors, windows, motion and cameras. A live preview draws each screen in the panel's six colours from what Home Assistant says right now, including unsaved changes. **Settings & import** holds the thresholds and brings over an existing panel's own settings. See "Viewports" below.
+- **Viewports** — colour wall-mounted e-ink displays (the reTerminal E1002 kitchen panel, or a meeting-room sign). Pick one to build its carousel of screens:
+  - any mix of sections (weather, energy totals and graph, battery, status icons, alerts, calendar, heat pump, rooms, people, now playing, departures, alarm, doors and windows, motion, cameras), each fully configurable
+  - or a whole-screen meeting room status
+
+  A live preview draws each screen in the panel's six colours. See "Viewports" below.
 - **Settings** — the shared Home Assistant connection (with a connection test), the Wi-Fi remotes join plus guest networks shown as join-QR codes, the clock's NTP server, and the **Theme**: pick a font and re-skin any of the ~107 icons the firmware draws, compiled by this server and downloaded automatically by every paired remote. See "Theme" below.
 
 > **⚠️ Upgrading from an older version?** This release adds auth: the admin UI now requires a password, and remotes must pair before they can fetch config. See "Auth" and "Pairing" below, and the **Migrating from an unauthenticated version** section — existing already-flashed remotes need reflashing plus a one-time pairing approval.
@@ -95,11 +99,11 @@ Every Switchboard remote already talks to this: `Settings → Select room` calls
 | GET | `/api/ha/status` | Whether the server can reach Home Assistant with the saved connection | session |
 | GET | `/api/ha/entities` | Search HA's entities (`domains`, `q`, `deviceClass`, `limit`) for the admin UI's pickers | session |
 | POST | `/api/ha/lookup` | Look up specific entity ids (`{ids: [...]}`): each entity, or `null` if HA doesn't have it | session |
-| GET | `/api/viewports/<mac>/bundle` | A viewport's dashboard layout plus Wi-Fi networks, NTP server and time zone (`me` = the calling device; `304` when unchanged) | session or device |
-| GET | `/api/viewports/<mac>/state` | Every screen's finished values, each with its own `etag`; `?screen=main` returns one screen with an `ETag` header and a bodyless `304` when unchanged | session or device |
+| GET | `/api/viewports/<mac>/bundle` | A viewport's layout (carousel + screens) plus every icon it can show, Wi-Fi networks, NTP server and time zone (`me` = the calling device; `304` when unchanged) | session or device |
+| GET | `/api/viewports/<mac>/state` | Every screen's finished values, each with its own `etag`, and `refreshInSec`; `?screen=<id>` returns one screen with `ETag` and `X-Refresh-In` headers, and a bodyless `304` when unchanged | session or device |
 | POST | `/api/viewports/<mac>/preview` | The state an unsaved layout (`{layout}`) would produce — the admin UI's live preview | session |
 | POST | `/api/viewports/import` | A kitchen panel's own `/api/config` JSON (`{config}`) as a layout, to review and save | session |
-| GET | `/api/viewports/defaults` | The default dashboard layout | session |
+| GET | `/api/viewports/defaults` | The kitchen panel's default layout, or `?kind=meetingRoom` for a meeting-room sign | session |
 | GET | `/api/health` | Liveness, version, mDNS info | none |
 | GET | `/api/auth/status` | `{authenticated, setupRequired}` | none |
 | POST | `/api/auth/setup` | Set the admin password (first run only) | none |
@@ -124,18 +128,45 @@ This stays plain HTTP by design (LAN-only, same trust model as everything else h
 
 ## Viewports
 
-A viewport is a colour wall-mounted e-ink display — the reTerminal E1002 kitchen panel — paired like a remote but registering as `"type": "viewport"`. It shows four fixed screens, drawn by the device; everything behind them lives here:
+A viewport is a colour wall-mounted e-ink display, for example the reTerminal E1002 kitchen panel or a sign beside a meeting room door. It pairs like a remote but registers as `"type": "viewport"`. The device draws the screens; everything behind them lives here, on the Viewports page.
 
-| Screen | Sections |
-|---|---|
-| Main | weather (now, later, next two days), energy totals, home battery, up to 9 status icons, up to 9 alert lines, calendar |
-| Climate | heat pump; each room's temperature against its target — red calling for heat, green at target, blue over target, black with no target |
-| Presence | room temperatures and humidity by floor, people (green when home), now playing, next departures (red when imminent) |
-| Security | alarm and when it last changed, doors and windows (red when open), motion (blue when recent), cameras |
+- **Carousel.** The screens the device's left/right buttons step through, in order. Between presses it stays on the current screen and just refreshes it. Optionally, every N minutes (30 by default) it can move to the next screen or go back to the first.
+- **Screens** come in two kinds:
+  - **Sections.** A layout (sidebar + main, two columns, or a single column) whose columns hold any sections, in any order. The same type can appear any number of times, each with its own settings. The types:
 
-The server does all the evaluating. `GET /api/viewports/me/state` returns each screen's finished values: colour indices (0 white, 1 black, 2 red, 3 yellow, 4 green, 5 blue), alert sentences, times and departure countdowns. So the panel needs no Home Assistant template sensors, no ESPHome integration and no rules of its own. It fetches every entity with one `GET /api/states`, plus the weather forecasts and calendar events, in parallel. Each screen carries its own ETag. When a screen hasn't changed the device gets a `304` and can skip its 15–20 s panel refresh.
+    | Type | What it shows |
+    |---|---|
+    | Weather | now, "later" and the next days |
+    | Energy totals | today's solar, use, export and import |
+    | Energy graph | solar production and consumption against the solar forecast, with grid import and export below the axis |
+    | Home battery | charge, status and time to full, with a colour per status |
+    | Status icons | up to 12 icons, each following any entity or attribute; rules set the colour, a different icon, or hide it |
+    | Alert lines | "Front door, Garage +1 open", or "All clear" |
+    | Calendar | upcoming events from any calendars |
+    | Heat pump | mode, outside temperature, setpoint, COP |
+    | Room climate | each room against its target: red calling for heat, green at target, blue over |
+    | Room temperatures | temperature and humidity, grouped by floor |
+    | People | who is home, in green |
+    | Now playing | what each player is playing |
+    | Departures | next departures, red when imminent |
+    | Alarm | its state, since when, and optionally when it was last armed, disarmed or triggered |
+    | Doors & windows | open (red) or closed |
+    | Motion | last motion per sensor, blue when recent |
+    | Cameras | last motion per camera |
 
-On each request the device can report its health as `X-Battery`, `X-Temperature`, `X-RSSI` and `X-Firmware` headers. The Viewports page shows them. The kitchen panel's firmware doesn't talk to these endpoints yet; until it does, it keeps working as before.
+  - **Meeting room.** A whole screen for one room's calendar. It shows *Available*, *Starting soon* or *In use* (plus *booked but empty* and *in use but not booked* if you add an occupancy sensor), "Busy until 14:30" or "Free until 16:00", the current meeting and the rest of today's. Titles can be hidden.
+
+The builder shows a live 800×480 preview of each screen, in the panel's six colours, from Home Assistant's current state and including unsaved changes. **Start from…** loads the kitchen panel's defaults or a meeting-room sign, or imports an existing panel's own settings.
+
+**The server does all the evaluating.** `GET /api/viewports/me/state` returns every screen's finished values: colour indices (0 white, 1 black, 2 red, 3 yellow, 4 green, 5 blue), which icon to draw, alert sentences, times, countdowns and graph buckets. So the device needs no Home Assistant template sensors and no rules of its own. Per refresh, the server makes one `GET /api/states` for every entity. It adds only what the screens need beyond that — weather forecasts, calendar events, and one history request per energy graph — all in parallel.
+
+**Energy graph data.** A series can be a power sensor (averaged per bar) or an energy meter (differenced per bar). The forecast is read from an entity attribute holding an hourly or half-hourly list, as Solcast (`detailedForecast`) and Open-Meteo Solar Forecast provide.
+
+**Refreshes.** Each screen carries its own ETag, and `?screen=<id>` answers a bodyless `304` when that screen is unchanged, so the device can skip its 15–20 s panel refresh. `refreshInSec` (and the `X-Refresh-In` header) says when to wake next: the refresh interval, or sooner when a meeting starts or ends. The bundle lists every icon the screens can show, so the device can fetch them once from `/api/icons/mdi/<name>` and cache them.
+
+**Health.** The device can send `X-Battery`, `X-Temperature`, `X-RSSI` and `X-Firmware` headers; the Viewports page shows them.
+
+The kitchen panel's firmware doesn't use these endpoints yet. Until it does, it keeps working as before.
 
 ## Pairing
 

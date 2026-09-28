@@ -250,10 +250,15 @@ app.get('/api/clients/schema', auth.requireAdminSession, (req, res) => {
   res.json({
     types: clients.CLIENT_TYPES,
     remotePages: clients.REMOTE_PAGES.map((p) => p.id),
-    viewportScreens: dashboard.SCREENS,
-    dashboardColors: dashboard.COLORS,
-    dashboardConditions: dashboard.CONDITIONS,
-    dashboardLimits: dashboard.LIMITS,
+    dashboard: {
+      sectionTypes: dashboard.SECTION_TYPES,
+      templates: Object.keys(dashboard.TEMPLATES),
+      carouselModes: dashboard.CAROUSEL_MODES,
+      colors: dashboard.COLORS,
+      conditions: dashboard.CONDITIONS,
+      limits: dashboard.LIMITS,
+      iconPresets: dashboard.ICON_PRESETS
+    },
     refreshChoices: clients.REFRESH_CHOICES
   });
 });
@@ -302,10 +307,14 @@ app.get('/api/viewports/:mac/bundle', auth.requireAdminOrDevice, (req, res) => {
   if (!device) return;
   noteViewportHealth(req, device);
   const globals = store.getGlobals();
+  const layout = clients.layoutFor({ ...device, type: 'viewport' });
   res.json({
     name: device.name,
     mac: device.mac,
-    layout: clients.layoutFor({ ...device, type: 'viewport' }),
+    layout,
+    // Every icon the screens can show, to fetch (and cache) up front from
+    // /api/icons/mdi/:name.
+    icons: dashboardState.iconsUsed(layout),
     wifiNetworks: globals.wifiNetworks || [],
     ntpServer: globals.ntpServer || 'pool.ntp.org',
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -322,30 +331,38 @@ function haError(res, e) {
   res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
 }
 
-// ?screen=main -> that screen alone ({screen, etag, data}), with an ETag
-// header and a bodyless 304 when it matches If-None-Match. No `screen` ->
-// every screen at once, each with its etag, for a device that caches them
-// all so page turns need no network.
+// ?screen=<id> -> that screen alone ({screen, etag, refreshInSec, data}),
+// with an ETag header and a bodyless 304 when it matches If-None-Match.
+// No `screen` -> every screen at once, each with its etag, for a device that
+// caches them all so page turns need no network. refreshInSec is when to
+// wake next: the refresh interval, or sooner when a screen will change on
+// its own (a meeting starting or ending).
 app.get('/api/viewports/:mac/state', auth.requireAdminOrDevice, async (req, res) => {
   const device = viewportFor(req, res);
   if (!device) return;
   noteViewportHealth(req, device);
   const layout = clients.layoutFor({ ...device, type: 'viewport' });
-  const refreshInSec = layout.refreshIntervalMin * 60;
+  const interval = layout.refreshIntervalMin * 60;
+  const soonest = (list) => Math.min(interval, ...list.filter((n) => n != null && n > 0));
   try {
     const { screens, errors, generatedAt } = await viewportScreens(layout);
     const wanted = req.query.screen ? String(req.query.screen) : '';
     if (wanted) {
-      if (!dashboard.SCREENS.includes(wanted)) return res.status(400).json({ error: 'unknown screen' });
-      const etag = dashboardState.screenEtag(screens[wanted]);
+      const screen = screens[wanted];
+      if (!screen) return res.status(404).json({ error: 'no such screen' });
+      const etag = dashboardState.screenEtag(screen);
       res.set('ETag', etag);
       res.set('Cache-Control', 'no-cache');
+      res.set('X-Refresh-In', String(soonest([screen.nextChangeInSec])));
       if (req.get('If-None-Match') === etag) return res.status(304).end();
-      return res.json({ screen: wanted, etag, refreshInSec, generatedAt, data: screens[wanted] });
+      return res.json({ screen: wanted, etag, refreshInSec: soonest([screen.nextChangeInSec]), generatedAt, data: screen });
     }
     const out = {};
-    for (const sid of dashboard.SCREENS) out[sid] = { etag: dashboardState.screenEtag(screens[sid]), data: screens[sid] };
-    res.json({ refreshInSec, generatedAt, errors, screens: out });
+    for (const sc of layout.screens.filter((x) => x.enabled)) {
+      out[sc.id] = { etag: dashboardState.screenEtag(screens[sc.id]), data: screens[sc.id] };
+    }
+    const next = layout.screens.filter((x) => x.enabled).map((x) => screens[x.id].nextChangeInSec);
+    res.json({ refreshInSec: soonest(next), generatedAt, errors, screens: out });
   } catch (e) {
     haError(res, e);
   }
@@ -371,8 +388,10 @@ app.post('/api/viewports/import', auth.requireAdminSession, (req, res) => {
   res.json({ layout: dashboard.fromKitchenPanel(config) });
 });
 
+// ?kind=meetingRoom -> a single meeting-room screen (a door sign);
+// otherwise the kitchen panel's screens.
 app.get('/api/viewports/defaults', auth.requireAdminSession, (req, res) => {
-  res.json({ layout: dashboard.defaultLayout() });
+  res.json({ layout: req.query.kind === 'meetingRoom' ? dashboard.meetingRoomLayout() : dashboard.defaultLayout() });
 });
 
 // --- Theme (compiled icon/font packs a paired device downloads) ---------
