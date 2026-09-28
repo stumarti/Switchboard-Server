@@ -1,5 +1,5 @@
-// App shell: sign-in gate, hash routing, the icon rail (Home / Layouts /
-// Remotes / Viewports / Settings) and, for Remotes and Viewports, the list column of
+// App shell: sign-in gate, hash routing, the icon rail (the Switchboard logo
+// is Home; then Layouts / Remotes / Viewports / Settings) and, for Remotes and Viewports, the list column of
 // devices beside it. Each page lives in its own module.
 
 import { html, render, useState, useEffect, useCallback, api, setUnauthorizedHandler, Icon, Button } from './lib.js';
@@ -114,7 +114,6 @@ function AuthGate({ needsSetup, onDone }) {
 // --- Rail ---------------------------------------------------------------------
 
 const SECTIONS = [
-  { id: 'home', label: 'Home', icon: 'home-outline' },
   { id: 'layouts', label: 'Layouts', icon: 'view-dashboard-edit-outline' },
   { id: 'remotes', label: 'Remotes', icon: 'remote' },
   { id: 'viewports', label: 'Viewports', icon: 'tablet-dashboard' },
@@ -123,13 +122,15 @@ const SECTIONS = [
 
 function Rail({ section, pendingCount, alertCount }) {
   return html`<nav class="rail">
-    <div class="rail-logo" title="Switchboard"><${Icon} name="remote-tv" size=${30} /></div>
+    <a class=${`rail-logo ${section === 'home' ? 'active' : ''}`} href="#/home" title="Switchboard — how everything is doing">
+      <${Icon} name="remote-tv" size=${30} />
+      ${alertCount > 0 && html`<span class="rail-count rail-count-bad" title="Critical problems">${alertCount}</span>`}
+    </a>
     ${SECTIONS.map(
       (s) => html`<a class=${`rail-item ${section === s.id ? 'active' : ''}`} href=${`#/${s.id}`}>
         <${Icon} name=${s.icon} size=${24} />
         <span>${s.label}</span>
         ${s.id === 'remotes' && pendingCount > 0 && html`<span class="rail-count" title="Waiting for approval">${pendingCount}</span>`}
-        ${s.id === 'home' && alertCount > 0 && html`<span class="rail-count rail-count-bad" title="Critical problems">${alertCount}</span>`}
       </a>`
     )}
     <div class="rail-spacer"></div>

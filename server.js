@@ -141,6 +141,33 @@ app.post('/api/auth/login', (req, res) => {
   res.json({ ok: true });
 });
 
+// Change the admin password: the current one first. Other signed-in browsers
+// are signed out; this one stays signed in.
+app.post('/api/auth/password', auth.requireAdminSession, (req, res) => {
+  const b = req.body || {};
+  if (!auth.checkPassword(String(b.current || ''))) return res.status(403).json({ error: 'the current password is wrong' });
+  const next = String(b.password || '');
+  if (next.length < 8) return res.status(400).json({ error: 'the new password must be at least 8 characters' });
+  auth.setPassword(next);
+  auth.destroyOtherSessions(auth.sessionFromRequest(req));
+  res.json({ ok: true, fromEnv: auth.passwordFromEnv() });
+});
+
+app.get('/api/auth/account', auth.requireAdminSession, (req, res) => {
+  const settings = store.getSettings();
+  res.json({ passwordFromEnv: auth.passwordFromEnv(), passwordChangedAt: settings.passwordChangedAt || null });
+});
+
+// The server's clock, to check it against yours: remotes set their clock from
+// its HTTP Date header, and it formats every time a viewport shows.
+app.get('/api/time', auth.requireAdminSession, (req, res) => {
+  res.json({
+    now: new Date().toISOString(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    ntpServer: store.getGlobals().ntpServer || 'pool.ntp.org'
+  });
+});
+
 app.post('/api/auth/logout', (req, res) => {
   auth.destroySession(auth.sessionFromRequest(req));
   auth.clearSessionCookie(res);
