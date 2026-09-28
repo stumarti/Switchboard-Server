@@ -11,7 +11,7 @@ import {
   html, useState, useEffect, api, go, Icon, Card, Field, TextInput, SecretInput, Select, Toggle, Button, Badge,
   Empty, useFlash, setIn, getIn, moveItem, timeAgo
 } from './lib.js';
-import { EntityPicker, IconPicker, useHaStatus } from './pickers.js';
+import { EntityPicker, IconPicker, useHaStatus, useEntity } from './pickers.js';
 import { CarouselBuilder, HubBuilder } from './clients.js';
 
 // --- A reorderable list of items (lights, scenes, blinds, sensors, games) ---
@@ -184,11 +184,18 @@ function MusicCard({ room, set }) {
   <//>`;
 }
 
-const TV_APPS = [
-  { key: 'youtube', label: 'YouTube', icon: 'youtube' },
-  { key: 'netflix', label: 'Netflix', icon: 'netflix' },
-  { key: 'tvMate', label: 'TV Mate', icon: 'television-guide' }
+// A room saved before the app list had a fixed trio (name -> launch value).
+const LEGACY_TV_APPS = [
+  { key: 'youtube', name: 'YouTube', icon: 'youtube' },
+  { key: 'netflix', name: 'Netflix', icon: 'netflix' },
+  { key: 'tvMate', name: 'TV Mate', icon: 'television-guide' }
 ];
+function tvAppList(tv) {
+  if (Array.isArray(tv.appList)) return tv.appList;
+  const apps = tv.apps || {};
+  return LEGACY_TV_APPS.filter((a) => apps[a.key]).map((a) => ({ id: a.key, name: a.name, launch: apps[a.key], icon: a.icon }));
+}
+const newItemId = () => (crypto.randomUUID ? crypto.randomUUID() : `id-${Math.random().toString(36).slice(2)}`);
 
 function TvCard({ room, set }) {
   const tv = room.tv || {};
@@ -197,14 +204,85 @@ function TvCard({ room, set }) {
       <${Field} label="Media player"><${EntityPicker} domains=${['media_player']} value=${tv.mediaPlayerEntity} onChange=${(id) => set(['tv', 'mediaPlayerEntity'], id)} /><//>
       <${Field} label="Remote"><${EntityPicker} domains=${['remote']} value=${tv.remoteEntity} onChange=${(id) => set(['tv', 'remoteEntity'], id)} /><//>
     </div>
-    <${Field} label="App shortcuts" hint="The launch value sent through the remote (package name or intent).">
-      ${TV_APPS.map(
-        (a) => html`<div class="row" style="align-items:center">
-          <${Icon} name=${a.icon} size=${20} />
-          <span style="width:80px">${a.label}</span>
-          <div style="flex:1"><${TextInput} value=${getIn(tv, ['apps', a.key])} onInput=${(v) => set(['tv', 'apps', a.key], v)} /></div>
-        </div>`
-      )}
+    <${Field} label="Apps" hint="Up to four, in one row on the remote. The launch value is the app's Android package name or intent. The icon is optional: without one, YouTube and Netflix get their own logo and anything else a generic app icon.">
+      <${ItemList}
+        items=${tvAppList(tv)}
+        onChange=${(l) => set(['tv', 'appList'], l)}
+        max=${4}
+        addLabel="Add app"
+        empty="No apps yet."
+        newItem=${() => ({ id: newItemId(), name: '', launch: '', icon: '' })}
+        render=${(it, upd) => html`<div class="row" style="align-items:flex-end">
+          <${IconPicker} value=${it.icon} title="Icon (optional)" onChange=${(icon) => upd({ ...it, icon })} />
+          <${Field} label="Name"><${TextInput} value=${it.name} placeholder="Plex" onInput=${(v) => upd({ ...it, name: v })} /><//>
+          <${Field} label="Launch value"><${TextInput} value=${it.launch} placeholder="com.plexapp.android" onInput=${(v) => upd({ ...it, launch: v })} /><//>
+        </div>`}
+      />
+    <//>
+  <//>`;
+}
+
+// An Enigma2 satellite/cable box (Home Assistant's enigma2 media_player):
+// channel up/down, favourite channels as buttons, volume, mute and power.
+// What the box reports, for the Receiver card's Check button.
+function BoxCheck({ receiver }) {
+  const [state, setState] = useState(null); // {busy} | {result} | {error}
+  const check = () => {
+    setState({ busy: true });
+    api('/api/receiver/check', { method: 'POST', body: { receiver } })
+      .then((result) => setState({ result }))
+      .catch((e) => setState({ error: e.message }));
+  };
+  const r = state && state.result;
+  return html`<div class="box-check">
+    <${Button} small icon="lan-check" disabled=${!receiver.boxUrl || (state && state.busy)} onClick=${check}>${state && state.busy ? 'Checking…' : 'Check'}<//>
+    ${state && state.error && html`<span class="text-bad">${state.error}</span>`}
+    ${r &&
+    html`<span class="hint">
+      <b>${r.channel || 'Nothing on'}</b>${r.now ? ` · Now ${r.now.time} ${r.now.title}` : ''}${r.next ? ` · Next ${r.next.time} ${r.next.title}` : ''}
+      ${r.channels != null ? ` · ${r.channels} channels listed` : ''}
+      ${r.favourites.length ? ` · favourites found: ${r.favourites.filter((f) => f.found).length} of ${r.favourites.length}` : ''}
+    </span>`}
+  </div>`;
+}
+
+function ReceiverCard({ room, set }) {
+  const r = room.receiver || { name: 'Receiver', mediaPlayerEntity: '', boxUrl: '', channels: [] };
+  const entity = useEntity(r.mediaPlayerEntity);
+  const sources = (entity && entity.capabilities && entity.capabilities.sources) || [];
+  const listId = `rx-sources-${room.slug || 'room'}`;
+  const hasBox = Boolean(r.boxUrl);
+  return html`<${Card} icon="satellite-variant" title="Receiver" subtitle="An Enigma2 box (Vu+, Dreambox, …) through Home Assistant's Enigma2 integration.">
+    <div class="row">
+      <${Field} label="Media player"><${EntityPicker} domains=${['media_player']} value=${r.mediaPlayerEntity} onChange=${(id, e) => set(['receiver'], { ...r, mediaPlayerEntity: id, name: r.name && r.name !== 'Receiver' ? r.name : (e && e.name) || r.name })} /><//>
+      <${Field} label="Name on the page"><${TextInput} value=${r.name} placeholder="Receiver" onInput=${(v) => set(['receiver', 'name'], v)} /><//>
+    </div>
+    <${Field} label="Box address (optional)" hint="The box's own web interface (OpenWebif). With it, the page also shows the programme on next, and favourites can show the channel's picon. It stays on this server: remotes never see it.">
+      <div class="row" style="align-items:center">
+        <div style="flex:1"><${TextInput} value=${r.boxUrl || ''} placeholder="http://192.168.1.50  (or http://root:password@vu.local)" onInput=${(v) => set(['receiver', 'boxUrl'], v)} /></div>
+      </div>
+      <${BoxCheck} receiver=${r} />
+    <//>
+    <p class="hint">The channel on now shows its picon too: from the box with an address, else from Home Assistant when its Enigma2 integration has "Use channel icon" on.</p>
+    <${Field} label="Favourite channels" hint=${`Up to six buttons. The channel is its name as the box lists it${sources.length ? ` — pick from the ${sources.length} it reports` : ''}. The icon is optional${hasBox ? ', or use the channel’s own picon' : ''}.`}>
+      <datalist id=${listId}>${sources.map((src) => html`<option value=${src} />`)}</datalist>
+      <${ItemList}
+        items=${r.channels || []}
+        onChange=${(l) => set(['receiver', 'channels'], l)}
+        max=${6}
+        addLabel="Add channel"
+        empty="No favourites yet. Channel up/down, volume and power work without any."
+        newItem=${() => ({ id: newItemId(), name: '', source: '', icon: '', usePicon: hasBox })}
+        render=${(it, upd) => html`<div class="row" style="align-items:flex-end">
+          <${IconPicker} value=${it.icon} title="Icon (optional)" onChange=${(icon) => upd({ ...it, icon })} />
+          <${Field} label="Channel">
+            <input type="text" list=${listId} value=${it.source} placeholder="BBC One HD"
+              onInput=${(e) => upd({ ...it, source: e.target.value, name: !it.name || it.name === it.source ? e.target.value : it.name })} />
+          <//>
+          <${Field} label="Label"><${TextInput} value=${it.name} placeholder="BBC One" onInput=${(v) => upd({ ...it, name: v })} /><//>
+        </div>
+        ${hasBox && html`<${Toggle} checked=${Boolean(it.usePicon)} onChange=${(v) => upd({ ...it, usePicon: v })} label="Use the channel’s picon from the box (instead of the icon)" />`}`}
+      />
     <//>
   <//>`;
 }
@@ -266,6 +344,7 @@ function pageEditor(page, cardProps, room, set) {
     case 'music': return html`<${MusicCard} ...${cardProps} />`;
     case 'tv': return html`<${TvCard} ...${cardProps} />`;
     case 'xbox': return html`<${XboxCard} ...${cardProps} />`;
+    case 'receiver': return html`<${ReceiverCard} ...${cardProps} />`;
     case 'wifi':
       return html`<${Card} icon="wifi-star" title="Guest Wi-Fi" subtitle="Join-QR codes for your guest networks.">
         <p class="hint">This page shows the guest networks set in <a href="#/settings/wifi">Settings → Wi-Fi</a>, the same in every room. Nothing to set here.</p>
@@ -424,11 +503,16 @@ function RoomEditor({ slug, clients, reloadRooms }) {
 
 // The room's carousel (screens.* flags + screens.order) as the carousel
 // builder's list, and back — the same rules the server uses for remotes.
-const PAGE_FLAGS = { status: null, lighting: 'lighting', blinds: 'blinds', music: 'music', tv: 'tv', xbox: 'xbox', wifi: 'wifi', climate: 'climate' };
+const PAGE_FLAGS = { status: null, lighting: 'lighting', blinds: 'blinds', music: 'music', tv: 'tv', xbox: 'xbox', wifi: 'wifi', climate: 'climate', receiver: 'receiver' };
+// Pages hidden until switched on (the server's rule too).
+const OFF_BY_DEFAULT = ['receiver'];
 function carouselFromScreens(screens) {
   const sc = screens || {};
   const ids = [...(sc.order || []), ...Object.keys(PAGE_FLAGS)].filter((id, i, all) => id in PAGE_FLAGS && all.indexOf(id) === i);
-  return ids.map((id) => ({ page: id, enabled: PAGE_FLAGS[id] ? sc[PAGE_FLAGS[id]] !== false : true }));
+  return ids.map((id) => {
+    const flag = PAGE_FLAGS[id] ? sc[PAGE_FLAGS[id]] : true;
+    return { page: id, enabled: typeof flag === 'boolean' ? flag : !OFF_BY_DEFAULT.includes(id) };
+  });
 }
 function screensFromCarousel(carousel, screens) {
   const out = { ...(screens || {}), order: carousel.map((c) => c.page) };

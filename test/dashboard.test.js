@@ -538,3 +538,50 @@ test('a screen with departures wakes when the next one turns imminent', () => {
   assert.equal(presence.nextChangeInSec, 15 * 60);
   assert.equal(home.nextChangeInSec, null);
 });
+
+test('conditional section: Now playing shows only while music plays, the calendar shrinks, and the display wakes every 3 min meanwhile', () => {
+  const lay = dashboard.normalizeLayout({
+    screens: [{
+      id: 'home', template: 'sidebar',
+      columns: [
+        [{ id: 'w', type: 'weather', entity: 'weather.home' }],
+        [
+          { id: 'cal', type: 'calendar', entities: ['calendar.home'], lines: 5 },
+          { id: 'np', type: 'media', players: [{ entity: 'media_player.bedroom' }], showWhen: { mode: 'playing' } }
+        ]
+      ]
+    }]
+  });
+  assert.deepEqual(lay.screens[0].columns[1][1].showWhen, { mode: 'playing', entity: '', cond: 'eq', value: '', liveMin: 3 });
+  assert.equal(lay.screens[0].columns[1][0].shrinkTo, 2);
+  const cal = { 'calendar.home': [1, 2, 3, 4, 5, 6].map((d) => ({ start: { dateTime: `2026-10-0${d}T09:00:00+01:00` }, end: { dateTime: `2026-10-0${d}T10:00:00+01:00` }, summary: `Event ${d}` })) };
+  const run = (player) => buildScreens(lay, { states: { ...states(), 'media_player.bedroom': player }, calendars: cal, now: NOW, timeZone: TZ }).home;
+
+  const playing = run(st('playing', { media_title: 'Comptine', media_artist: 'Yann Tiersen', entity_picture: '/api/media_player_proxy/media_player.bedroom?token=abc&cache=1' }));
+  const right = playing.columns[1];
+  assert.deepEqual(right.map((s) => s.id), ['cal', 'np']);
+  assert.equal(right[1].conditional, true);
+  assert.equal(right[1].data.players[0].title, 'Comptine');
+  assert.equal(right[1].data.players[0].art, '/api/media_player_proxy/media_player.bedroom?cache=1'); // no rotating token
+  assert.equal(right[0].data.lines.length, 2); // shrunk to make room
+  assert.equal(playing.nextChangeInSec, 180);
+
+  const paused = run(st('paused', { media_title: 'Comptine' }));
+  assert.deepEqual(paused.columns[1].map((s) => s.id), ['cal']);
+  assert.equal(paused.columns[1][0].data.lines.length, 5); // full height again
+  assert.equal(paused.nextChangeInSec, null); // back to the normal refresh
+});
+
+test('conditional section: on an entity state, and "playing" only means something for Now playing', () => {
+  const lay = dashboard.normalizeLayout({
+    screens: [{ id: 's', template: 'single', columns: [[
+      { id: 'a', type: 'alarm', entity: 'alarm_control_panel.home', showWhen: { mode: 'entity', entity: 'alarm_control_panel.home', cond: 'ne', value: 'disarmed', liveMin: 0 } },
+      { id: 'b', type: 'people', people: [], showWhen: { mode: 'playing' } }
+    ]] }]
+  });
+  assert.equal(lay.screens[0].columns[0][1].showWhen.mode, 'always');
+  const run = (alarm) => buildScreens(lay, { states: { ...states(), 'alarm_control_panel.home': st(alarm) }, now: NOW, timeZone: TZ }).s;
+  assert.deepEqual(run('armed_away').columns[0].map((s) => s.id), ['a', 'b']);
+  assert.deepEqual(run('disarmed').columns[0].map((s) => s.id), ['b']);
+  assert.equal(run('armed_away').nextChangeInSec, null); // liveMin 0: no extra wakes
+});

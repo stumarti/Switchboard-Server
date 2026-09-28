@@ -76,3 +76,13 @@ test('entity_picture drops the rotating HA access token', () => {
   assert.equal(stablePicture('https://store-images.example/box.jpg'), 'https://store-images.example/box.jpg');
   assert.equal(stablePicture(undefined), undefined);
 });
+
+test('mask1: a logo is thresholded, not dithered', () => {
+  // A flat mid-dark grey: dithering mixes ink and paper; thresholding is all ink.
+  const grey = Buffer.alloc(16, 90);
+  const dithered = [...art.toMask1(grey, 16, 1)];
+  const flat = [...art.toMask1(grey, 16, 1, { threshold: true })];
+  assert.notDeepEqual(dithered, [0, 0]);
+  assert.deepEqual(flat, [0, 0]);
+  assert.deepEqual([...art.toMask1(Buffer.alloc(8, 240), 8, 1, { threshold: true })], [0xff]);
+});

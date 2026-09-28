@@ -26,7 +26,7 @@ test("a room's carousel order is validated and kept", () => {
 test("a remote without its own layout uses its room's order, pages, hub and refresh", () => {
   const layout = clients.layoutFor({ type: 'remote' }, room);
   assert.deepEqual(layout.carousel.map((c) => `${c.page}${c.enabled ? '' : '-'}`), [
-    'climate', 'status', 'lighting', 'blinds-', 'music', 'tv-', 'xbox-', 'wifi-'
+    'climate', 'status', 'lighting', 'blinds-', 'music', 'tv-', 'xbox-', 'wifi-', 'receiver-' // the receiver starts off
   ]);
   assert.equal(layout.refreshIntervalMin, 15);
   assert.equal(layout.hub.items[0].name, 'Lights');
@@ -50,4 +50,35 @@ test('a viewport shows its dashboard, else a layout it still carries, else "not 
   const none = clients.layoutFor({ type: 'viewport' }, null, null);
   assert.equal(none.screens.length, 1);
   assert.match(none.screens[0].title, /Not set up/);
+});
+
+test('TV apps: a list of up to four with icons, still sent as the old name -> launch map', () => {
+  // A room saved before the list: its fixed trio becomes the list.
+  const legacy = normalizeProfile({ tv: { apps: { youtube: 'com.google.android.youtube.tv', netflix: '', tvMate: 'de.cyberdream.tvmate' } } }, null);
+  assert.deepEqual(legacy.tv.appList.map((a) => [a.name, a.icon]), [['YouTube', 'youtube'], ['TV Mate', 'television-guide']]);
+  assert.deepEqual(legacy.tv.apps, { YouTube: 'com.google.android.youtube.tv', 'TV Mate': 'de.cyberdream.tvmate' });
+  // The new list: any names, optional icons, at most four.
+  const list = [1, 2, 3, 4, 5].map((n) => ({ name: `App ${n}`, launch: `pkg.${n}`, icon: n === 1 ? 'plex' : '' }));
+  const saved = normalizeProfile({ tv: { appList: list } }, legacy);
+  assert.equal(saved.tv.appList.length, 4);
+  assert.equal(saved.tv.appList[0].icon, 'plex');
+  assert.deepEqual(Object.keys(saved.tv.apps), ['App 1', 'App 2', 'App 3', 'App 4']);
+  // Saving other fields keeps the list.
+  assert.equal(normalizeProfile({ tv: { mediaPlayerEntity: 'media_player.tv' } }, saved).tv.appList.length, 4);
+});
+
+test('receiver: an Enigma2 box with favourite channels; its page starts off', () => {
+  const p = normalizeProfile({
+    receiver: {
+      mediaPlayerEntity: 'media_player.vu_uno',
+      channels: [{ name: 'BBC One HD', source: 'BBC One HD', icon: 'alpha-b-box' }, ...Array.from({ length: 8 }, (_, i) => ({ name: `Ch ${i}`, source: `Ch ${i}` }))]
+    }
+  }, null);
+  assert.equal(p.receiver.name, 'Receiver');
+  assert.equal(p.receiver.channels.length, 6);
+  assert.equal(p.receiver.channels[0].icon, 'alpha-b-box');
+  assert.equal(p.screens.receiver, false);
+  assert.equal(normalizeProfile({ screens: { receiver: true } }, p).screens.receiver, true);
+  const layout = clients.layoutFor({ type: 'remote' }, normalizeProfile({ screens: { receiver: true } }, p));
+  assert.equal(layout.carousel.find((c) => c.page === 'receiver').enabled, true);
 });

@@ -65,6 +65,7 @@ const dashboardState = require('./lib/dashboard-state');
 const art = require('./lib/art');
 const haMonitor = require('./lib/ha-monitor');
 const overview = require('./lib/overview');
+const enigma2 = require('./lib/enigma2');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
 const fontsCompiler = require('./lib/assets/fonts');
@@ -506,8 +507,9 @@ app.get('/api/art', auth.requireAdminOrDevice, async (req, res) => {
     const img = await art.prepare(src, {
       width: Number(req.query.w) || size || 120,
       height: Number(req.query.h) || size || 120,
-      format: String(req.query.fmt || 'mask1')
-    }, store.getGlobals());
+      format: String(req.query.fmt || 'mask1'),
+      fit: req.query.fit === 'contain' ? 'contain' : 'cover'
+    }, store.getGlobals(), (s) => enigma2.resolvePiconSrc(s, store.getProfile));
     const etag = `"${img.key.slice(0, 20)}"`;
     res.set('ETag', etag);
     res.set('Cache-Control', 'private, max-age=86400');
@@ -761,7 +763,7 @@ app.get('/api/devices/:slug/state', auth.requireAdminOrDevice, async (req, res) 
   const only = page ? pages[page] : null;
   const wait = Math.min(Math.max(Number(req.query.wait) || 0, 0), STATE_WAIT_MAX_S);
   const have = req.get('If-None-Match');
-  const etagOf = (r) => `"${require('crypto').createHash('sha1').update(JSON.stringify([r.states, r.forecast, r.live])).digest('hex').slice(0, 20)}"`;
+  const etagOf = (r) => `"${require('crypto').createHash('sha1').update(JSON.stringify([r.states, r.forecast, r.live, r.receiver])).digest('hex').slice(0, 20)}"`;
   const globals = store.getGlobals();
 
   let closed = false;
@@ -776,6 +778,15 @@ app.get('/api/devices/:slug/state', auth.requireAdminOrDevice, async (req, res) 
       const failed = Object.keys(result.errors).length;
       // Entities HA says it doesn't have: a Home page warning for the room.
       if (!only && total > 0) haMonitor.noteEntities({ kind: 'room', slug: req.params.slug }, result.errors);
+      // The receiver page's now / next and picons: from the box when the room
+      // has its address, else from Home Assistant (lib/enigma2.js).
+      const rx = profile.receiver;
+      if (!only && rx && rx.mediaPlayerEntity) {
+        result.receiver = await enigma2.receiverInfo(rx, {
+          haState: result.states[rx.mediaPlayerEntity],
+          piconSrc: enigma2.piconSrcFor(req.params.slug)
+        });
+      }
       if (total === 0 && failed > 0) {
         return res.status(502).json({ error: 'Home Assistant unreachable', errors: result.errors });
       }
@@ -823,6 +834,7 @@ app.post('/api/devices/:slug/config', auth.requireAdminSession, (req, res) => {
     climate: normalized.climate,
     tv: normalized.tv,
     xbox: normalized.xbox,
+    receiver: normalized.receiver,
     hub: normalized.hub
   };
 
@@ -856,6 +868,36 @@ app.delete('/api/devices/:slug', auth.requireAdminSession, (req, res) => {
     return res.status(404).json({ error: 'no such profile' });
   }
   res.status(204).end();
+});
+
+// The Receiver card's "Check": what an (unsaved) receiver config gets from
+// its box — now / next, and how many channels and picons it lists.
+app.post('/api/receiver/check', auth.requireAdminSession, async (req, res) => {
+  const b = (req.body && req.body.receiver) || {};
+  const box = enigma2.boxBase(b.boxUrl);
+  if (!box) return res.status(400).json({ error: 'Enter the box’s address, e.g. http://192.168.1.50' });
+  try {
+    const cur = await enigma2.current(box);
+    let list = null;
+    try {
+      list = await enigma2.channels(box);
+    } catch {
+      list = null;
+    }
+    const info = await enigma2.receiverInfo({ ...b, mediaPlayerEntity: b.mediaPlayerEntity || 'x' }, { piconSrc: (p) => p });
+    res.json({
+      channel: cur.name,
+      now: info && info.now,
+      next: info && info.next,
+      channels: list ? list.byName.size : null,
+      favourites: (b.channels || []).map((ch) => {
+        const hit = list && list.byName.get(String(ch.source || '').toLowerCase());
+        return { found: Boolean(hit), picon: Boolean(hit && hit.picon) };
+      })
+    });
+  } catch (e) {
+    res.status(502).json({ error: `The box didn’t answer: ${e.message}` });
+  }
 });
 
 // The admin Home page: device stats, battery and offline warnings, devices
