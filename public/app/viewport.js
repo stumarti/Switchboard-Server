@@ -126,7 +126,7 @@ function newScreen(kind) {
       id: newId(), title: 'Meeting room', enabled: true, kind,
       meeting: {
         calendar: '', name: '', occupancy: '', hideTitles: false, soonMin: 10, emptyMin: 10, upcoming: 4,
-        freeIcon: 'door-open', occupiedIcon: 'account-group', timelineHours: 2,
+        freeIcon: 'door-open', occupiedIcon: 'account-group', labels: { ...DEFAULT_LABELS.meeting }, timelineHours: 2,
         climate: { show: false, temperature: '', humidity: '', co2: '' }
       }
     };
@@ -134,7 +134,7 @@ function newScreen(kind) {
   if (kind === 'roomFinder') {
     return {
       id: newId(), title: 'Other rooms', enabled: true, kind,
-      finder: { rooms: [], showBusy: true, soonMin: 10, emptyMin: 10, freeIcon: 'door-open', occupiedIcon: 'account-group' }
+      finder: { rooms: [], showBusy: true, soonMin: 10, emptyMin: 10, freeIcon: 'door-open', occupiedIcon: 'account-group', labels: { ...DEFAULT_LABELS.finder } }
     };
   }
   return { id: newId(), title: 'New screen', enabled: true, kind: 'sections', template: 'sidebar', columns: [[], []] };
@@ -623,12 +623,32 @@ const TIMELINE_CHOICES = [
   { value: '3', label: 'Next 3 hours' }
 ];
 
-// Free / in use icons: the meeting room's status bar and the room finder's rows.
-function StatusIconsFields({ m, set }) {
+// Free / in use icons, and what each state says: the meeting room's status
+// bar and the room finder's rows. A blank label goes back to the default.
+const STATUS_LABELS = [
+  { key: 'free', label: 'Free', icon: 'freeIcon' },
+  { key: 'busy', label: 'In use (booked)', icon: 'occupiedIcon' },
+  { key: 'occupied', label: 'In use, not booked', icon: 'occupiedIcon' },
+  { key: 'soon', label: 'Starting soon' },
+  { key: 'bookedEmpty', label: 'Booked, no one there' }
+];
+const DEFAULT_LABELS = {
+  meeting: { free: 'Available', soon: 'Starting soon', busy: 'In use', bookedEmpty: 'Booked — no one here', occupied: 'In use — not booked' },
+  finder: { free: 'Free', soon: 'Free', busy: 'In use', bookedEmpty: 'Booked — no one here', occupied: 'In use — not booked' }
+};
+function StatusIconsFields({ m, set, kind = 'meeting' }) {
+  const labels = { ...DEFAULT_LABELS[kind], ...(m.labels || {}) };
   return html`<div class="row">
-    <${Field} label="Free icon"><${IconPicker} value=${m.freeIcon} onChange=${(v) => set('freeIcon', v || 'door-open')} /><//>
-    <${Field} label="In use icon"><${IconPicker} value=${m.occupiedIcon} onChange=${(v) => set('occupiedIcon', v || 'account-group')} /><//>
-  </div>`;
+      <${Field} label="Free icon"><${IconPicker} value=${m.freeIcon} onChange=${(v) => set('freeIcon', v || 'door-open')} /><//>
+      <${Field} label="In use icon"><${IconPicker} value=${m.occupiedIcon} onChange=${(v) => set('occupiedIcon', v || 'account-group')} /><//>
+    </div>
+    <div class="label-grid">
+      ${STATUS_LABELS.map(
+        (x) => html`<${Field} label=${x.label}>
+          <${TextInput} value=${labels[x.key]} placeholder=${DEFAULT_LABELS[kind][x.key]} onInput=${(v) => set('labels', { ...labels, [x.key]: v })} />
+        <//>`
+      )}
+    </div>`;
 }
 
 function MeetingEditor({ screen, setScreen }) {
@@ -650,7 +670,7 @@ function MeetingEditor({ screen, setScreen }) {
         <${Field} label="Later meetings shown"><${NumberInput} min="0" max="8" value=${m.upcoming} onChange=${(v) => set('upcoming', v)} /><//>
       </div>
     <//>
-    <${Card} icon="view-agenda-outline" title="Status bar" subtitle="The icon beside Available / In use, and a timeline of the next hours under the bar.">
+    <${Card} icon="view-agenda-outline" title="Status bar" subtitle="Its icons and words for each state, and a timeline of the next hours under the bar.">
       <${StatusIconsFields} m=${m} set=${set} />
       <${Field} label="Timeline under the bar" hint="Bookings as blocks. It moves on each quarter hour, when the display wakes.">
         <${Select} value=${String(m.timelineHours ?? 2)} onChange=${(v) => set('timelineHours', Number(v))} options=${TIMELINE_CHOICES} />
@@ -715,7 +735,7 @@ function FinderEditor({ screen, setScreen, layout }) {
     <//>
     <${Card} icon="tune-variant" title="Options" subtitle="Meeting titles are never shown here.">
       <${Toggle} checked=${f.showBusy} onChange=${(v) => set('showBusy', v)} label="List busy rooms too (after the free ones)" />
-      <${StatusIconsFields} m=${f} set=${set} />
+      <${StatusIconsFields} m=${f} set=${set} kind="finder" />
       <div class="row">
         <${Field} label="“Starting soon” (min before)"><${NumberInput} min="0" max="60" value=${f.soonMin} onChange=${(v) => set('soonMin', v)} /><//>
         <${Field} label="“No one here” after (min)"><${NumberInput} min="0" max="60" value=${f.emptyMin} onChange=${(v) => set('emptyMin', v)} /><//>

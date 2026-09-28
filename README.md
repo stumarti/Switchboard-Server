@@ -25,6 +25,11 @@ This is step one. Get this running and set up at least one room *before* you fla
 </tr>
 </table>
 
+- **Home** — how the whole setup is doing, and what needs attention, worst first, each linking to where it's fixed:
+  - remotes and viewports online, devices waiting for approval, low batteries, and Home Assistant's response time;
+  - critical and low batteries (10% / 20%), devices not heard from (a remote in a day, a viewport in three refresh intervals), weak Wi-Fi, devices without a room or layout, and remotes on different firmware versions;
+  - Home Assistant: not set up, unreachable, or requests failing in the last hour (with the recent errors), and any entity a room or viewport layout names that Home Assistant doesn't have (a typo, or one renamed in HA);
+  - every device with its battery, Wi-Fi signal, firmware and when it was last seen.
 - **Layouts** — every UI, defined on the server before any hardware exists:
   - **Remote layouts** (top): one per room. Each has the room's Home Assistant entities, one card per function, with entity fields that search Home Assistant as you type. It also sets what the room's remotes show: which carousel pages, in what order, the Quick Access buttons, and the refresh interval.
   - **Viewport layouts** (bottom): whole wall-display UIs, each assignable to any number of displays. Start one from the home panel, a meeting-room sign, or blank.
@@ -95,6 +100,7 @@ Every Switchboard remote already talks to this: `Settings → Select room` calls
 | GET | `/api/globals` | Shared WiFi + Home Assistant connection | session or device |
 | POST | `/api/globals` | Update Globals | session |
 | GET | `/api/clients` | Every paired device (remotes and viewports) with its effective layout | session |
+| GET | `/api/overview` | The Home page: device counts and health, what needs attention, how requests to Home Assistant are going | session |
 | PUT | `/api/clients/<mac>` | Set a device's `name`, `type`, `room` or `layout` (`layout: null` goes back to the defaults) | session |
 | GET | `/api/clients/schema` | The pages, tile types, sizes and refresh intervals the layout builders offer | session |
 | GET | `/api/ha/status` | Whether the server can reach Home Assistant with the saved connection | session |
@@ -175,7 +181,7 @@ The layout builder shows a live 800×480 preview of each screen, in the panel's 
 - **Viewports:** they run on battery and never stay awake for live content. Live sections update when the display wakes. A display with departures also wakes early, when the next one turns imminent.
 - **Album and box art** are prepared here (`/api/art`), so neither kind of device decodes a JPEG.
 
-**Health.** The device can send `X-Battery`, `X-Temperature`, `X-RSSI` and `X-Firmware` headers; the Viewports page shows them.
+**Health.** Any paired device — remote or viewport — can send `X-Battery`, `X-Temperature`, `X-RSSI` and `X-Firmware` headers on its requests; the Home page and the device's page show them, and warn on a low battery or weak signal. Remote firmware sends them on every request to the server.
 
 The kitchen panel's firmware doesn't use these endpoints yet. Until it does, it keeps working as before.
 

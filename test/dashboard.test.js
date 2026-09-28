@@ -472,6 +472,10 @@ test('meeting room: status icon, a timeline snapped to the quarter hour, and the
   // Seven minutes on, the timeline hasn't moved: same screen, no panel refresh.
   assert.deepEqual(run('2026-09-28T12:37:00Z').timeline, d.timeline);
   assert.equal(run('2026-09-28T11:00:00Z').icon, 'door-open'); // free before the meeting
+  assert.equal(d.label, 'In use');
+  lay.screens[0].meeting.labels = { ...lay.screens[0].meeting.labels, busy: 'Busy', free: '' };
+  assert.equal(run('2026-09-28T12:30:00Z').label, 'Busy');
+  assert.equal(dashboard.normalizeLayout(lay).screens[0].meeting.labels.free, 'Available'); // blank -> default
   // Off: no timeline, no climate.
   lay.screens[0].meeting.timelineHours = 0;
   lay.screens[0].meeting.climate.show = false;
@@ -507,6 +511,7 @@ test('room finder: free rooms first, longest free first, and when to wake', () =
     ['Boardroom', 'busy', 'Busy until 14:30']
   ]);
   assert.equal(r.data.summary, '2 of 4 rooms free');
+  assert.deepEqual(r.data.rooms.map((x) => x.label), ['Free', 'Free', 'In use — not booked', 'In use']);
   assert.equal(r.nextChangeInSec, 20 * 60); // Focus turns "starting soon" at 13:50
   lay.screens[0].finder.showBusy = false;
   assert.deepEqual(run().data.rooms.map((x) => x.name), ['Quiet', 'Focus']);
