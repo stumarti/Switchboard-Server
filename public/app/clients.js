@@ -235,18 +235,24 @@ export function useDragOrder(list, onChange) {
   return { props, cls };
 }
 
-export function CarouselBuilder({ carousel, onChange, room, roomSlug }) {
+// `selected`/`onSelect` (the room editor): the cards double as a picker for
+// which page's settings show below, and `extras` adds cards after the pages
+// for settings that aren't a page ({id, label, icon, sub}).
+export function CarouselBuilder({ carousel, onChange, room, roomSlug, selected, onSelect, extras = [], subtitle }) {
   const { props, cls } = useDragOrder(carousel, onChange);
+  const stop = (e) => e.stopPropagation();
   let num = 0;
-  return html`<${Card} icon="view-carousel-outline" title="Carousel" subtitle="The pages this remote swipes through, left to right. Drag to reorder; switch pages off to skip them.">
-    <div class="carousel">
+  return html`<${Card} icon="view-carousel-outline" title="Carousel"
+    subtitle=${subtitle || 'The pages this remote swipes through, left to right. Drag to reorder; switch pages off to skip them.'}>
+    <div class=${`carousel ${onSelect ? 'carousel-strip' : ''}`}>
       ${carousel.map((c, i) => {
         const meta = PAGE_META[c.page] || { label: c.page, icon: 'card-outline' };
         const s = pageSummary(c.page, room);
         const locked = c.page === 'status';
         if (c.enabled) num += 1;
-        return html`<div class=${`page-card ${c.enabled ? '' : 'off'} ${cls(i)}`} key=${c.page} ...${props(i)}>
-          <div class="pc-top">
+        return html`<div class=${`page-card ${c.enabled ? '' : 'off'} ${selected === c.page ? 'selected' : ''} ${onSelect ? 'selectable' : ''} ${cls(i)}`} key=${c.page} ...${props(i)}
+          onClick=${onSelect ? () => onSelect(c.page) : undefined}>
+          <div class="pc-top" onClick=${stop}>
             <span class="pc-num">${c.enabled ? num : '–'}</span>
             <span class="spacer"></span>
             ${locked
@@ -257,15 +263,26 @@ export function CarouselBuilder({ carousel, onChange, room, roomSlug }) {
           <div class="pc-title">${meta.label}</div>
           <div class="pc-sub">
             ${!s.ok && c.enabled
-              ? html`<a href=${`#/remote-layouts/${encodeURIComponent(roomSlug)}`} class="badge badge-warn"><${Icon} name="alert-outline" size=${13} />${s.text}</a>`
+              ? onSelect
+                ? html`<span class="badge badge-warn"><${Icon} name="alert-outline" size=${13} />${s.text}</span>`
+                : html`<a href=${`#/remote-layouts/${encodeURIComponent(roomSlug)}`} class="badge badge-warn"><${Icon} name="alert-outline" size=${13} />${s.text}</a>`
               : s.text}
           </div>
-          <div class="pc-move">
+          <div class="pc-move" onClick=${stop}>
             <${Button} kind="ghost" small icon="chevron-left" title="Move left" disabled=${i === 0} onClick=${() => onChange(moveItem(carousel, i, i - 1))} />
             <${Button} kind="ghost" small icon="chevron-right" title="Move right" disabled=${i === carousel.length - 1} onClick=${() => onChange(moveItem(carousel, i, i + 1))} />
           </div>
         </div>`;
       })}
+      ${extras.length > 0 && html`<div class="carousel-divider"></div>`}
+      ${extras.map(
+        (x) => html`<div class=${`page-card extra selectable ${selected === x.id ? 'selected' : ''}`} key=${x.id} onClick=${() => onSelect && onSelect(x.id)}>
+          <div class="pc-top"><span class="pc-num"><${Icon} name="cog-outline" size=${14} /></span></div>
+          <div class="pc-screen"><${Icon} name=${x.icon} size=${40} /></div>
+          <div class="pc-title">${x.label}</div>
+          <div class="pc-sub">${x.sub || ''}</div>
+        </div>`
+      )}
     </div>
   <//>`;
 }

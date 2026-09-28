@@ -322,20 +322,70 @@ function SectionsScreen({ d, highlight }) {
   </div>`;
 }
 
+// Bookings over the next 1-3 hours: red blocks on a bar, ticks below.
+function MeetingTimeline({ t }) {
+  return html`<div class="vp-timeline">
+    <div class="vp-tl-bar">
+      ${t.blocks.map(
+        (b) => html`<div class="vp-tl-block" style=${{ left: `${b.from * 100}%`, width: `${(b.to - b.from) * 100}%`, background: c(b.color) }}>
+          <span>${b.title}</span>
+        </div>`
+      )}
+    </div>
+    <div class="vp-tl-ticks">
+      ${t.ticks.map((k) => html`<span class="vp-tl-tick" style=${{ left: `${k.at * 100}%` }}>${k.label}</span>`)}
+    </div>
+  </div>`;
+}
+
+function MeetingClimate({ cl }) {
+  return html`<div class="vp-meeting-climate">
+    ${cl.temperature != null && html`<span class="vp-row"><${Icon} name="thermometer" size=${22} /><span class="vp-big">${cl.temperature}${cl.unit}</span></span>`}
+    ${cl.humidity != null && html`<span class="vp-row"><${Icon} name="water-percent" size=${20} /><span class="vp-med">${cl.humidity}%</span></span>`}
+    ${cl.co2 != null && html`<span class="vp-row" style=${{ color: c(cl.co2Color) }}><${Icon} name="molecule-co2" size=${22} /><span class="vp-med">${cl.co2} ppm</span></span>`}
+  </div>`;
+}
+
 function MeetingRoom({ d }) {
   return html`<div class="vp-meeting">
     <div class="vp-meeting-band" style=${{ background: c(d.color) }}>
-      <div class="vp-meeting-name">${d.name}</div>
-      <div class="vp-meeting-status">${d.label}</div>
-      <div class="vp-meeting-until">${d.until}</div>
+      <${Icon} name=${d.icon} size=${84} />
+      <div class="vp-meeting-text">
+        <div class="vp-meeting-name">${d.name}</div>
+        <div class="vp-meeting-status">${d.label}</div>
+        <div class="vp-meeting-until">${d.until}</div>
+      </div>
     </div>
-    <div class="vp-meeting-body">
+    ${d.timeline && html`<${MeetingTimeline} t=${d.timeline} />`}
+    <div class=${`vp-meeting-body${d.climate ? ' with-climate' : ''}`}>
       ${d.current
         ? html`<div><div class="vp-label">Now</div><div class="vp-big">${d.current.title}</div><div class="vp-med">${d.current.time} · ends in ${d.current.endsInMin} min</div></div>`
         : d.next && html`<div><div class="vp-label">Next</div><div class="vp-big">${d.next.title}</div><div class="vp-med">${d.next.day} ${d.next.time}</div></div>`}
       ${d.upcoming.length > 0 &&
       html`<div><div class="vp-label">Later today</div>${d.upcoming.map((u) => html`<div class="vp-row vp-rowline"><span class="vp-med" style="width:140px">${u.time}</span><span class="vp-med">${u.title}</span></div>`)}</div>`}
     </div>
+    ${d.climate && html`<${MeetingClimate} cl=${d.climate} />`}
+  </div>`;
+}
+
+// The other rooms: free first, each with its status colour and icon.
+function RoomFinder({ d, title }) {
+  return html`<div class="vp-finder">
+    <div class="vp-finder-head">
+      <span class="vp-big">${title}</span>
+      <span class="vp-med" style=${{ color: c(d.available ? 4 : 2) }}>${d.summary}</span>
+    </div>
+    ${d.rooms.length === 0 && html`<div class="vp-med" style=${{ color: GREY }}>${d.total ? 'No rooms free right now' : 'Add rooms to this screen'}</div>`}
+    ${d.rooms.map(
+      (r) => html`<div class="vp-finder-row">
+        <span class="vp-finder-icon" style=${{ background: c(r.color) }}><${Icon} name=${r.icon} size=${30} /></span>
+        <span class="vp-finder-name">${r.name}</span>
+        <span class="vp-finder-status">
+          <span class="vp-med" style=${{ color: c(r.color) }}>${r.label}</span>
+          <span class="vp-small">${r.until}</span>
+        </span>
+      </div>`
+    )}
   </div>`;
 }
 
@@ -360,9 +410,11 @@ export function ViewportPreview({ screen, state, error, loading, highlight }) {
       ${d
         ? d.kind === 'meetingRoom'
           ? html`<${MeetingRoom} d=${d.data} />`
+          : d.kind === 'roomFinder'
+          ? html`<${RoomFinder} d=${d.data} title=${d.title} />`
           : html`<${SectionsScreen} d=${d} highlight=${highlight} />`
         : html`<div class="vp-empty">${error ? error : loading ? 'Loading…' : 'No preview'}</div>`}
-      ${d && d.kind !== 'meetingRoom' && html`<${Footer} generatedAt=${state.generatedAt} />`}
+      ${d && d.kind === 'sections' && html`<${Footer} generatedAt=${state.generatedAt} />`}
       ${loading && d && html`<div class="vp-loading"><${Icon} name="refresh" size=${16} /></div>`}
     </div>
   </div>`;

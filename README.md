@@ -25,6 +25,11 @@ This is step one. Get this running and set up at least one room *before* you fla
 </tr>
 </table>
 
+- **Home** — how the whole setup is doing, and what needs attention, worst first, each linking to where it's fixed:
+  - remotes and viewports online, devices waiting for approval, low batteries, and Home Assistant's response time;
+  - critical and low batteries (10% / 20%), devices not heard from (a remote in a day, a viewport in three refresh intervals), weak Wi-Fi, devices without a room or layout, and remotes on different firmware versions;
+  - Home Assistant: not set up, unreachable, or requests failing in the last hour (with the recent errors), and any entity a room or viewport layout names that Home Assistant doesn't have (a typo, or one renamed in HA);
+  - every device with its battery, Wi-Fi signal, firmware and when it was last seen.
 - **Layouts** — every UI, defined on the server before any hardware exists:
   - **Remote layouts** (top): one per room. Each has the room's Home Assistant entities, one card per function, with entity fields that search Home Assistant as you type. It also sets what the room's remotes show: which carousel pages, in what order, the Quick Access buttons, and the refresh interval.
   - **Viewport layouts** (bottom): whole wall-display UIs, each assignable to any number of displays. Start one from the home panel, a meeting-room sign, or blank.
@@ -95,6 +100,7 @@ Every Switchboard remote already talks to this: `Settings → Select room` calls
 | GET | `/api/globals` | Shared WiFi + Home Assistant connection | session or device |
 | POST | `/api/globals` | Update Globals | session |
 | GET | `/api/clients` | Every paired device (remotes and viewports) with its effective layout | session |
+| GET | `/api/overview` | The Home page: device counts and health, what needs attention, how requests to Home Assistant are going | session |
 | PUT | `/api/clients/<mac>` | Set a device's `name`, `type`, `room` or `layout` (`layout: null` goes back to the defaults) | session |
 | GET | `/api/clients/schema` | The pages, tile types, sizes and refresh intervals the layout builders offer | session |
 | GET | `/api/ha/status` | Whether the server can reach Home Assistant with the saved connection | session |
@@ -159,7 +165,8 @@ A viewport is a colour wall-mounted e-ink display, for example the reTerminal E1
     | Motion | last motion per sensor, blue when recent |
     | Cameras | last motion per camera |
 
-  - **Meeting room.** A whole screen for one room's calendar. It shows *Available*, *Starting soon* or *In use* (plus *booked but empty* and *in use but not booked* if you add an occupancy sensor), "Busy until 14:30" or "Free until 16:00", the current meeting and the rest of today's. Titles can be hidden.
+  - **Meeting room.** A whole screen for one room's calendar. The bar shows *Available*, *Starting soon* or *In use* (plus *booked but empty* and *in use but not booked* if you add an occupancy sensor) with a status icon (free and in-use icons are yours to pick), and "Busy until 14:30" or "Free until 16:00". Below it, an optional timeline of the next 1, 2 or 3 hours shows bookings as blocks; it starts at the current quarter hour, so it only changes (and costs a panel refresh) when the quarter turns or a booking changes. Then the current meeting and the rest of today's. Titles can be hidden. The bottom-right corner can show the room's climate: temperature from a thermostat or sensor, humidity, and CO2 (yellow from 1000 ppm, red from 1500).
+  - **Room finder.** The other rooms, each by its calendar (and occupancy sensor), free ones first and the longest free at the top, with "Free until 15:00" or "Busy until 14:30". Busy rooms can be listed after the free ones or left out; titles are never shown. **Add the other meeting-room signs** fills it from every other layout's meeting room. The meeting-room sign template has both screens: the display's button toggles to the room finder, and it returns to the room after 5 minutes.
 
 The layout builder shows a live 800×480 preview of each screen, in the panel's six colours, from Home Assistant's current state and including unsaved changes. **Start from…** loads the kitchen panel's defaults or a meeting-room sign, or imports an existing panel's own settings.
 
@@ -174,7 +181,7 @@ The layout builder shows a live 800×480 preview of each screen, in the panel's 
 - **Viewports:** they run on battery and never stay awake for live content. Live sections update when the display wakes. A display with departures also wakes early, when the next one turns imminent.
 - **Album and box art** are prepared here (`/api/art`), so neither kind of device decodes a JPEG.
 
-**Health.** The device can send `X-Battery`, `X-Temperature`, `X-RSSI` and `X-Firmware` headers; the Viewports page shows them.
+**Health.** Any paired device — remote or viewport — can send `X-Battery`, `X-Temperature`, `X-RSSI` and `X-Firmware` headers on its requests; the Home page and the device's page show them, and warn on a low battery or weak signal. Remote firmware sends them on every request to the server.
 
 The kitchen panel's firmware doesn't use these endpoints yet. Until it does, it keeps working as before.
 

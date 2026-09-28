@@ -442,6 +442,83 @@ test('meeting room: free, starting soon, booked-but-empty, and hidden titles', (
   assert.equal(run('2026-09-28T13:20:00Z').data.current.title, 'Booked');
 });
 
+const BOARDROOM = {
+  'calendar.boardroom': [
+    { start: { dateTime: '2026-09-28T13:00:00+01:00' }, end: { dateTime: '2026-09-28T14:00:00+01:00' }, summary: 'Quarterly review' },
+    { start: { dateTime: '2026-09-28T14:00:00+01:00' }, end: { dateTime: '2026-09-28T14:30:00+01:00' }, summary: 'Design sync' },
+    { start: { dateTime: '2026-09-28T16:00:00+01:00' }, end: { dateTime: '2026-09-28T17:00:00+01:00' }, summary: 'Hiring panel' }
+  ]
+};
+
+test('meeting room: status icon, a timeline snapped to the quarter hour, and the room climate', () => {
+  const lay = dashboard.normalizeLayout({
+    screens: [{ id: 'room', kind: 'meetingRoom', meeting: {
+      calendar: 'calendar.boardroom', timelineHours: 2, occupiedIcon: 'account-tie',
+      climate: { show: true, temperature: 'climate.kitchen', co2: 'sensor.boardroom_co2' }
+    } }]
+  });
+  const run = (now) => buildScreens(lay, {
+    states: { ...states(), 'sensor.boardroom_co2': st('1200') },
+    calendars: BOARDROOM,
+    now: new Date(now),
+    timeZone: TZ
+  }).room.data;
+  const d = run('2026-09-28T12:30:00Z'); // 13:30 local, in the Quarterly review
+  assert.equal(d.icon, 'account-tie');
+  assert.deepEqual(d.timeline.blocks.map((b) => [b.from, b.to, b.title]), [[0, 0.25, 'Quarterly review'], [0.25, 0.5, 'Design sync']]);
+  assert.deepEqual(d.timeline.ticks.map((t) => t.label), ['13:30', '14:00', '14:30', '15:00', '15:30']);
+  assert.deepEqual([d.timeline.start, d.timeline.end], ['13:30', '15:30']);
+  assert.deepEqual(d.climate, { temperature: 20.1, unit: '°', humidity: null, co2: 1200, co2Color: 3 });
+  // Seven minutes on, the timeline hasn't moved: same screen, no panel refresh.
+  assert.deepEqual(run('2026-09-28T12:37:00Z').timeline, d.timeline);
+  assert.equal(run('2026-09-28T11:00:00Z').icon, 'door-open'); // free before the meeting
+  assert.equal(d.label, 'In use');
+  lay.screens[0].meeting.labels = { ...lay.screens[0].meeting.labels, busy: 'Busy', free: '' };
+  assert.equal(run('2026-09-28T12:30:00Z').label, 'Busy');
+  assert.equal(dashboard.normalizeLayout(lay).screens[0].meeting.labels.free, 'Available'); // blank -> default
+  // Off: no timeline, no climate.
+  lay.screens[0].meeting.timelineHours = 0;
+  lay.screens[0].meeting.climate.show = false;
+  const off = run('2026-09-28T12:30:00Z');
+  assert.equal(off.timeline, null);
+  assert.equal(off.climate, null);
+});
+
+test('room finder: free rooms first, longest free first, and when to wake', () => {
+  const lay = dashboard.normalizeLayout({
+    screens: [{ id: 'rooms', kind: 'roomFinder', finder: { rooms: [
+      { name: 'Boardroom', calendar: 'calendar.boardroom' },
+      { name: 'Focus', calendar: 'calendar.focus' },
+      { name: 'Quiet', calendar: 'calendar.quiet' },
+      { name: 'Huddle', calendar: 'calendar.huddle', occupancy: 'binary_sensor.huddle' }
+    ] } }]
+  });
+  const run = () => buildScreens(lay, {
+    states: { ...states(), 'binary_sensor.huddle': st('on') },
+    calendars: {
+      ...BOARDROOM,
+      'calendar.focus': [{ start: { dateTime: '2026-09-28T14:00:00+01:00' }, end: { dateTime: '2026-09-28T15:00:00+01:00' }, summary: 'Secret' }]
+    },
+    now: NOW,
+    timeZone: TZ
+  }).rooms;
+  const r = run();
+  assert.equal(r.kind, 'roomFinder');
+  assert.deepEqual(r.data.rooms.map((x) => [x.name, x.status, x.until]), [
+    ['Quiet', 'free', 'Free for the rest of the day'],
+    ['Focus', 'free', 'Free until 14:00'],
+    ['Huddle', 'occupied', 'Not booked today'],
+    ['Boardroom', 'busy', 'Busy until 14:30']
+  ]);
+  assert.equal(r.data.summary, '2 of 4 rooms free');
+  assert.deepEqual(r.data.rooms.map((x) => x.label), ['Free', 'Free', 'In use — not booked', 'In use']);
+  assert.equal(r.nextChangeInSec, 20 * 60); // Focus turns "starting soon" at 13:50
+  lay.screens[0].finder.showBusy = false;
+  assert.deepEqual(run().data.rooms.map((x) => x.name), ['Quiet', 'Focus']);
+  // The meeting-room template comes with it, as the screen to toggle to.
+  assert.deepEqual(dashboard.meetingRoomLayout().screens.map((s) => s.kind), ['meetingRoom', 'roomFinder']);
+});
+
 test('screen etags change only when that screen changes; icons used are listed', () => {
   const a = build();
   const s = states();
@@ -449,7 +526,10 @@ test('screen etags change only when that screen changes; icons used are listed',
   const b = build({ states: s });
   assert.equal(screenEtag(a.home), screenEtag(b.home));
   assert.notEqual(screenEtag(a.presence), screenEtag(b.presence));
-  assert.deepEqual(iconsUsed(layout()), ['bus', 'lock', 'lock-open-variant', 'shield-home', 'trash-can']);
+  // The meeting room's four status icons are listed too.
+  assert.deepEqual(iconsUsed(layout()), [
+    'account-group', 'account-off-outline', 'bus', 'clock-alert-outline', 'door-open', 'lock', 'lock-open-variant', 'shield-home', 'trash-can'
+  ]);
 });
 
 test('a screen with departures wakes when the next one turns imminent', () => {

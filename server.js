@@ -63,6 +63,8 @@ const clients = require('./lib/clients');
 const dashboard = require('./lib/dashboard');
 const dashboardState = require('./lib/dashboard-state');
 const art = require('./lib/art');
+const haMonitor = require('./lib/ha-monitor');
+const overview = require('./lib/overview');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
 const fontsCompiler = require('./lib/assets/fonts');
@@ -300,22 +302,11 @@ function viewportFor(req, res) {
   return d;
 }
 
-// Battery %, panel temperature, Wi-Fi signal and firmware, as the device
-// reports them on every request.
-function noteViewportHealth(req, device) {
-  if (!req.device) return;
-  pairing.recordHealth(device.mac, {
-    battery: req.get('X-Battery'),
-    temperature: req.get('X-Temperature'),
-    rssi: req.get('X-RSSI'),
-    firmware: req.get('X-Firmware')
-  });
-}
-
+// (Battery, temperature, Wi-Fi signal and firmware headers are recorded for
+// every device in lib/auth.js.)
 app.get('/api/viewports/:mac/bundle', auth.requireAdminOrDevice, (req, res) => {
   const device = viewportFor(req, res);
   if (!device) return;
-  noteViewportHealth(req, device);
   const globals = store.getGlobals();
   const layout = viewportLayout(device);
   const dash = device.dashboard ? store.getDashboard(device.dashboard) : null;
@@ -336,9 +327,15 @@ app.get('/api/viewports/:mac/bundle', auth.requireAdminOrDevice, (req, res) => {
   });
 });
 
-async function viewportScreens(layout) {
+// `slug`: the saved layout being drawn, so entities HA doesn't have are
+// reported on the Home page (not for an unsaved preview).
+async function viewportScreens(layout, slug) {
   const inputs = await dashboardState.fetchInputs(layout, store.getGlobals());
   const screens = dashboardState.buildScreens(layout, inputs);
+  if (slug && inputs.states && Object.keys(inputs.states).length) {
+    const missing = dashboardState.missingEntities(layout, inputs.states);
+    haMonitor.noteEntities({ kind: 'layout', slug }, Object.fromEntries(missing.map((id) => [id, 'HTTP 404'])));
+  }
   return { screens, errors: inputs.errors, generatedAt: inputs.now.toISOString() };
 }
 
@@ -355,12 +352,11 @@ function haError(res, e) {
 app.get('/api/viewports/:mac/state', auth.requireAdminOrDevice, async (req, res) => {
   const device = viewportFor(req, res);
   if (!device) return;
-  noteViewportHealth(req, device);
   const layout = viewportLayout(device);
   const interval = layout.refreshIntervalMin * 60;
   const soonest = (list) => Math.min(interval, ...list.filter((n) => n != null && n > 0));
   try {
-    const { screens, errors, generatedAt } = await viewportScreens(layout);
+    const { screens, errors, generatedAt } = await viewportScreens(layout, device.dashboard || '');
     const wanted = req.query.screen ? String(req.query.screen) : '';
     if (wanted) {
       const screen = screens[wanted];
@@ -419,6 +415,10 @@ function dashboardSummary(d) {
     name: d.name,
     updatedAt: d.updatedAt || null,
     screens: layout.screens.map((sc) => ({ title: sc.title, kind: sc.kind, enabled: sc.enabled })),
+    // Its meeting rooms, so another sign's room finder can list them.
+    meetingRooms: layout.screens
+      .filter((sc) => sc.kind === 'meetingRoom' && sc.meeting.calendar)
+      .map((sc) => ({ calendar: sc.meeting.calendar, name: sc.meeting.name, occupancy: sc.meeting.occupancy })),
     devices: devices.map((x) => ({ mac: x.mac, name: x.name }))
   };
 }
@@ -774,6 +774,8 @@ app.get('/api/devices/:slug/state', auth.requireAdminOrDevice, async (req, res) 
       const result = await haState.fetchRoomState(profile, globals, { only });
       const total = Object.keys(result.states).length;
       const failed = Object.keys(result.errors).length;
+      // Entities HA says it doesn't have: a Home page warning for the room.
+      if (!only && total > 0) haMonitor.noteEntities({ kind: 'room', slug: req.params.slug }, result.errors);
       if (total === 0 && failed > 0) {
         return res.status(502).json({ error: 'Home Assistant unreachable', errors: result.errors });
       }
@@ -854,6 +856,40 @@ app.delete('/api/devices/:slug', auth.requireAdminSession, (req, res) => {
     return res.status(404).json({ error: 'no such profile' });
   }
   res.status(204).end();
+});
+
+// The admin Home page: device stats, battery and offline warnings, devices
+// waiting for approval, how talking to Home Assistant is going, and
+// anything else that needs attention (lib/overview.js).
+const STARTED_AT = new Date();
+app.get('/api/overview', auth.requireAdminSession, (req, res) => {
+  const rooms = Object.fromEntries(store.listProfiles().map((p) => [p.slug, p.name]));
+  const dashes = store.listDashboards();
+  const layouts = Object.fromEntries(dashes.map((d) => [d.slug, d.name]));
+  const refreshOf = Object.fromEntries(dashes.map((d) => [d.slug, dashboard.normalizeLayout(d.layout).refreshIntervalMin]));
+  const devices = pairing.list().map((d) => ({
+    ...d,
+    type: clients.normalizeType(d.type),
+    refreshMin: d.dashboard ? refreshOf[d.dashboard] : null
+  }));
+  const globals = store.getGlobals();
+  const haCfg = globals.homeAssistant || {};
+  res.json(
+    overview.build({
+      devices,
+      rooms,
+      layouts,
+      ha: haMonitor.snapshot(),
+      haConfigured: Boolean(haCfg.host && haCfg.token),
+      server: {
+        version: APP_VERSION,
+        startedAt: STARTED_AT.toISOString(),
+        mdnsHostname: MDNS_HOSTNAME,
+        port: PORT,
+        haHost: haCfg.host ? `${haCfg.host}:${haCfg.port || 8123}` : ''
+      }
+    })
+  );
 });
 
 app.get('/api/health', (req, res) => {

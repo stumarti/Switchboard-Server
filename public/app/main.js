@@ -1,5 +1,5 @@
-// App shell: sign-in gate, hash routing, the icon rail (Rooms / Remotes /
-// Viewports / Settings) and, for Remotes and Viewports, the list column of
+// App shell: sign-in gate, hash routing, the icon rail (Home / Layouts /
+// Remotes / Viewports / Settings) and, for Remotes and Viewports, the list column of
 // devices beside it. Each page lives in its own module.
 
 import { html, render, useState, useEffect, useCallback, api, setUnauthorizedHandler, Icon, Button } from './lib.js';
@@ -7,16 +7,18 @@ import { RoomsPage } from './rooms.js';
 import { DashboardPage } from './dashboards.js';
 import { ClientList, ClientPage } from './clients.js';
 import { SettingsPage } from './settings.js';
+import { HomePage } from './home.js';
 
 // --- Routing ----------------------------------------------------------------
-// #/rooms, #/remote-layouts/<slug>, #/remotes/<mac>, #/viewports/<mac>, #/settings/<tab>
+// #/home, #/layouts, #/remote-layouts/<slug>, #/viewport-layouts/<slug>,
+// #/remotes/<mac>, #/viewports/<mac>, #/settings/<tab>
 
 // Links from before the Layouts page (#/rooms/<slug>, #/dashboards/<slug>)
 // still work.
 const ALIASES = { rooms: 'remote-layouts', dashboards: 'viewport-layouts' };
 function parseHash() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
-  let section = ALIASES[parts[0]] || parts[0] || 'layouts';
+  let section = ALIASES[parts[0]] || parts[0] || 'home';
   if (section === 'remote-layouts' && !parts[1]) section = 'layouts';
   return { section, id: parts[1] || '' };
 }
@@ -39,6 +41,8 @@ function useAppData(signedIn) {
   const [rooms, setRooms] = useState(null);
   const [clients, setClients] = useState(null);
   const [dashboards, setDashboards] = useState(null);
+  const [alertCount, setAlertCount] = useState(0);
+  const reloadAlerts = useCallback(() => api('/api/overview').then((o) => setAlertCount(o.counts.critical)).catch(() => {}), []);
   const reloadRooms = useCallback(() => api('/api/devices').then(setRooms).catch(() => {}), []);
   const reloadClients = useCallback(() => api('/api/clients').then(setClients).catch(() => {}), []);
   const reloadDashboards = useCallback(() => api('/api/dashboards').then(setDashboards).catch(() => {}), []);
@@ -47,12 +51,19 @@ function useAppData(signedIn) {
     reloadRooms();
     reloadClients();
     reloadDashboards();
+    reloadAlerts();
     const t = setInterval(() => {
       if (!document.hidden) reloadClients();
     }, 5000);
-    return () => clearInterval(t);
+    const t2 = setInterval(() => {
+      if (!document.hidden) reloadAlerts();
+    }, 30000);
+    return () => {
+      clearInterval(t);
+      clearInterval(t2);
+    };
   }, [signedIn]);
-  return { rooms, clients, dashboards, reloadRooms, reloadClients, reloadDashboards, setClients };
+  return { rooms, clients, dashboards, alertCount, reloadRooms, reloadClients, reloadDashboards, setClients };
 }
 
 // --- Sign in ------------------------------------------------------------------
@@ -103,13 +114,14 @@ function AuthGate({ needsSetup, onDone }) {
 // --- Rail ---------------------------------------------------------------------
 
 const SECTIONS = [
+  { id: 'home', label: 'Home', icon: 'home-outline' },
   { id: 'layouts', label: 'Layouts', icon: 'view-dashboard-edit-outline' },
   { id: 'remotes', label: 'Remotes', icon: 'remote' },
   { id: 'viewports', label: 'Viewports', icon: 'tablet-dashboard' },
   { id: 'settings', label: 'Settings', icon: 'cog-outline' }
 ];
 
-function Rail({ section, pendingCount }) {
+function Rail({ section, pendingCount, alertCount }) {
   return html`<nav class="rail">
     <div class="rail-logo" title="Switchboard"><${Icon} name="remote-tv" size=${30} /></div>
     ${SECTIONS.map(
@@ -117,6 +129,7 @@ function Rail({ section, pendingCount }) {
         <${Icon} name=${s.icon} size=${24} />
         <span>${s.label}</span>
         ${s.id === 'remotes' && pendingCount > 0 && html`<span class="rail-count" title="Waiting for approval">${pendingCount}</span>`}
+        ${s.id === 'home' && alertCount > 0 && html`<span class="rail-count rail-count-bad" title="Critical problems">${alertCount}</span>`}
       </a>`
     )}
     <div class="rail-spacer"></div>
@@ -146,7 +159,9 @@ function App() {
   const pendingCount = (data.clients || []).filter((c) => c.status === 'pending').length;
 
   let main;
-  if (section === 'layouts' || section === 'remote-layouts') {
+  if (section === 'home') {
+    main = html`<${HomePage} />`;
+  } else if (section === 'layouts' || section === 'remote-layouts') {
     main = html`<${RoomsPage} slug=${section === 'remote-layouts' ? id : ''} ...${data} />`;
   } else if (section === 'viewport-layouts') {
     main = html`<${DashboardPage} key=${id} slug=${id} ...${data} />`;
@@ -157,7 +172,7 @@ function App() {
   }
 
   return html`<div class="shell">
-    <${Rail} section=${section.endsWith('layouts') ? 'layouts' : section} pendingCount=${pendingCount} />
+    <${Rail} section=${section.endsWith('layouts') ? 'layouts' : section} pendingCount=${pendingCount} alertCount=${data.alertCount} />
     ${clientType
       ? html`<${ClientList} type=${clientType} selected=${id} clients=${data.clients} rooms=${data.rooms} dashboards=${data.dashboards} />`
       : html`<div></div>`}
