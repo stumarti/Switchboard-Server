@@ -49,6 +49,7 @@
  * remotes need reflashing + pairing once this ships - see README.md).
  */
 
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 
@@ -86,6 +87,22 @@ const app = express();
 app.use(express.json({ limit: '3mb' }));
 app.set('trust proxy', true); // req.ip reflects X-Forwarded-For behind a reverse proxy, for device lastIp
 app.use(express.static(path.join(__dirname, 'public')));
+// The admin UI's libraries, straight from node_modules — no build step:
+// Preact + htm as ES modules (index.html's import map points at these), and
+// every Material Design Icon as an SVG the UI draws with a CSS mask.
+// A package's install folder, found the way require() would (some packages'
+// "exports" hide package.json from require.resolve).
+const moduleDir = (pkg) => {
+  for (const dir of require.resolve.paths(pkg) || []) {
+    const candidate = path.join(dir, pkg);
+    if (fs.existsSync(path.join(candidate, 'package.json'))) return candidate;
+  }
+  throw new Error(`${pkg} is not installed (run npm install)`);
+};
+const vendorStatic = (dir) => express.static(dir, { maxAge: '7d', immutable: true });
+app.use('/vendor/preact', vendorStatic(moduleDir('preact')));
+app.use('/vendor/htm', vendorStatic(path.join(moduleDir('htm'), 'dist')));
+app.use('/mdi', vendorStatic(path.join(moduleDir('@mdi/svg'), 'svg')));
 
 // --- Auth ----------------------------------------------------------------
 
@@ -241,7 +258,11 @@ app.get('/api/clients/schema', auth.requireAdminSession, (req, res) => {
 
 app.get('/api/theme', auth.requireAdminOrDevice, (req, res) => {
   const theme = store.getTheme();
-  res.json({ iconsVersion: theme.iconsVersion, fontsVersion: theme.fontsVersion });
+  const out = { iconsVersion: theme.iconsVersion, fontsVersion: theme.fontsVersion };
+  // The admin UI also gets the slot overrides the current pack was built
+  // from, so the Theme page reopens with them instead of starting blank.
+  if (!req.device) out.iconOverrides = theme.iconOverrides || {};
+  res.json(out);
 });
 
 app.get('/api/theme/icons.pack', auth.requireAdminOrDevice, (req, res) => {
@@ -365,6 +386,7 @@ app.post('/api/assets/icons/compile', auth.requireAdminSession, async (req, res)
     store.saveIconsPack(buf);
     const theme = store.getTheme();
     theme.iconsVersion = version;
+    theme.iconOverrides = overrides;
     theme.updatedAt = new Date().toISOString();
     store.saveTheme(theme);
     res.json({ ok: true, version });
@@ -537,8 +559,9 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// SPA fallback for the admin UI (any non-API GET) -> index.html
-app.get(/^(?!\/api\/).*/, (req, res) => {
+// SPA fallback for the admin UI (any non-API GET that isn't a missing
+// file, so a bad script path 404s instead of coming back as HTML).
+app.get(/^(?!\/api\/)(?!.*\.[a-z0-9]+$).*/i, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

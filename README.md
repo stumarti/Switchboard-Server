@@ -69,8 +69,11 @@ If this repo is private, GHCR images are private by default too — `docker logi
 
 ## What it does
 
-- One JSON profile per room (lighting, blinds, media, climate, TV, Xbox, which carousel screens are on) — edit them from a browser instead of the on-device form.
-- A shared **Globals** page for WiFi and your Home Assistant connection, so you only enter those once.
+- **Rooms** — one profile per room (lighting, blinds, media, climate, TV, Xbox): which Home Assistant entities it has, one card per function. Entity fields search Home Assistant's own entity list (through the server, which holds the token), show each entity's live state, flag ids HA doesn't know, and fill in names, icons and supported light controls for you. With HA unreachable they fall back to plain text boxes.
+- **Remotes** and **Viewports** — every paired device, listed beside the menu. A remote gets its own carousel (page cards you drag into order and switch on/off, each showing what its room gives it), its own Quick Access hub and refresh interval; a viewport (a colour wall-mounted e-ink display) gets a board of tiles. New devices appear under Remotes to approve, as either kind.
+- **Settings** for the Home Assistant connection (with a connection test), device and guest Wi-Fi, the clock's NTP server, and the theme (icon and font packs, custom icons).
+
+The admin UI is plain ES modules — Preact + htm served from `node_modules`, Material Design Icons from `@mdi/svg` — so there is no build step.
 - Advertises itself on the LAN (`switchboard.local`) so remotes find it with zero configuration.
 
 Every Switchboard remote already talks to this: `Settings → Select room` calls `GET /api/devices`, and each data refresh makes two requests — `GET /api/devices/<slug>/bundle` (its room's config, the shared WiFi/HA connection and theme versions; a bodyless `304` when nothing changed) and `GET /api/devices/<slug>/state` (the room's live Home Assistant state, which the server fetches from HA in parallel). Older firmware uses `GET /api/devices/<slug>/config` and `GET /api/globals` and talks to HA directly; those still work. For `/state` the server must be able to reach Home Assistant at the host in Globals — if it can't, the remote falls back to asking HA itself. Every one of these three now requires the remote to be paired (see "Pairing" below) — the admin UI's own browser session works too, so nothing changes for you in the UI itself.
