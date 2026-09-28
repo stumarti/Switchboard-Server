@@ -76,7 +76,7 @@ If this repo is private, GHCR images are private by default too — `docker logi
 The admin UI is plain ES modules — Preact + htm served from `node_modules`, Material Design Icons from `@mdi/svg` — so there is no build step.
 - Advertises itself on the LAN (`switchboard.local`) so remotes find it with zero configuration.
 
-Every Switchboard remote already talks to this: `Settings → Select room` calls `GET /api/devices`, and each data refresh makes two requests — `GET /api/devices/<slug>/bundle` (its room's config, the shared WiFi/HA connection and theme versions; a bodyless `304` when nothing changed) and `GET /api/devices/<slug>/state` (the room's live Home Assistant state, which the server fetches from HA in parallel). Older firmware uses `GET /api/devices/<slug>/config` and `GET /api/globals` and talks to HA directly; those still work. For `/state` the server must be able to reach Home Assistant at the host in Globals — if it can't, the remote falls back to asking HA itself. Every one of these three now requires the remote to be paired (see "Pairing" below) — the admin UI's own browser session works too, so nothing changes for you in the UI itself.
+Every Switchboard remote already talks to this: `Settings → Select room` calls `GET /api/devices`, and each data refresh makes two requests — `GET /api/devices/<slug>/bundle` (its room's config, the shared WiFi/HA connection and theme versions; a bodyless `304` when nothing changed) and `GET /api/devices/<slug>/state` (the room's live Home Assistant state, which the server fetches from HA in parallel). Older firmware uses `GET /api/devices/<slug>/config` and `GET /api/globals` and talks to HA directly; those still work. For `/state` the server must be able to reach Home Assistant at the host in Settings → Home Assistant — if it can't, the remote falls back to asking HA itself. Every one of these three now requires the remote to be paired (see "Pairing" below) — the admin UI's own browser session works too, so nothing changes for you in the UI itself.
 
 | Method | Path | Purpose | Auth |
 |---|---|---|---|
@@ -89,6 +89,12 @@ Every Switchboard remote already talks to this: `Settings → Select room` calls
 | DELETE | `/api/devices/<slug>` | Remove a room | session |
 | GET | `/api/globals` | Shared WiFi + Home Assistant connection | session or device |
 | POST | `/api/globals` | Update Globals | session |
+| GET | `/api/clients` | Every paired device (remotes and viewports) with its effective layout | session |
+| PUT | `/api/clients/<mac>` | Set a device's `name`, `type`, `room` or `layout` (`layout: null` goes back to the defaults) | session |
+| GET | `/api/clients/schema` | The pages, tile types, sizes and refresh intervals the layout builders offer | session |
+| GET | `/api/ha/status` | Whether the server can reach Home Assistant with the saved connection | session |
+| GET | `/api/ha/entities` | Search HA's entities (`domains`, `q`, `deviceClass`, `limit`) for the admin UI's pickers | session |
+| POST | `/api/ha/lookup` | Look up specific entity ids (`{ids: [...]}`): each entity, or `null` if HA doesn't have it | session |
 | GET | `/api/health` | Liveness, version, mDNS info | none |
 | GET | `/api/auth/status` | `{authenticated, setupRequired}` | none |
 | POST | `/api/auth/setup` | Set the admin password (first run only) | none |
