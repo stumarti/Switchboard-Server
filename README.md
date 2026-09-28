@@ -16,20 +16,20 @@ This is step one. Get this running and set up at least one room *before* you fla
 
 <table>
 <tr>
-  <td><img src="screenshots/room.png" width="360" alt="Editing a room"><br><sub>Rooms — one card per function, entities searched from Home Assistant</sub></td>
+  <td><img src="screenshots/room.png" width="360" alt="Editing a room"><br><sub>Layouts — a room's remote layout, entities searched from Home Assistant</sub></td>
   <td><img src="screenshots/remote.png" width="360" alt="A remote's carousel"><br><sub>Remotes — drag-to-order carousel and Quick Access hub</sub></td>
 </tr>
 <tr>
-  <td><img src="screenshots/viewport.png" width="360" alt="A viewport's tiles"><br><sub>Viewports — a wall display's dashboard, with a live preview</sub></td>
+  <td><img src="screenshots/viewport.png" width="360" alt="A viewport's tiles"><br><sub>Layouts — a viewport layout, with a live preview</sub></td>
   <td><img src="screenshots/settings.png" width="360" alt="Settings"><br><sub>Settings — Home Assistant, Wi-Fi, clock, theme</sub></td>
 </tr>
 </table>
 
-- **Rooms** — every UI, defined on the server before any hardware exists:
-  - **Remotes** (top): one card per room. A room has its Home Assistant entities, one card per function, with entity fields that search Home Assistant as you type. It also has its **remote UI**: which carousel pages, in what order, the Quick Access buttons, and the refresh interval. Every remote in the room shows it.
-  - **Viewports** (bottom): dashboards for wall displays, each assignable to any number of displays. Start one from the home-panel layout, a meeting-room sign, or blank.
-- **Remotes** — every handheld remote, in a list beside the menu. Pick one to choose its room; optionally customise its pages and Quick Access for just that remote. New devices waiting for approval appear at the top; approve one as a remote (choosing its room) or a viewport (choosing its dashboard) in one step. See "Pairing" below.
-- **Viewports** — every wall display. Pick one to choose which dashboard it shows. The display itself holds no UI: until it has a dashboard it shows "not set up".
+- **Layouts** — every UI, defined on the server before any hardware exists:
+  - **Remote layouts** (top): one per room. Each has the room's Home Assistant entities, one card per function, with entity fields that search Home Assistant as you type. It also sets what the room's remotes show: which carousel pages, in what order, the Quick Access buttons, and the refresh interval.
+  - **Viewport layouts** (bottom): whole wall-display UIs, each assignable to any number of displays. Start one from the home panel, a meeting-room sign, or blank.
+- **Remotes** — every handheld remote, in a list beside the menu. Pick one to choose its room; optionally customise its pages and Quick Access for just that remote. New devices waiting for approval appear at the top; approve one as a remote (choosing its room) or a viewport (choosing its layout) in one step. See "Pairing" below.
+- **Viewports** — every wall display. Pick one to choose which viewport layout it shows. The display itself holds no UI: until it has a layout it shows "not set up".
 - **Settings** — the shared Home Assistant connection (with a connection test), the Wi-Fi remotes join plus guest networks shown as join-QR codes, the clock's NTP server, and the **Theme**: pick a font and re-skin any of the ~107 icons the firmware draws, compiled by this server and downloaded automatically by every paired remote. See "Theme" below.
 
 > **⚠️ Upgrading from an older version?** This release adds auth: the admin UI now requires a password, and remotes must pair before they can fetch config. See "Auth" and "Pairing" below, and the **Migrating from an unauthenticated version** section — existing already-flashed remotes need reflashing plus a one-time pairing approval.
@@ -71,9 +71,9 @@ If this repo is private, GHCR images are private by default too — `docker logi
 
 ## What it does
 
-- **Rooms** — one profile per room (lighting, blinds, media, climate, TV, Xbox): which Home Assistant entities it has, one card per function. Entity fields search Home Assistant's own entity list (through the server, which holds the token), show each entity's live state, flag ids HA doesn't know, and fill in names, icons and supported light controls for you. With HA unreachable they fall back to plain text boxes.
-- **Dumb hardware, server control.** Every UI — a room's remote UI, a wall display's dashboard — is defined here, before any device exists. A device is only ever *assigned* one: remotes to a room, viewports to a dashboard.
-- **Remotes** and **Viewports** — every paired device, listed beside the menu. A remote shows its room's carousel, Quick Access hub and refresh interval, or its own if customised. A viewport shows its assigned dashboard. New devices appear under Remotes to approve, as either kind.
+- **Remote layouts** — one per room (lighting, blinds, media, climate, TV, Xbox): which Home Assistant entities it has, and what its remotes show, one card per function. Entity fields search Home Assistant's own entity list (through the server, which holds the token), show each entity's live state, flag ids HA doesn't know, and fill in names, icons and supported light controls for you. With HA unreachable they fall back to plain text boxes.
+- **Dumb hardware, server control.** Every UI — a room's remote layout, a wall display's viewport layout — is defined here, on the Layouts page, before any device exists. A device is only ever *assigned* one: a remote to a room, a viewport to a layout.
+- **Remotes** and **Viewports** — every paired device, listed beside the menu. A remote shows its room's carousel, Quick Access hub and refresh interval, or its own if customised. A viewport shows its assigned layout. New devices appear under Remotes to approve, as either kind.
 - **Settings** for the Home Assistant connection (with a connection test), device and guest Wi-Fi, the clock's NTP server, and the theme (icon and font packs, custom icons).
 
 The admin UI is plain ES modules — Preact + htm served from `node_modules`, Material Design Icons from `@mdi/svg` — so there is no build step.
@@ -102,7 +102,7 @@ Every Switchboard remote already talks to this: `Settings → Select room` calls
 | GET | `/api/viewports/<mac>/state` | Every screen's finished values, each with its own `etag`, and `refreshInSec`; `?screen=<id>` returns one screen with `ETag` and `X-Refresh-In` headers, and a bodyless `304` when unchanged | session or device |
 | POST | `/api/viewports/<mac>/preview` | The state an unsaved layout (`{layout}`) would produce — the admin UI's live preview | session |
 | POST | `/api/viewports/import` | A kitchen panel's own `/api/config` JSON (`{config}`) as a layout, to review and save | session |
-| GET | `/api/dashboards` | Every dashboard (viewport UI), with its screens and the displays using it | session |
+| GET | `/api/dashboards` | Every viewport layout ("dashboard" in the API), with its screens and the displays using it | session |
 | POST | `/api/dashboards` | Create one: `{name, template: kitchen\|meetingRoom\|blank}`, `{name, copyFrom}` or `{name, layout}` | session |
 | GET/PUT/DELETE | `/api/dashboards/<slug>` | Read, save (`{name, layout}`) or delete one (its displays go back to "not set up") | session |
 | POST | `/api/dashboards/preview` | The state an unsaved layout would produce — the builder's live preview | session |
@@ -131,7 +131,7 @@ This stays plain HTTP by design (LAN-only, same trust model as everything else h
 
 ## Viewports
 
-A viewport is a colour wall-mounted e-ink display, for example the reTerminal E1002 kitchen panel or a sign beside a meeting room door. It pairs like a remote but registers as `"type": "viewport"`. The device only draws. Its whole UI is a **dashboard**, built on the Rooms page (before or after any display exists) and assigned to one or more displays on their Viewports page. A display without a dashboard shows "not set up". Viewports saved before dashboards existed move into a dashboard of their own automatically at startup.
+A viewport is a colour wall-mounted e-ink display, for example the reTerminal E1002 kitchen panel or a sign beside a meeting room door. It pairs like a remote but registers as `"type": "viewport"`. The device only draws. Its whole UI is a **viewport layout** (a "dashboard" in the API and data folder). It's built on the Layouts page, before or after any display exists, and assigned to one or more displays on their Viewports page. A display without a layout shows "not set up". Viewports saved before layouts were separate move into a layout of their own automatically at startup.
 
 - **Carousel.** The screens the device's left/right buttons step through, in order. Between presses it stays on the current screen and just refreshes it. Optionally, every N minutes (30 by default) it can move to the next screen or go back to the first.
 - **Screens** come in two kinds:
@@ -159,7 +159,7 @@ A viewport is a colour wall-mounted e-ink display, for example the reTerminal E1
 
   - **Meeting room.** A whole screen for one room's calendar. It shows *Available*, *Starting soon* or *In use* (plus *booked but empty* and *in use but not booked* if you add an occupancy sensor), "Busy until 14:30" or "Free until 16:00", the current meeting and the rest of today's. Titles can be hidden.
 
-The builder shows a live 800×480 preview of each screen, in the panel's six colours, from Home Assistant's current state and including unsaved changes. **Start from…** loads the kitchen panel's defaults or a meeting-room sign, or imports an existing panel's own settings.
+The layout builder shows a live 800×480 preview of each screen, in the panel's six colours, from Home Assistant's current state and including unsaved changes. **Start from…** loads the kitchen panel's defaults or a meeting-room sign, or imports an existing panel's own settings.
 
 **The server does all the evaluating.** `GET /api/viewports/me/state` returns every screen's finished values: colour indices (0 white, 1 black, 2 red, 3 yellow, 4 green, 5 blue), which icon to draw, alert sentences, times, countdowns and graph buckets. So the device needs no Home Assistant template sensors and no rules of its own. Per refresh, the server makes one `GET /api/states` for every entity. It adds only what the screens need beyond that — weather forecasts, calendar events, and one history request per energy graph — all in parallel.
 

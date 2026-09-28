@@ -9,11 +9,16 @@ import { ClientList, ClientPage } from './clients.js';
 import { SettingsPage } from './settings.js';
 
 // --- Routing ----------------------------------------------------------------
-// #/rooms, #/rooms/<slug>, #/remotes/<mac>, #/viewports/<mac>, #/settings/<tab>
+// #/rooms, #/remote-layouts/<slug>, #/remotes/<mac>, #/viewports/<mac>, #/settings/<tab>
 
+// Links from before the Layouts page (#/rooms/<slug>, #/dashboards/<slug>)
+// still work.
+const ALIASES = { rooms: 'remote-layouts', dashboards: 'viewport-layouts' };
 function parseHash() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
-  return { section: parts[0] || 'rooms', id: parts[1] || '' };
+  let section = ALIASES[parts[0]] || parts[0] || 'layouts';
+  if (section === 'remote-layouts' && !parts[1]) section = 'layouts';
+  return { section, id: parts[1] || '' };
 }
 
 function useRoute() {
@@ -98,7 +103,7 @@ function AuthGate({ needsSetup, onDone }) {
 // --- Rail ---------------------------------------------------------------------
 
 const SECTIONS = [
-  { id: 'rooms', label: 'Rooms', icon: 'home-group' },
+  { id: 'layouts', label: 'Layouts', icon: 'view-dashboard-edit-outline' },
   { id: 'remotes', label: 'Remotes', icon: 'remote' },
   { id: 'viewports', label: 'Viewports', icon: 'tablet-dashboard' },
   { id: 'settings', label: 'Settings', icon: 'cog-outline' }
@@ -141,9 +146,9 @@ function App() {
   const pendingCount = (data.clients || []).filter((c) => c.status === 'pending').length;
 
   let main;
-  if (section === 'rooms') {
-    main = html`<${RoomsPage} slug=${id} ...${data} />`;
-  } else if (section === 'dashboards') {
+  if (section === 'layouts' || section === 'remote-layouts') {
+    main = html`<${RoomsPage} slug=${section === 'remote-layouts' ? id : ''} ...${data} />`;
+  } else if (section === 'viewport-layouts') {
     main = html`<${DashboardPage} key=${id} slug=${id} ...${data} />`;
   } else if (clientType) {
     main = html`<${ClientPage} type=${clientType} mac=${id} ...${data} />`;
@@ -152,7 +157,7 @@ function App() {
   }
 
   return html`<div class="shell">
-    <${Rail} section=${section === 'dashboards' ? 'rooms' : section} pendingCount=${pendingCount} />
+    <${Rail} section=${section.endsWith('layouts') ? 'layouts' : section} pendingCount=${pendingCount} />
     ${clientType
       ? html`<${ClientList} type=${clientType} selected=${id} clients=${data.clients} rooms=${data.rooms} dashboards=${data.dashboards} />`
       : html`<div></div>`}

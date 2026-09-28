@@ -1,9 +1,11 @@
-// The UIs, defined on the server before (or without) any hardware:
-//   Remotes    one per room: its Home Assistant entities, one card per
-//              function, and the remote UI — which carousel pages, in what
-//              order, the Quick Access buttons, how often it refreshes.
-//              Every remote assigned the room shows it (unless customised).
-//   Viewports  dashboards (dashboards.js), each assigned to any displays.
+// Layouts: every UI, defined on the server before (or without) any hardware.
+//   Remote layouts    one per room: its Home Assistant entities, one card
+//                     per function, and the remote UI — which carousel
+//                     pages, in what order, the Quick Access buttons, how
+//                     often it refreshes. Every remote assigned the room
+//                     shows it (unless customised).
+//   Viewport layouts  (dashboards.js; "dashboards" in the API and store),
+//                     each assigned to any number of displays.
 
 import {
   html, useState, useEffect, api, go, Icon, Card, Field, TextInput, SecretInput, Select, Toggle, Button, Badge,
@@ -306,7 +308,7 @@ function RoomEditor({ slug, clients, reloadRooms }) {
     if (!confirm(`Delete the room “${room.name}”? Devices assigned to it will have no room.`)) return;
     await api(`/api/devices/${encodeURIComponent(slug)}`, { method: 'DELETE' });
     reloadRooms();
-    go('rooms');
+    go('layouts');
   };
 
   const download = () => {
@@ -323,7 +325,7 @@ function RoomEditor({ slug, clients, reloadRooms }) {
 
   return html`<div class="page">
     <div class="page-head">
-      <${Button} kind="ghost" icon="arrow-left" title="All rooms" onClick=${() => go('rooms')} />
+      <${Button} kind="ghost" icon="arrow-left" title="All layouts" onClick=${() => go('layouts')} />
       <div class="ph-icon"><${Icon} name="sofa-outline" size=${26} /></div>
       <div class="ph-text">
         <input type="text" class="title-input" value=${room.name} onInput=${(e) => set(['name'], e.target.value)} style="font-size:20px;font-weight:600;border-color:transparent;padding:4px 6px;background:transparent" />
@@ -357,7 +359,7 @@ function RoomEditor({ slug, clients, reloadRooms }) {
       <${XboxCard} ...${cardProps} />
       <${ConnectionCard} ...${cardProps} />
     </div>
-    <div class="section-heading"><${Icon} name="remote" size=${22} /><h2>Remote UI</h2><span class="hint">What every remote in this room shows (a remote can be customised on its own page).</span></div>
+    <div class="section-heading"><${Icon} name="remote" size=${22} /><h2>What its remotes show</h2><span class="hint">Every remote in this room shows this (a remote can be customised on its own page).</span></div>
     <div class="stack">
       <${Card} icon="update" title="Refresh" subtitle="How often its remotes wake to fetch new state. Less often = longer battery.">
         <${Select} value=${String(getIn(room, ['standby', 'refreshIntervalMin'], 30))} onChange=${(v) => set(['standby', 'refreshIntervalMin'], Number(v))}
@@ -398,7 +400,7 @@ function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboar
       const room = await api('/api/devices', { method: 'POST', body: { name: name.trim() } });
       setName('');
       await reloadRooms();
-      go('rooms', room.slug);
+      go('remote-layouts', room.slug);
     } catch (err) {
       flash(err.message, 5000);
     }
@@ -411,7 +413,7 @@ function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboar
       const d = await api('/api/dashboards', { method: 'POST', body: { name: dashName.trim(), template } });
       setDashName('');
       await reloadDashboards();
-      go('dashboards', d.slug);
+      go('viewport-layouts', d.slug);
     } catch (err) {
       flash(err.message, 5000);
     }
@@ -430,7 +432,7 @@ function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboar
       if (!slug) throw new Error('no slug in the file');
       await api(`/api/devices/${encodeURIComponent(slug)}/config`, { method: 'POST', body });
       await reloadRooms();
-      go('rooms', slug);
+      go('remote-layouts', slug);
     } catch (err) {
       flash(`Import failed: ${err.message}`, 6000);
     }
@@ -444,10 +446,10 @@ function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboar
 
   return html`<div class="page">
     <div class="page-head">
-      <div class="ph-icon"><${Icon} name="home-group" size=${26} /></div>
+      <div class="ph-icon"><${Icon} name="view-dashboard-edit-outline" size=${26} /></div>
       <div class="ph-text">
-        <h1>Rooms</h1>
-        <p class="hint">Every UI lives here, ready before any hardware: remote rooms above, viewport dashboards below. Devices are just assigned to one.</p>
+        <h1>Layouts</h1>
+        <p class="hint">Every UI lives here, ready before any hardware: remote layouts (one per room) above, viewport layouts below. Devices are just assigned to one.</p>
       </div>
       <div class="page-actions">
         <span class="flash flash-bad">${msg}</span>
@@ -455,8 +457,8 @@ function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboar
     </div>
 
     <div class="section-heading">
-      <${Icon} name="remote" size=${22} /><h2>Remotes</h2>
-      <span class="hint">A room's entities and its remote UI. Remotes in the room show it.</span>
+      <${Icon} name="remote" size=${22} /><h2>Remote layouts</h2>
+      <span class="hint">One per room: its entities and what its remotes show. Remotes in the room use it.</span>
       <label class="btn btn-small" style="margin-left:auto" title="Import a room from a JSON file">
         <${Icon} name="upload-outline" size=${16} /><span>Import</span>
         <input type="file" accept="application/json,.json" hidden onChange=${importJson} />
@@ -465,7 +467,7 @@ function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboar
     ${rooms === null && html`<p class="hint">Loading…</p>`}
     <div class="grid">
       ${(rooms || []).map(
-        (r) => html`<a class="card" href=${`#/rooms/${encodeURIComponent(r.slug)}`} style="text-decoration:none;color:inherit">
+        (r) => html`<a class="card" href=${`#/remote-layouts/${encodeURIComponent(r.slug)}`} style="text-decoration:none;color:inherit">
           <div class="card-head">
             <div class="card-icon"><${Icon} name="sofa-outline" size=${22} /></div>
             <div class="card-titles"><h2>${r.name}</h2><p class="hint">Updated ${timeAgo(r.updatedAt)}</p></div>
@@ -477,7 +479,7 @@ function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboar
       <form class="card" onSubmit=${create}>
         <div class="card-head">
           <div class="card-icon"><${Icon} name="plus" size=${22} /></div>
-          <div class="card-titles"><h2>New room</h2></div>
+          <div class="card-titles"><h2>New remote layout</h2><p class="hint">For a room</p></div>
         </div>
         <div class="card-body">
           <div class="input-with-button">
@@ -489,13 +491,13 @@ function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboar
     </div>
 
     <div class="section-heading">
-      <${Icon} name="tablet-dashboard" size=${22} /><h2>Viewports</h2>
-      <span class="hint">Dashboards for wall displays. Assign one to any number of displays.</span>
+      <${Icon} name="tablet-dashboard" size=${22} /><h2>Viewport layouts</h2>
+      <span class="hint">Whole wall-display UIs. Assign one to any number of displays.</span>
     </div>
     ${dashboards === null && html`<p class="hint">Loading…</p>`}
     <div class="grid">
       ${(dashboards || []).map(
-        (d) => html`<a class="card" href=${`#/dashboards/${encodeURIComponent(d.slug)}`} style="text-decoration:none;color:inherit">
+        (d) => html`<a class="card" href=${`#/viewport-layouts/${encodeURIComponent(d.slug)}`} style="text-decoration:none;color:inherit">
           <div class="card-head">
             <div class="card-icon"><${Icon} name=${d.screens.some((sc) => sc.kind === 'meetingRoom') ? 'calendar-account-outline' : 'view-dashboard-outline'} size=${22} /></div>
             <div class="card-titles"><h2>${d.name}</h2><p class="hint">${d.screens.filter((sc) => sc.enabled).map((sc) => sc.title || 'Untitled').join(' · ')}</p></div>
@@ -507,7 +509,7 @@ function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboar
       <form class="card" onSubmit=${createDashboard}>
         <div class="card-head">
           <div class="card-icon"><${Icon} name="plus" size=${22} /></div>
-          <div class="card-titles"><h2>New dashboard</h2></div>
+          <div class="card-titles"><h2>New viewport layout</h2></div>
         </div>
         <div class="card-body">
           <div class="chips">

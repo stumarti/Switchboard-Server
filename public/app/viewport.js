@@ -545,7 +545,7 @@ function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId }) {
   };
   return html`<div class="stack">
     <div class="row" style="align-items:center">
-      <span class="hint">Layout</span>
+      <span class="hint">Arrangement</span>
       <div class="chips">
         ${TEMPLATES.map((t) => html`<button type="button" class=${`chip ${t.value === screen.template ? 'on' : ''}`} onClick=${() => setTemplate(t.value)}><${Icon} name=${t.icon} size=${16} />${t.label}</button>`)}
       </div>
@@ -622,7 +622,7 @@ function ScreensCard({ screens, selected, onSelect, onChange, useDragOrder }) {
     actions=${html`<${Button} small icon="plus" disabled=${screens.length >= 12} onClick=${() => setAdding(!adding)}>Add screen<//>`}>
     ${adding &&
     html`<div class="section-palette" style="grid-template-columns:1fr 1fr">
-      <button type="button" class="palette-item" onClick=${() => add('sections')}><${Icon} name="view-dashboard-edit-outline" size=${26} /><span><b>Sections</b><br /><span class="hint">Pick a layout and fill it with any sections</span></span></button>
+      <button type="button" class="palette-item" onClick=${() => add('sections')}><${Icon} name="view-dashboard-edit-outline" size=${26} /><span><b>Sections</b><br /><span class="hint">Pick an arrangement and fill it with any sections</span></span></button>
       <button type="button" class="palette-item" onClick=${() => add('meetingRoom')}><${Icon} name="calendar-account-outline" size=${26} /><span><b>Meeting room</b><br /><span class="hint">Free / in use, current and next meetings</span></span></button>
     </div>`}
     <div class="carousel">

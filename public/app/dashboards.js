@@ -1,6 +1,6 @@
-// A viewport dashboard: a whole wall-display UI, defined here before (or
-// without) any hardware, then assigned to any number of displays on their
-// Viewports page. The builder itself is viewport.js.
+// A viewport layout ("dashboard" in the API and store): a whole wall-display
+// UI, defined here before (or without) any hardware, then assigned to any
+// number of displays on their Viewports page. The builder is viewport.js.
 
 import { html, useState, useEffect, api, go, Icon, Button, Badge, Empty, useFlash, timeAgo } from './lib.js';
 import { DashboardBuilder } from './viewport.js';
@@ -27,7 +27,7 @@ export function DashboardPage({ slug, rooms, reloadDashboards, reloadClients }) 
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
 
-  if (error) return html`<div class="page"><${Empty} icon="alert-circle-outline" title="Couldn't load this dashboard">${error.message}<//></div>`;
+  if (error) return html`<div class="page"><${Empty} icon="alert-circle-outline" title="Couldn't load this layout">${error.message}<//></div>`;
   if (!dash) return html`<div class="page"><p class="hint">Loading…</p></div>`;
 
   const update = (next) => {
@@ -51,19 +51,19 @@ export function DashboardPage({ slug, rooms, reloadDashboards, reloadClients }) 
   const duplicate = async () => {
     const copy = await api('/api/dashboards', { method: 'POST', body: { name: `${dash.name} copy`, layout: dash.layout } });
     await reloadDashboards();
-    go('dashboards', copy.slug);
+    go('viewport-layouts', copy.slug);
   };
   const remove = async () => {
     const using = dash.devices.length ? ` ${dash.devices.length} display(s) using it will show “not set up”.` : '';
-    if (!confirm(`Delete the dashboard “${dash.name}”?${using}`)) return;
+    if (!confirm(`Delete the layout “${dash.name}”?${using}`)) return;
     await api(`/api/dashboards/${encodeURIComponent(slug)}`, { method: 'DELETE' });
     await Promise.all([reloadDashboards(), reloadClients()]);
-    go('rooms');
+    go('layouts');
   };
 
   return html`<div class="page">
     <div class="page-head">
-      <${Button} kind="ghost" icon="arrow-left" title="All rooms and dashboards" onClick=${() => go('rooms')} />
+      <${Button} kind="ghost" icon="arrow-left" title="All layouts" onClick=${() => go('layouts')} />
       <div class="ph-icon"><${Icon} name="view-dashboard-outline" size=${26} /></div>
       <div class="ph-text">
         <input type="text" value=${dash.name} onInput=${(e) => update({ ...dash, name: e.target.value })} style="font-size:20px;font-weight:600;border-color:transparent;padding:4px 6px;background:transparent" />
@@ -77,7 +77,7 @@ export function DashboardPage({ slug, rooms, reloadDashboards, reloadClients }) 
       <div class="page-actions">
         <span class=${`flash ${msg.startsWith('Save failed') ? 'flash-bad' : ''}`}>${msg}</span>
         <${Button} kind="ghost" icon="content-copy" title="Duplicate" onClick=${duplicate} />
-        <${Button} kind="ghost" icon="trash-can-outline" title="Delete dashboard" onClick=${remove} />
+        <${Button} kind="ghost" icon="trash-can-outline" title="Delete layout" onClick=${remove} />
         <${Button} kind="primary" icon="content-save-outline" disabled=${!dirty || saving} onClick=${save}>${saving ? 'Saving…' : 'Save'}<//>
       </div>
     </div>
