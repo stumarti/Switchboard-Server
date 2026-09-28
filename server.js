@@ -62,6 +62,7 @@ const haState = require('./lib/ha-state');
 const clients = require('./lib/clients');
 const dashboard = require('./lib/dashboard');
 const dashboardState = require('./lib/dashboard-state');
+const art = require('./lib/art');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
 const fontsCompiler = require('./lib/assets/fonts');
@@ -491,6 +492,34 @@ app.post('/api/dashboards/preview', auth.requireAdminSession, async (req, res) =
   }
 });
 
+// --- Pictures, prepared for the device (album art, box art) ----------------
+//
+// GET /api/art?src=<entity_picture path or http(s) URL>&size=280 (or w=&h=)
+// &fmt=mask1|spectra|png — the picture resized and dithered into exactly
+// what the device draws (lib/art.js), so it never decodes a JPEG. Cached,
+// with an ETag, so a repeat is a bodyless 304.
+app.get('/api/art', auth.requireAdminOrDevice, async (req, res) => {
+  const src = String(req.query.src || '');
+  if (!src) return res.status(400).json({ error: 'src is required' });
+  const size = Number(req.query.size) || 0;
+  try {
+    const img = await art.prepare(src, {
+      width: Number(req.query.w) || size || 120,
+      height: Number(req.query.h) || size || 120,
+      format: String(req.query.fmt || 'mask1')
+    }, store.getGlobals());
+    const etag = `"${img.key.slice(0, 20)}"`;
+    res.set('ETag', etag);
+    res.set('Cache-Control', 'private, max-age=86400');
+    res.set('X-Width', String(img.width));
+    res.set('X-Height', String(img.height));
+    if (req.get('If-None-Match') === etag) return res.status(304).end();
+    res.type(img.type).send(img.body);
+  } catch (e) {
+    res.status(e.status || 502).json({ error: e.message });
+  }
+});
+
 // --- Theme (compiled icon/font packs a paired device downloads) ---------
 
 app.get('/api/theme', auth.requireAdminOrDevice, (req, res) => {
@@ -706,20 +735,62 @@ app.get('/api/devices/:slug/bundle', auth.requireAdminOrDevice, (req, res) => {
 // fetched in parallel here and trimmed to what the firmware reads (see
 // lib/ha-state.js) — one request per device refresh instead of a dozen-plus.
 // 502 when HA can't be reached from the server at all: the device then
-// falls back to asking HA directly, entity by entity.
+// falls back to asking HA directly.
+//
+// `live` says which pages are live right now (a player playing, blinds
+// moving) and which are passive (they only change when someone presses a
+// button), so a remote knows when watching is worth the radio time.
+//
+// ?page=music|xbox|blinds — just that page's entities (no forecast): what a
+// remote re-reads while it has a live page on screen.
+// ?wait=N (up to 25 s) with If-None-Match — held open until the state
+// differs from the ETag the device has, else a bodyless 304 after N
+// seconds: one request that answers the moment the track changes, instead
+// of the device asking every few seconds. The server does the polling (HA
+// is on the LAN; the device's radio is what costs).
+const STATE_WAIT_MAX_S = 25;
+const STATE_WAIT_STEP_MS = 2000;
 app.get('/api/devices/:slug/state', auth.requireAdminOrDevice, async (req, res) => {
   const profile = store.getProfile(req.params.slug);
   if (!profile) {
     return res.status(404).json({ error: 'no such profile' });
   }
+  const page = req.query.page ? String(req.query.page) : '';
+  const pages = haState.pageEntities(profile);
+  if (page && !pages[page]) return res.status(400).json({ error: 'unknown page' });
+  const only = page ? pages[page] : null;
+  const wait = Math.min(Math.max(Number(req.query.wait) || 0, 0), STATE_WAIT_MAX_S);
+  const have = req.get('If-None-Match');
+  const etagOf = (r) => `"${require('crypto').createHash('sha1').update(JSON.stringify([r.states, r.forecast, r.live])).digest('hex').slice(0, 20)}"`;
+  const globals = store.getGlobals();
+
+  let closed = false;
+  req.on('close', () => {
+    closed = true;
+  });
   try {
-    const result = await haState.fetchRoomState(profile, store.getGlobals());
-    const total = Object.keys(result.states).length;
-    const failed = Object.keys(result.errors).length;
-    if (total === 0 && failed > 0) {
-      return res.status(502).json({ error: 'Home Assistant unreachable', errors: result.errors });
+    const deadline = Date.now() + wait * 1000;
+    for (;;) {
+      const result = await haState.fetchRoomState(profile, globals, { only });
+      const total = Object.keys(result.states).length;
+      const failed = Object.keys(result.errors).length;
+      if (total === 0 && failed > 0) {
+        return res.status(502).json({ error: 'Home Assistant unreachable', errors: result.errors });
+      }
+      const etag = etagOf(result);
+      if (have !== etag) {
+        res.set('ETag', etag);
+        return res.json(result);
+      }
+      if (closed) return undefined;
+      const left = deadline - Date.now();
+      if (left <= 0) {
+        res.set('ETag', etag);
+        return res.status(304).end();
+      }
+      await new Promise((r) => setTimeout(r, Math.min(STATE_WAIT_STEP_MS, left)));
+      if (closed) return undefined;
     }
-    res.json(result);
   } catch (e) {
     res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
   }

@@ -599,6 +599,8 @@ textarea { min-height: 70px; font-family: ui-monospace, monospace; font-size: 12
 .vp-rowline { border-bottom: 1px solid #ddd; padding: 3px 0; }
 .vp-key { display: inline-block; width: 12px; height: 12px; margin-right: 5px; vertical-align: -1px; }
 .vp-key-dash { height: 0; border-top: 3px dashed; vertical-align: 3px; width: 16px; }
+.vp-art { image-rendering: pixelated; flex: none; }
+.wake-note { display: flex; gap: 6px; align-items: flex-start; }
 .vp-erow { display: flex; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid #ddd; }
 .vp-erow:last-child { border-bottom: 0; }
 .vp-meeting { display: flex; flex-direction: column; height: 480px; }

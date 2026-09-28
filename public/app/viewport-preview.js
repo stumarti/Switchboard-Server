@@ -244,7 +244,9 @@ const Media = ({ d }) =>
   d.players.length
     ? html`<div>${d.players.map(
         (m) => html`<div class="vp-row" style="align-items:flex-start;margin-bottom:4px">
-          <span style=${{ color: c(5) }}><${Icon} name=${m.icon || 'music'} size=${24} /></span>
+          ${m.art
+            ? html`<img class="vp-art" src=${`/api/art?src=${encodeURIComponent(m.art)}&w=72&h=72&fmt=png`} width="72" height="72" alt="" />`
+            : html`<span style=${{ color: c(5) }}><${Icon} name=${m.icon || 'music'} size=${24} /></span>`}
           <div><div class="vp-tiny">${m.room}${m.app ? ` · ${m.app}` : ''}</div><div class="vp-med">${m.title}</div><div class="vp-small">${m.artist}</div></div>
         </div>`
       )}</div>`
