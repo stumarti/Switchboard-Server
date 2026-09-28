@@ -1,0 +1,163 @@
+// App shell: sign-in gate, hash routing, the icon rail (Rooms / Remotes /
+// Viewports / Settings) and, for Remotes and Viewports, the list column of
+// devices beside it. Each page lives in its own module.
+
+import { html, render, useState, useEffect, useCallback, api, setUnauthorizedHandler, Icon, Button } from './lib.js';
+import { RoomsPage } from './rooms.js';
+import { ClientList, ClientPage } from './clients.js';
+import { SettingsPage } from './settings.js';
+
+// --- Routing ----------------------------------------------------------------
+// #/rooms, #/rooms/<slug>, #/remotes/<mac>, #/viewports/<mac>, #/settings/<tab>
+
+function parseHash() {
+  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
+  return { section: parts[0] || 'rooms', id: parts[1] || '' };
+}
+
+function useRoute() {
+  const [route, setRoute] = useState(parseHash());
+  useEffect(() => {
+    const on = () => setRoute(parseHash());
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  return route;
+}
+
+// --- Shared data: rooms + clients -------------------------------------------
+// Loaded once and refreshed on demand; clients are also polled so a device
+// that has just asked to pair shows up without reloading the page.
+
+function useAppData(signedIn) {
+  const [rooms, setRooms] = useState(null);
+  const [clients, setClients] = useState(null);
+  const reloadRooms = useCallback(() => api('/api/devices').then(setRooms).catch(() => {}), []);
+  const reloadClients = useCallback(() => api('/api/clients').then(setClients).catch(() => {}), []);
+  useEffect(() => {
+    if (!signedIn) return undefined;
+    reloadRooms();
+    reloadClients();
+    const t = setInterval(() => {
+      if (!document.hidden) reloadClients();
+    }, 5000);
+    return () => clearInterval(t);
+  }, [signedIn]);
+  return { rooms, clients, reloadRooms, reloadClients, setClients };
+}
+
+// --- Sign in ------------------------------------------------------------------
+
+function AuthGate({ needsSetup, onDone }) {
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (needsSetup && pw !== pw2) {
+      setError('Passwords do not match');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api(needsSetup ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', body: { password: pw } });
+      onDone();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return html`<div class="auth-gate">
+    <form class="auth-card" onSubmit=${submit}>
+      <div class="auth-brand"><${Icon} name="remote-tv" size=${32} /><h1>Switchboard</h1></div>
+      <p class="hint">${needsSetup ? 'Choose an admin password to finish setting up this server.' : 'Sign in to manage rooms and devices.'}</p>
+      <label class="field">
+        <span class="field-label">Admin password</span>
+        <input type="password" value=${pw} onInput=${(e) => setPw(e.target.value)} autocomplete=${needsSetup ? 'new-password' : 'current-password'} autofocus required />
+      </label>
+      ${needsSetup &&
+      html`<label class="field">
+        <span class="field-label">Confirm password</span>
+        <input type="password" value=${pw2} onInput=${(e) => setPw2(e.target.value)} autocomplete="new-password" required />
+      </label>`}
+      ${error && html`<p class="auth-error">${error}</p>`}
+      <${Button} type="submit" kind="primary" icon=${needsSetup ? 'lock-plus-outline' : 'login'} disabled=${busy}>
+        ${needsSetup ? 'Set password' : 'Sign in'}
+      <//>
+    </form>
+  </div>`;
+}
+
+// --- Rail ---------------------------------------------------------------------
+
+const SECTIONS = [
+  { id: 'rooms', label: 'Rooms', icon: 'home-group' },
+  { id: 'remotes', label: 'Remotes', icon: 'remote' },
+  { id: 'viewports', label: 'Viewports', icon: 'tablet-dashboard' },
+  { id: 'settings', label: 'Settings', icon: 'cog-outline' }
+];
+
+function Rail({ section, pendingCount }) {
+  return html`<nav class="rail">
+    <div class="rail-logo" title="Switchboard"><${Icon} name="remote-tv" size=${30} /></div>
+    ${SECTIONS.map(
+      (s) => html`<a class=${`rail-item ${section === s.id ? 'active' : ''}`} href=${`#/${s.id}`}>
+        <${Icon} name=${s.icon} size=${24} />
+        <span>${s.label}</span>
+        ${s.id === 'remotes' && pendingCount > 0 && html`<span class="rail-count" title="Waiting for approval">${pendingCount}</span>`}
+      </a>`
+    )}
+    <div class="rail-spacer"></div>
+  </nav>`;
+}
+
+// --- App ------------------------------------------------------------------------
+
+function App() {
+  const [auth, setAuth] = useState(null); // {authenticated, setupRequired}
+  const checkAuth = useCallback(() => api('/api/auth/status').then(setAuth).catch(() => setAuth({ setupRequired: false, authenticated: false })), []);
+  useEffect(() => {
+    setUnauthorizedHandler(() => setAuth((a) => ({ ...(a || {}), authenticated: false })));
+    checkAuth();
+  }, []);
+  const signedIn = Boolean(auth && auth.authenticated);
+  const data = useAppData(signedIn);
+  const route = useRoute();
+
+  if (!auth) return null;
+  if (!signedIn) return html`<${AuthGate} needsSetup=${Boolean(auth.setupRequired)} onDone=${checkAuth} />`;
+
+  const { section, id } = route;
+  const clientType = section === 'remotes' ? 'remote' : section === 'viewports' ? 'viewport' : null;
+  // Devices still waiting to be approved are listed under Remotes: every
+  // device registers as a remote until it says otherwise.
+  const pendingCount = (data.clients || []).filter((c) => c.status === 'pending').length;
+
+  let main;
+  if (section === 'rooms') {
+    main = html`<${RoomsPage} slug=${id} rooms=${data.rooms} clients=${data.clients} reloadRooms=${data.reloadRooms} />`;
+  } else if (clientType) {
+    main = html`<${ClientPage}
+      type=${clientType}
+      mac=${id}
+      clients=${data.clients}
+      rooms=${data.rooms}
+      reloadClients=${data.reloadClients}
+    />`;
+  } else {
+    main = html`<${SettingsPage} tab=${id} onSignOut=${checkAuth} />`;
+  }
+
+  return html`<div class="shell">
+    <${Rail} section=${section} pendingCount=${pendingCount} />
+    ${clientType
+      ? html`<${ClientList} type=${clientType} selected=${id} clients=${data.clients} rooms=${data.rooms} />`
+      : html`<div></div>`}
+    <main class="main">${main}</main>
+  </div>`;
+}
+
+render(html`<${App} />`, document.getElementById('root'));

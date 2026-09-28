@@ -49,6 +49,7 @@
  * remotes need reflashing + pairing once this ships - see README.md).
  */
 
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 
@@ -57,6 +58,10 @@ const { normalizeProfile, normalizeGlobals } = require('./lib/validate');
 const { startMdnsResponder } = require('./lib/mdns');
 const auth = require('./lib/auth');
 const pairing = require('./lib/pairing');
+const haState = require('./lib/ha-state');
+const clients = require('./lib/clients');
+const dashboard = require('./lib/dashboard');
+const dashboardState = require('./lib/dashboard-state');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
 const fontsCompiler = require('./lib/assets/fonts');
@@ -84,6 +89,22 @@ const app = express();
 app.use(express.json({ limit: '3mb' }));
 app.set('trust proxy', true); // req.ip reflects X-Forwarded-For behind a reverse proxy, for device lastIp
 app.use(express.static(path.join(__dirname, 'public')));
+// The admin UI's libraries, straight from node_modules — no build step:
+// Preact + htm as ES modules (index.html's import map points at these), and
+// every Material Design Icon as an SVG the UI draws with a CSS mask.
+// A package's install folder, found the way require() would (some packages'
+// "exports" hide package.json from require.resolve).
+const moduleDir = (pkg) => {
+  for (const dir of require.resolve.paths(pkg) || []) {
+    const candidate = path.join(dir, pkg);
+    if (fs.existsSync(path.join(candidate, 'package.json'))) return candidate;
+  }
+  throw new Error(`${pkg} is not installed (run npm install)`);
+};
+const vendorStatic = (dir) => express.static(dir, { maxAge: '7d', immutable: true });
+app.use('/vendor/preact', vendorStatic(moduleDir('preact')));
+app.use('/vendor/htm', vendorStatic(path.join(moduleDir('htm'), 'dist')));
+app.use('/mdi', vendorStatic(path.join(moduleDir('@mdi/svg'), 'svg')));
 
 // --- Auth ----------------------------------------------------------------
 
@@ -127,7 +148,7 @@ app.post('/api/auth/logout', (req, res) => {
 // No auth: this is a device's very first-ever contact, before it has a
 // token. Also polled (still unauthenticated) while pending/revoked.
 app.post('/api/pairing/register', (req, res) => {
-  const result = pairing.register(req.body && req.body.mac, req.ip);
+  const result = pairing.register(req.body && req.body.mac, req.ip, req.body && req.body.type);
   if (result.error) return res.status(400).json(result);
   res.json(result);
 });
@@ -166,11 +187,222 @@ app.delete('/api/pairing/:mac', auth.requireAdminSession, (req, res) => {
   res.status(204).end();
 });
 
+// --- Home Assistant lookups for the admin UI (entity pickers) -----------
+//
+// The server holds the HA token, so the browser never needs it: these proxy
+// HA's own entity list, trimmed to what the pickers show.
+
+app.get('/api/ha/status', auth.requireAdminSession, async (req, res) => {
+  res.json(await haState.checkConnection(store.getGlobals()));
+});
+
+app.get('/api/ha/entities', auth.requireAdminSession, async (req, res) => {
+  try {
+    const domains = String(req.query.domains || '')
+      .split(',')
+      .map((d) => d.trim())
+      .filter(Boolean);
+    res.json(
+      await haState.searchEntities(store.getGlobals(), {
+        domains,
+        q: String(req.query.q || ''),
+        deviceClass: String(req.query.deviceClass || ''),
+        limit: Math.min(Number(req.query.limit) || 50, 500)
+      })
+    );
+  } catch (e) {
+    res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
+  }
+});
+
+app.post('/api/ha/lookup', auth.requireAdminSession, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.filter((i) => typeof i === 'string') : [];
+    res.json(await haState.lookupEntities(store.getGlobals(), ids.slice(0, 500)));
+  } catch (e) {
+    res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
+  }
+});
+
+// --- Clients (remotes + viewports: every paired device, with its layout) --
+
+// Every device, each with its effective layout (its own, or the default
+// derived from its room / type) — what the Remotes and Viewports pages list.
+app.get('/api/clients', auth.requireAdminSession, (req, res) => {
+  res.json(
+    pairing.list().map((d) => ({
+      ...d,
+      type: clients.normalizeType(d.type),
+      layout: clients.layoutFor(d, d.assignedSlug ? store.getProfile(d.assignedSlug) : null),
+      layoutCustomized: Boolean(d.layout)
+    }))
+  );
+});
+
+app.put('/api/clients/:mac', auth.requireAdminSession, (req, res) => {
+  const result = pairing.update(req.params.mac, req.body);
+  if (result.error) return res.status(404).json(result);
+  res.json(result);
+});
+
+// The option lists the admin UI's builders offer.
+app.get('/api/clients/schema', auth.requireAdminSession, (req, res) => {
+  res.json({
+    types: clients.CLIENT_TYPES,
+    remotePages: clients.REMOTE_PAGES.map((p) => p.id),
+    dashboard: {
+      sectionTypes: dashboard.SECTION_TYPES,
+      templates: Object.keys(dashboard.TEMPLATES),
+      carouselModes: dashboard.CAROUSEL_MODES,
+      colors: dashboard.COLORS,
+      conditions: dashboard.CONDITIONS,
+      limits: dashboard.LIMITS,
+      iconPresets: dashboard.ICON_PRESETS
+    },
+    refreshChoices: clients.REFRESH_CHOICES
+  });
+});
+
+// --- Viewports (the colour wall display's dashboard) ----------------------
+//
+// A viewport device calls these with its own token, as `me` (or its own
+// MAC); the admin UI calls them for any viewport. Two requests per wake,
+// like a remote: the bundle (its layout, plus the Wi-Fi networks and clock
+// server; Express answers an unchanged one with a bodyless 304) and the
+// state — every screen's finished values, each with its own ETag, so the
+// device can skip the panel refresh for a screen that hasn't changed.
+
+// The viewport a request is about, or null after answering the error.
+function viewportFor(req, res) {
+  const param = String(req.params.mac || '');
+  if (req.device) {
+    if (param !== 'me' && store.normalizeMac(param) !== req.device.mac) {
+      res.status(403).json({ error: 'a device can only read its own viewport' });
+      return null;
+    }
+    return req.device;
+  }
+  const d = store.getDevices()[store.normalizeMac(param)];
+  if (!d) {
+    res.status(404).json({ error: 'no such device' });
+    return null;
+  }
+  return d;
+}
+
+// Battery %, panel temperature, Wi-Fi signal and firmware, as the device
+// reports them on every request.
+function noteViewportHealth(req, device) {
+  if (!req.device) return;
+  pairing.recordHealth(device.mac, {
+    battery: req.get('X-Battery'),
+    temperature: req.get('X-Temperature'),
+    rssi: req.get('X-RSSI'),
+    firmware: req.get('X-Firmware')
+  });
+}
+
+app.get('/api/viewports/:mac/bundle', auth.requireAdminOrDevice, (req, res) => {
+  const device = viewportFor(req, res);
+  if (!device) return;
+  noteViewportHealth(req, device);
+  const globals = store.getGlobals();
+  const layout = clients.layoutFor({ ...device, type: 'viewport' });
+  res.json({
+    name: device.name,
+    mac: device.mac,
+    layout,
+    // Every icon the screens can show, to fetch (and cache) up front from
+    // /api/icons/mdi/:name.
+    icons: dashboardState.iconsUsed(layout),
+    wifiNetworks: globals.wifiNetworks || [],
+    ntpServer: globals.ntpServer || 'pool.ntp.org',
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+  });
+});
+
+async function viewportScreens(layout) {
+  const inputs = await dashboardState.fetchInputs(layout, store.getGlobals());
+  const screens = dashboardState.buildScreens(layout, inputs);
+  return { screens, errors: inputs.errors, generatedAt: inputs.now.toISOString() };
+}
+
+function haError(res, e) {
+  res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
+}
+
+// ?screen=<id> -> that screen alone ({screen, etag, refreshInSec, data}),
+// with an ETag header and a bodyless 304 when it matches If-None-Match.
+// No `screen` -> every screen at once, each with its etag, for a device that
+// caches them all so page turns need no network. refreshInSec is when to
+// wake next: the refresh interval, or sooner when a screen will change on
+// its own (a meeting starting or ending).
+app.get('/api/viewports/:mac/state', auth.requireAdminOrDevice, async (req, res) => {
+  const device = viewportFor(req, res);
+  if (!device) return;
+  noteViewportHealth(req, device);
+  const layout = clients.layoutFor({ ...device, type: 'viewport' });
+  const interval = layout.refreshIntervalMin * 60;
+  const soonest = (list) => Math.min(interval, ...list.filter((n) => n != null && n > 0));
+  try {
+    const { screens, errors, generatedAt } = await viewportScreens(layout);
+    const wanted = req.query.screen ? String(req.query.screen) : '';
+    if (wanted) {
+      const screen = screens[wanted];
+      if (!screen) return res.status(404).json({ error: 'no such screen' });
+      const etag = dashboardState.screenEtag(screen);
+      res.set('ETag', etag);
+      res.set('Cache-Control', 'no-cache');
+      res.set('X-Refresh-In', String(soonest([screen.nextChangeInSec])));
+      if (req.get('If-None-Match') === etag) return res.status(304).end();
+      return res.json({ screen: wanted, etag, refreshInSec: soonest([screen.nextChangeInSec]), generatedAt, data: screen });
+    }
+    const out = {};
+    for (const sc of layout.screens.filter((x) => x.enabled)) {
+      out[sc.id] = { etag: dashboardState.screenEtag(screens[sc.id]), data: screens[sc.id] };
+    }
+    const next = layout.screens.filter((x) => x.enabled).map((x) => screens[x.id].nextChangeInSec);
+    res.json({ refreshInSec: soonest(next), generatedAt, errors, screens: out });
+  } catch (e) {
+    haError(res, e);
+  }
+});
+
+// The admin UI's live preview: the state an unsaved layout would produce.
+app.post('/api/viewports/:mac/preview', auth.requireAdminSession, async (req, res) => {
+  const device = viewportFor(req, res);
+  if (!device) return;
+  try {
+    const layout = dashboard.normalizeLayout(req.body && req.body.layout);
+    res.json(await viewportScreens(layout));
+  } catch (e) {
+    haError(res, e);
+  }
+});
+
+// The kitchen panel's own settings (its GET /api/config JSON) as a layout,
+// for the admin UI to review and save.
+app.post('/api/viewports/import', auth.requireAdminSession, (req, res) => {
+  const config = req.body && req.body.config;
+  if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config (the panel\'s /api/config JSON) is required' });
+  res.json({ layout: dashboard.fromKitchenPanel(config) });
+});
+
+// ?kind=meetingRoom -> a single meeting-room screen (a door sign);
+// otherwise the kitchen panel's screens.
+app.get('/api/viewports/defaults', auth.requireAdminSession, (req, res) => {
+  res.json({ layout: req.query.kind === 'meetingRoom' ? dashboard.meetingRoomLayout() : dashboard.defaultLayout() });
+});
+
 // --- Theme (compiled icon/font packs a paired device downloads) ---------
 
 app.get('/api/theme', auth.requireAdminOrDevice, (req, res) => {
   const theme = store.getTheme();
-  res.json({ iconsVersion: theme.iconsVersion, fontsVersion: theme.fontsVersion });
+  const out = { iconsVersion: theme.iconsVersion, fontsVersion: theme.fontsVersion };
+  // The admin UI also gets the slot overrides the current pack was built
+  // from, so the Theme page reopens with them instead of starting blank.
+  if (!req.device) out.iconOverrides = theme.iconOverrides || {};
+  res.json(out);
 });
 
 app.get('/api/theme/icons.pack', auth.requireAdminOrDevice, (req, res) => {
@@ -294,6 +526,7 @@ app.post('/api/assets/icons/compile', auth.requireAdminSession, async (req, res)
     store.saveIconsPack(buf);
     const theme = store.getTheme();
     theme.iconsVersion = version;
+    theme.iconOverrides = overrides;
     theme.updatedAt = new Date().toISOString();
     store.saveTheme(theme);
     res.json({ ok: true, version });
@@ -340,12 +573,59 @@ app.post('/api/devices', auth.requireAdminSession, (req, res) => {
   res.status(201).json(profile);
 });
 
+// A device gets the room with its own layout folded in (lib/clients.js's
+// composeDeviceConfig); the admin UI gets the room exactly as stored.
 app.get('/api/devices/:slug/config', auth.requireAdminOrDevice, (req, res) => {
   const profile = store.getProfile(req.params.slug);
   if (!profile) {
     return res.status(404).json({ error: 'no such profile' });
   }
-  res.json(profile);
+  res.json(req.device ? clients.composeDeviceConfig(profile, req.device) : profile);
+});
+
+// Everything a remote needs to know about its room, in one response: the
+// room config, the shared globals (HA connection, Wi-Fi networks) and the
+// theme pack versions — what /config + /api/globals + /api/theme return
+// separately. Express's ETag handling answers an unchanged bundle with a
+// bodyless 304 when the device sends If-None-Match, so a routine refresh
+// with nothing new costs a few hundred bytes.
+app.get('/api/devices/:slug/bundle', auth.requireAdminOrDevice, (req, res) => {
+  const profile = store.getProfile(req.params.slug);
+  if (!profile) {
+    return res.status(404).json({ error: 'no such profile' });
+  }
+  const theme = store.getTheme();
+  res.json({
+    config: req.device ? clients.composeDeviceConfig(profile, req.device) : profile,
+    globals: store.getGlobals(),
+    theme: {
+      iconsVersion: theme.iconsVersion || '',
+      fontsVersion: theme.fontsVersion || ''
+    }
+  });
+});
+
+// Live Home Assistant state for every entity this room's pages show,
+// fetched in parallel here and trimmed to what the firmware reads (see
+// lib/ha-state.js) — one request per device refresh instead of a dozen-plus.
+// 502 when HA can't be reached from the server at all: the device then
+// falls back to asking HA directly, entity by entity.
+app.get('/api/devices/:slug/state', auth.requireAdminOrDevice, async (req, res) => {
+  const profile = store.getProfile(req.params.slug);
+  if (!profile) {
+    return res.status(404).json({ error: 'no such profile' });
+  }
+  try {
+    const result = await haState.fetchRoomState(profile, store.getGlobals());
+    const total = Object.keys(result.states).length;
+    const failed = Object.keys(result.errors).length;
+    if (total === 0 && failed > 0) {
+      return res.status(502).json({ error: 'Home Assistant unreachable', errors: result.errors });
+    }
+    res.json(result);
+  } catch (e) {
+    res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
+  }
 });
 
 app.post('/api/devices/:slug/config', auth.requireAdminSession, (req, res) => {
@@ -419,8 +699,9 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// SPA fallback for the admin UI (any non-API GET) -> index.html
-app.get(/^(?!\/api\/).*/, (req, res) => {
+// SPA fallback for the admin UI (any non-API GET that isn't a missing
+// file, so a bad script path 404s instead of coming back as HTML).
+app.get(/^(?!\/api\/)(?!.*\.[a-z0-9]+$).*/i, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

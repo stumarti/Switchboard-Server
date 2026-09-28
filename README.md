@@ -16,19 +16,23 @@ This is step one. Get this running and set up at least one room *before* you fla
 
 <table>
 <tr>
-  <td><img src="screenshots/overview.png" width="360" alt="Room list"><br><sub>Room list</sub></td>
-  <td><img src="screenshots/room-profile.png" width="360" alt="Editing a room profile"><br><sub>Editing a room</sub></td>
+  <td><img src="screenshots/room.png" width="360" alt="Editing a room"><br><sub>Rooms — one card per function, entities searched from Home Assistant</sub></td>
+  <td><img src="screenshots/remote.png" width="360" alt="A remote's carousel"><br><sub>Remotes — drag-to-order carousel and Quick Access hub</sub></td>
 </tr>
 <tr>
-  <td colspan="2"><img src="screenshots/globals.png" width="360" alt="Globals page"><br><sub>Globals — shared WiFi & Home Assistant</sub></td>
+  <td><img src="screenshots/viewport.png" width="360" alt="A viewport's tiles"><br><sub>Viewports — a wall display's dashboard, with a live preview</sub></td>
+  <td><img src="screenshots/settings.png" width="360" alt="Settings"><br><sub>Settings — Home Assistant, Wi-Fi, clock, theme</sub></td>
 </tr>
 </table>
 
-- **Room list** (left sidebar) — every room you've set up, plus buttons to add a new one or jump to Globals.
-- **Room profile** — one room's whole setup: its Home Assistant connection (or "use the shared one"), the Standby weather/temperature entities, and cards for Lighting, Blinds, Media, Climate, TV and Xbox. The **Active screens** checkboxes at the top control which of these actually show up on that room's remote.
-- **Globals** — the household-wide WiFi network, a list of WiFi networks to show as join-QR codes on remotes, and the default Home Assistant connection every room uses unless it opts out.
-- **Devices** — every physical remote that has ever contacted this server: approve a pending one (assigning its default room in the same step), rename it, change its room later, or revoke/delete it. See "Pairing" below.
-- **Theme** — pick a font and re-skin any of the ~107 icons the firmware draws, compiled by this server and downloaded automatically by every paired remote. See "Theme" below.
+- **Rooms** — every room's entities, one card per function (status page, lighting, climate, blinds, music, TV, Xbox, and an optional room-specific Home Assistant connection). Entity fields search Home Assistant as you type and show each entity's live state.
+- **Remotes** — every handheld remote, in a list beside the menu. Pick one to choose its room and refresh interval, build its carousel (drag the page cards into order, switch pages on or off) and its Quick Access hub. New devices waiting for approval appear at the top; approve one as a remote or a viewport, with its name and room, in one step. See "Pairing" below.
+- **Viewports** — colour wall-mounted e-ink displays (the reTerminal E1002 kitchen panel, or a meeting-room sign). Pick one to build its carousel of screens:
+  - any mix of sections (weather, energy totals and graph, battery, status icons, alerts, calendar, heat pump, rooms, people, now playing, departures, alarm, doors and windows, motion, cameras), each fully configurable
+  - or a whole-screen meeting room status
+
+  A live preview draws each screen in the panel's six colours. See "Viewports" below.
+- **Settings** — the shared Home Assistant connection (with a connection test), the Wi-Fi remotes join plus guest networks shown as join-QR codes, the clock's NTP server, and the **Theme**: pick a font and re-skin any of the ~107 icons the firmware draws, compiled by this server and downloaded automatically by every paired remote. See "Theme" below.
 
 > **⚠️ Upgrading from an older version?** This release adds auth: the admin UI now requires a password, and remotes must pair before they can fetch config. See "Auth" and "Pairing" below, and the **Migrating from an unauthenticated version** section — existing already-flashed remotes need reflashing plus a one-time pairing approval.
 
@@ -69,21 +73,37 @@ If this repo is private, GHCR images are private by default too — `docker logi
 
 ## What it does
 
-- One JSON profile per room (lighting, blinds, media, climate, TV, Xbox, which carousel screens are on) — edit them from a browser instead of the on-device form.
-- A shared **Globals** page for WiFi and your Home Assistant connection, so you only enter those once.
+- **Rooms** — one profile per room (lighting, blinds, media, climate, TV, Xbox): which Home Assistant entities it has, one card per function. Entity fields search Home Assistant's own entity list (through the server, which holds the token), show each entity's live state, flag ids HA doesn't know, and fill in names, icons and supported light controls for you. With HA unreachable they fall back to plain text boxes.
+- **Remotes** and **Viewports** — every paired device, listed beside the menu. A remote gets its own carousel (page cards you drag into order and switch on/off, each showing what its room gives it), its own Quick Access hub and refresh interval; a viewport (a colour wall-mounted e-ink display) gets a board of tiles. New devices appear under Remotes to approve, as either kind.
+- **Settings** for the Home Assistant connection (with a connection test), device and guest Wi-Fi, the clock's NTP server, and the theme (icon and font packs, custom icons).
+
+The admin UI is plain ES modules — Preact + htm served from `node_modules`, Material Design Icons from `@mdi/svg` — so there is no build step.
 - Advertises itself on the LAN (`switchboard.local`) so remotes find it with zero configuration.
 
-Every Switchboard remote already talks to this: `Settings → Select room` calls `GET /api/devices`, then pulls that room's full config from `GET /api/devices/<slug>/config`. `GET /api/globals` supplies the shared WiFi/HA connection. Every one of these three now requires the remote to be paired (see "Pairing" below) — the admin UI's own browser session works too, so nothing changes for you in the UI itself.
+Every Switchboard remote already talks to this: `Settings → Select room` calls `GET /api/devices`, and each data refresh makes two requests — `GET /api/devices/<slug>/bundle` (its room's config, the shared WiFi/HA connection and theme versions; a bodyless `304` when nothing changed) and `GET /api/devices/<slug>/state` (the room's live Home Assistant state, which the server fetches from HA in parallel). Older firmware uses `GET /api/devices/<slug>/config` and `GET /api/globals` and talks to HA directly; those still work. For `/state` the server must be able to reach Home Assistant at the host in Settings → Home Assistant — if it can't, the remote falls back to asking HA itself. Every one of these three now requires the remote to be paired (see "Pairing" below) — the admin UI's own browser session works too, so nothing changes for you in the UI itself.
 
 | Method | Path | Purpose | Auth |
 |---|---|---|---|
 | GET | `/api/devices` | List rooms | session or device |
 | GET | `/api/devices/<slug>/config` | One room's full config | session or device |
+| GET | `/api/devices/<slug>/bundle` | Room config + globals + theme versions in one response (`304` when unchanged, via `If-None-Match`) | session or device |
+| GET | `/api/devices/<slug>/state` | Live Home Assistant state for every entity the room's pages show, fetched in parallel by the server and trimmed to what the remote reads (`502` if HA is unreachable from the server) | session or device |
 | POST | `/api/devices/<slug>/config` | Create/update a room | session |
 | POST | `/api/devices` | Create a room from just a name | session |
 | DELETE | `/api/devices/<slug>` | Remove a room | session |
 | GET | `/api/globals` | Shared WiFi + Home Assistant connection | session or device |
 | POST | `/api/globals` | Update Globals | session |
+| GET | `/api/clients` | Every paired device (remotes and viewports) with its effective layout | session |
+| PUT | `/api/clients/<mac>` | Set a device's `name`, `type`, `room` or `layout` (`layout: null` goes back to the defaults) | session |
+| GET | `/api/clients/schema` | The pages, tile types, sizes and refresh intervals the layout builders offer | session |
+| GET | `/api/ha/status` | Whether the server can reach Home Assistant with the saved connection | session |
+| GET | `/api/ha/entities` | Search HA's entities (`domains`, `q`, `deviceClass`, `limit`) for the admin UI's pickers | session |
+| POST | `/api/ha/lookup` | Look up specific entity ids (`{ids: [...]}`): each entity, or `null` if HA doesn't have it | session |
+| GET | `/api/viewports/<mac>/bundle` | A viewport's layout (carousel + screens) plus every icon it can show, Wi-Fi networks, NTP server and time zone (`me` = the calling device; `304` when unchanged) | session or device |
+| GET | `/api/viewports/<mac>/state` | Every screen's finished values, each with its own `etag`, and `refreshInSec`; `?screen=<id>` returns one screen with `ETag` and `X-Refresh-In` headers, and a bodyless `304` when unchanged | session or device |
+| POST | `/api/viewports/<mac>/preview` | The state an unsaved layout (`{layout}`) would produce — the admin UI's live preview | session |
+| POST | `/api/viewports/import` | A kitchen panel's own `/api/config` JSON (`{config}`) as a layout, to review and save | session |
+| GET | `/api/viewports/defaults` | The kitchen panel's default layout, or `?kind=meetingRoom` for a meeting-room sign | session |
 | GET | `/api/health` | Liveness, version, mDNS info | none |
 | GET | `/api/auth/status` | `{authenticated, setupRequired}` | none |
 | POST | `/api/auth/setup` | Set the admin password (first run only) | none |
@@ -95,7 +115,7 @@ Every Switchboard remote already talks to this: `Settings → Select room` calls
 | DELETE | `/api/pairing/<mac>` | Remove a device record | session |
 | GET | `/api/theme` | Current icon/font pack version stamps | session or device |
 | GET | `/api/theme/icons.pack` \| `/fonts.pack` | The compiled binary a device downloads | session or device |
-| GET | `/api/assets/icon-slots` | The ~107 named icon slots, for the Theme page | session |
+| GET | `/api/assets/icon-slots` | The ~107 named icon slots, for Settings → Theme | session |
 | GET | `/api/assets/icons/search?q=` | Search MDI icons (with previews) | session |
 | POST | `/api/assets/icons/compile` \| `/api/assets/fonts/compile` | Compile + publish a new theme | session |
 
@@ -105,9 +125,52 @@ A single shared admin password protects this UI — set it from the one-time set
 
 This stays plain HTTP by design (LAN-only, same trust model as everything else here) — don't port-forward it regardless.
 
+
+## Viewports
+
+A viewport is a colour wall-mounted e-ink display, for example the reTerminal E1002 kitchen panel or a sign beside a meeting room door. It pairs like a remote but registers as `"type": "viewport"`. The device draws the screens; everything behind them lives here, on the Viewports page.
+
+- **Carousel.** The screens the device's left/right buttons step through, in order. Between presses it stays on the current screen and just refreshes it. Optionally, every N minutes (30 by default) it can move to the next screen or go back to the first.
+- **Screens** come in two kinds:
+  - **Sections.** A layout (sidebar + main, two columns, or a single column) whose columns hold any sections, in any order. The same type can appear any number of times, each with its own settings. The types:
+
+    | Type | What it shows |
+    |---|---|
+    | Weather | now, "later" and the next days |
+    | Energy totals | predicted and generated solar, house use, grid import and export, as tiles or a sidebar list |
+    | Energy graph | two panels: actual solar against the prediction; below it, what the house used, stacked by source (solar, battery, grid), with export to the grid below the line |
+    | Home battery | charge, status and time to full, with a colour per status |
+    | Status icons | up to 12 icons, each following any entity or attribute; rules set the colour, a different icon, or hide it |
+    | Alert lines | "Front door, Garage +1 open", or "All clear" |
+    | Calendar | upcoming events from any calendars |
+    | Heat pump | mode, outside temperature, setpoint, COP |
+    | Room climate | each room against its target: red calling for heat, green at target, blue over |
+    | Room temperatures | temperature and humidity, grouped by floor |
+    | People | who is home, in green |
+    | Now playing | what each player is playing |
+    | Departures | next departures, red when imminent |
+    | Alarm | its state, since when, and optionally when it was last armed, disarmed or triggered |
+    | Doors & windows | open (red) or closed |
+    | Motion | last motion per sensor, blue when recent |
+    | Cameras | last motion per camera |
+
+  - **Meeting room.** A whole screen for one room's calendar. It shows *Available*, *Starting soon* or *In use* (plus *booked but empty* and *in use but not booked* if you add an occupancy sensor), "Busy until 14:30" or "Free until 16:00", the current meeting and the rest of today's. Titles can be hidden.
+
+The builder shows a live 800×480 preview of each screen, in the panel's six colours, from Home Assistant's current state and including unsaved changes. **Start from…** loads the kitchen panel's defaults or a meeting-room sign, or imports an existing panel's own settings.
+
+**The server does all the evaluating.** `GET /api/viewports/me/state` returns every screen's finished values: colour indices (0 white, 1 black, 2 red, 3 yellow, 4 green, 5 blue), which icon to draw, alert sentences, times, countdowns and graph buckets. So the device needs no Home Assistant template sensors and no rules of its own. Per refresh, the server makes one `GET /api/states` for every entity. It adds only what the screens need beyond that — weather forecasts, calendar events, and one history request per energy graph — all in parallel.
+
+**Energy graph data.** A series can be a power sensor (averaged per bar) or an energy meter (differenced per bar). Each bar of use is split by source: grid import first (it's metered), then metered battery discharge, then solar up to what it produced. Anything left is counted as battery, so a house with a battery but no battery sensor still adds up. The forecast is read from an entity attribute holding an hourly or half-hourly list, as Solcast (`detailedForecast`) and Open-Meteo Solar Forecast provide.
+
+**Refreshes.** Each screen carries its own ETag, and `?screen=<id>` answers a bodyless `304` when that screen is unchanged, so the device can skip its 15–20 s panel refresh. `refreshInSec` (and the `X-Refresh-In` header) says when to wake next: the refresh interval, or sooner when a meeting starts or ends. The bundle lists every icon the screens can show, so the device can fetch them once from `/api/icons/mdi/<name>` and cache them.
+
+**Health.** The device can send `X-Battery`, `X-Temperature`, `X-RSSI` and `X-Firmware` headers; the Viewports page shows them.
+
+The kitchen panel's firmware doesn't use these endpoints yet. Until it does, it keeps working as before.
+
 ## Pairing
 
-A physical remote pairs with this server once: on first boot it registers itself by MAC address and shows up under **Devices** as `pending`. Approve it there (optionally assigning its room in the same step — that's also the MAC → default room mapping) and the server hands it a long-lived token, which it stores and sends on every request from then on. A revoked or deleted device's old token stops working immediately.
+A physical remote pairs with this server once: on first boot it registers itself by MAC address and shows up under **Remotes** as waiting for approval. Approve it there (optionally assigning its room in the same step — that's also the MAC → default room mapping) and the server hands it a long-lived token, which it stores and sends on every request from then on. A revoked or deleted device's old token stops working immediately.
 
 If a paired device ever loses its stored token (e.g. a factory reset), it re-registers with the same MAC and gets a fresh token automatically — no need to re-approve it, since the trust decision was already made the first time.
 
@@ -146,7 +209,7 @@ Plain HTTP, LAN-only by design — same trust model as the on-device config form
 
 1. Update this server first and set an admin password from its one-time setup screen (or `ADMIN_PASSWORD`).
 2. Reflash every physical remote with a firmware version that supports pairing (see the [Switchboard README](https://github.com/stumarti/Switchboard)) — an older firmware has no token to send and will get `401`s fetching its config.
-3. Each remote shows up under **Devices** as `pending` on its first boot after reflashing; approve it (assigning its room) from there.
+3. Each remote shows up under **Remotes** as waiting for approval on its first boot after reflashing; approve it (assigning its room) from there.
 
 Existing room profiles, Globals, and any already-compiled theme carry over unchanged — this only affects how a client authenticates, not what's stored.
 
