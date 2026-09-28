@@ -671,7 +671,7 @@ const THRESHOLDS = [
 function CarouselCard({ layout, onChange }) {
   const c = layout.carousel;
   const set = (k, v) => onChange({ ...layout, carousel: { ...c, [k]: v } });
-  return html`<${Card} icon="rotate-right" title="Carousel" subtitle="What the display does between button presses.">
+  return html`<${Card} icon="rotate-right" title="Carousel" subtitle="What the display does between button presses, and how often it refreshes.">
     <div class="row" style="align-items:flex-end">
       <${Field} label="Between presses">
         <${Select} value=${c.mode} onChange=${(v) => set('mode', v)} options=${[
@@ -681,6 +681,10 @@ function CarouselCard({ layout, onChange }) {
         ]} />
       <//>
       ${c.mode !== 'stay' && html`<div style="width:150px"><${Field} label="Every (minutes)"><${NumberInput} min="5" max="240" value=${c.everyMin} onChange=${(v) => set('everyMin', v)} /><//></div>`}
+      <div style="width:200px"><${Field} label="Refresh data every">
+        <${Select} value=${String(layout.refreshIntervalMin)} onChange=${(v) => onChange({ ...layout, refreshIntervalMin: Number(v) })}
+          options=${[5, 10, 15, 30, 60].map((n) => ({ value: String(n), label: n === 60 ? 'Hour' : `${n} minutes` }))} />
+      <//></div>
     </div>
     <p class="hint">${c.mode === 'stay'
       ? 'The screen only changes when someone presses a button.'
@@ -747,7 +751,7 @@ function SettingsCard({ layout, onChange }) {
 
 // The live preview: the server evaluates the (unsaved) layout against Home
 // Assistant, debounced while editing.
-function usePreview(mac, layout) {
+function usePreview(layout) {
   const [state, setState] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -757,7 +761,7 @@ function usePreview(mac, layout) {
     const n = ++seq.current;
     setLoading(true);
     const t = setTimeout(() => {
-      api(`/api/viewports/${encodeURIComponent(mac)}/preview`, { method: 'POST', body: { layout } })
+      api('/api/dashboards/preview', { method: 'POST', body: { layout } })
         .then((s) => {
           if (n !== seq.current) return;
           setState(s);
@@ -767,15 +771,15 @@ function usePreview(mac, layout) {
         .finally(() => n === seq.current && setLoading(false));
     }, 600);
     return () => clearTimeout(t);
-  }, [mac, key]);
+  }, [key]);
   return { state, error, loading };
 }
 
-export function DashboardBuilder({ mac, layout, onChange, rooms, useDragOrder }) {
+export function DashboardBuilder({ layout, onChange, rooms, useDragOrder }) {
   const [selected, setSelected] = useState(layout.screens[0] && layout.screens[0].id);
   const [openId, setOpenId] = useState(null);
   const [presets, setPresets] = useState(null);
-  const preview = usePreview(mac, layout);
+  const preview = usePreview(layout);
   useEffect(() => {
     api('/api/clients/schema').then((s) => setPresets(s.dashboard && s.dashboard.iconPresets)).catch(() => {});
   }, []);

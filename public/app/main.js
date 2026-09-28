@@ -4,6 +4,7 @@
 
 import { html, render, useState, useEffect, useCallback, api, setUnauthorizedHandler, Icon, Button } from './lib.js';
 import { RoomsPage } from './rooms.js';
+import { DashboardPage } from './dashboards.js';
 import { ClientList, ClientPage } from './clients.js';
 import { SettingsPage } from './settings.js';
 
@@ -32,18 +33,21 @@ function useRoute() {
 function useAppData(signedIn) {
   const [rooms, setRooms] = useState(null);
   const [clients, setClients] = useState(null);
+  const [dashboards, setDashboards] = useState(null);
   const reloadRooms = useCallback(() => api('/api/devices').then(setRooms).catch(() => {}), []);
   const reloadClients = useCallback(() => api('/api/clients').then(setClients).catch(() => {}), []);
+  const reloadDashboards = useCallback(() => api('/api/dashboards').then(setDashboards).catch(() => {}), []);
   useEffect(() => {
     if (!signedIn) return undefined;
     reloadRooms();
     reloadClients();
+    reloadDashboards();
     const t = setInterval(() => {
       if (!document.hidden) reloadClients();
     }, 5000);
     return () => clearInterval(t);
   }, [signedIn]);
-  return { rooms, clients, reloadRooms, reloadClients, setClients };
+  return { rooms, clients, dashboards, reloadRooms, reloadClients, reloadDashboards, setClients };
 }
 
 // --- Sign in ------------------------------------------------------------------
@@ -138,23 +142,19 @@ function App() {
 
   let main;
   if (section === 'rooms') {
-    main = html`<${RoomsPage} slug=${id} rooms=${data.rooms} clients=${data.clients} reloadRooms=${data.reloadRooms} />`;
+    main = html`<${RoomsPage} slug=${id} ...${data} />`;
+  } else if (section === 'dashboards') {
+    main = html`<${DashboardPage} key=${id} slug=${id} ...${data} />`;
   } else if (clientType) {
-    main = html`<${ClientPage}
-      type=${clientType}
-      mac=${id}
-      clients=${data.clients}
-      rooms=${data.rooms}
-      reloadClients=${data.reloadClients}
-    />`;
+    main = html`<${ClientPage} type=${clientType} mac=${id} ...${data} />`;
   } else {
     main = html`<${SettingsPage} tab=${id} onSignOut=${checkAuth} />`;
   }
 
   return html`<div class="shell">
-    <${Rail} section=${section} pendingCount=${pendingCount} />
+    <${Rail} section=${section === 'dashboards' ? 'rooms' : section} pendingCount=${pendingCount} />
     ${clientType
-      ? html`<${ClientList} type=${clientType} selected=${id} clients=${data.clients} rooms=${data.rooms} />`
+      ? html`<${ClientList} type=${clientType} selected=${id} clients=${data.clients} rooms=${data.rooms} dashboards=${data.dashboards} />`
       : html`<div></div>`}
     <main class="main">${main}</main>
   </div>`;
