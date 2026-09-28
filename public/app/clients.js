@@ -295,17 +295,23 @@ export function CarouselBuilder({ carousel, onChange, room, roomSlug, selected, 
 
 // --- Remote: Quick Access hub ------------------------------------------------------------
 
+// Every page a hub button can open, in carousel order: the ids the remote
+// firmware's hubTargetPage() knows (app/quick_access.h).
 const HUB_TARGETS = [
-  { value: 'media', label: 'Music', icon: 'music-circle-outline' },
-  { value: 'climate', label: 'Climate', icon: 'thermostat' },
+  { value: 'status', label: 'Status', icon: 'home-outline' },
   { value: 'lighting', label: 'Lighting', icon: 'lightbulb-group-outline' },
+  { value: 'blinds', label: 'Blinds', icon: 'blinds' },
+  { value: 'media', label: 'Music', icon: 'music-circle-outline' },
   { value: 'tv', label: 'TV', icon: 'television' },
   { value: 'xbox', label: 'Xbox', icon: 'microsoft-xbox' },
-  { value: 'receiver', label: 'Receiver', icon: 'satellite-variant' },
   { value: 'guestwifi', label: 'Guest Wi-Fi', icon: 'wifi-star' },
-  { value: 'vacuum', label: 'Vacuum', icon: 'robot-vacuum' }
+  { value: 'climate', label: 'Climate', icon: 'thermostat' },
+  { value: 'receiver', label: 'Receiver', icon: 'satellite-variant' },
+  { value: 'settings', label: 'Settings', icon: 'cog-outline' }
 ];
-const TOGGLE_DOMAINS = ['light', 'switch', 'fan', 'input_boolean', 'cover', 'media_player', 'automation', 'vacuum'];
+// What a Toggle quick action can switch: the remote knows each domain's
+// on/off services and states (ha_client.h's hubToggleService / hubStateActive).
+const TOGGLE_DOMAINS = ['light', 'switch', 'fan', 'input_boolean', 'cover', 'valve', 'lock', 'media_player', 'automation', 'vacuum', 'humidifier', 'siren'];
 
 export function HubBuilder({ hub, onChange }) {
   const h = hub || { quickActionsEnabled: true, items: [] };
@@ -322,7 +328,7 @@ export function HubBuilder({ hub, onChange }) {
         const a = it.action || { type: 'none' };
         const targets = HUB_TARGETS.some((t) => t.value === it.target) || !it.target
           ? HUB_TARGETS
-          : [...HUB_TARGETS, { value: it.target, label: it.target }];
+          : [...HUB_TARGETS, { value: it.target, label: `${it.target} (no such page: opens Settings)` }];
         return html`<div class="row">
             <${IconPicker} value=${it.icon} onChange=${(icon) => upd({ ...it, icon })} />
             <${Field} label="Label"><${TextInput} value=${it.name} onInput=${(v) => upd({ ...it, name: v })} /><//>
