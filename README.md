@@ -16,19 +16,19 @@ This is step one. Get this running and set up at least one room *before* you fla
 
 <table>
 <tr>
-  <td><img src="screenshots/overview.png" width="360" alt="Room list"><br><sub>Room list</sub></td>
-  <td><img src="screenshots/room-profile.png" width="360" alt="Editing a room profile"><br><sub>Editing a room</sub></td>
+  <td><img src="screenshots/room.png" width="360" alt="Editing a room"><br><sub>Rooms — one card per function, entities searched from Home Assistant</sub></td>
+  <td><img src="screenshots/remote.png" width="360" alt="A remote's carousel"><br><sub>Remotes — drag-to-order carousel and Quick Access hub</sub></td>
 </tr>
 <tr>
-  <td colspan="2"><img src="screenshots/globals.png" width="360" alt="Globals page"><br><sub>Globals — shared WiFi & Home Assistant</sub></td>
+  <td><img src="screenshots/viewport.png" width="360" alt="A viewport's tiles"><br><sub>Viewports — a board of tiles for a wall display</sub></td>
+  <td><img src="screenshots/settings.png" width="360" alt="Settings"><br><sub>Settings — Home Assistant, Wi-Fi, clock, theme</sub></td>
 </tr>
 </table>
 
-- **Room list** (left sidebar) — every room you've set up, plus buttons to add a new one or jump to Globals.
-- **Room profile** — one room's whole setup: its Home Assistant connection (or "use the shared one"), the Standby weather/temperature entities, and cards for Lighting, Blinds, Media, Climate, TV and Xbox. The **Active screens** checkboxes at the top control which of these actually show up on that room's remote.
-- **Globals** — the household-wide WiFi network, a list of WiFi networks to show as join-QR codes on remotes, and the default Home Assistant connection every room uses unless it opts out.
-- **Devices** — every physical remote that has ever contacted this server: approve a pending one (assigning its default room in the same step), rename it, change its room later, or revoke/delete it. See "Pairing" below.
-- **Theme** — pick a font and re-skin any of the ~107 icons the firmware draws, compiled by this server and downloaded automatically by every paired remote. See "Theme" below.
+- **Rooms** — every room's entities, one card per function (status page, lighting, climate, blinds, music, TV, Xbox, and an optional room-specific Home Assistant connection). Entity fields search Home Assistant as you type and show each entity's live state.
+- **Remotes** — every handheld remote, in a list beside the menu. Pick one to choose its room and refresh interval, build its carousel (drag the page cards into order, switch pages on or off) and its Quick Access hub. New devices waiting for approval appear at the top; approve one as a remote or a viewport, with its name and room, in one step. See "Pairing" below.
+- **Viewports** — colour wall-mounted e-ink displays: pick one to lay out its tiles (clock, weather, forecast, climate, lights, blinds, now playing, sensors) in small, wide or large sizes.
+- **Settings** — the shared Home Assistant connection (with a connection test), the Wi-Fi remotes join plus guest networks shown as join-QR codes, the clock's NTP server, and the **Theme**: pick a font and re-skin any of the ~107 icons the firmware draws, compiled by this server and downloaded automatically by every paired remote. See "Theme" below.
 
 > **⚠️ Upgrading from an older version?** This release adds auth: the admin UI now requires a password, and remotes must pair before they can fetch config. See "Auth" and "Pairing" below, and the **Migrating from an unauthenticated version** section — existing already-flashed remotes need reflashing plus a one-time pairing approval.
 
@@ -100,7 +100,7 @@ Every Switchboard remote already talks to this: `Settings → Select room` calls
 | DELETE | `/api/pairing/<mac>` | Remove a device record | session |
 | GET | `/api/theme` | Current icon/font pack version stamps | session or device |
 | GET | `/api/theme/icons.pack` \| `/fonts.pack` | The compiled binary a device downloads | session or device |
-| GET | `/api/assets/icon-slots` | The ~107 named icon slots, for the Theme page | session |
+| GET | `/api/assets/icon-slots` | The ~107 named icon slots, for Settings → Theme | session |
 | GET | `/api/assets/icons/search?q=` | Search MDI icons (with previews) | session |
 | POST | `/api/assets/icons/compile` \| `/api/assets/fonts/compile` | Compile + publish a new theme | session |
 
@@ -112,7 +112,7 @@ This stays plain HTTP by design (LAN-only, same trust model as everything else h
 
 ## Pairing
 
-A physical remote pairs with this server once: on first boot it registers itself by MAC address and shows up under **Devices** as `pending`. Approve it there (optionally assigning its room in the same step — that's also the MAC → default room mapping) and the server hands it a long-lived token, which it stores and sends on every request from then on. A revoked or deleted device's old token stops working immediately.
+A physical remote pairs with this server once: on first boot it registers itself by MAC address and shows up under **Remotes** as waiting for approval. Approve it there (optionally assigning its room in the same step — that's also the MAC → default room mapping) and the server hands it a long-lived token, which it stores and sends on every request from then on. A revoked or deleted device's old token stops working immediately.
 
 If a paired device ever loses its stored token (e.g. a factory reset), it re-registers with the same MAC and gets a fresh token automatically — no need to re-approve it, since the trust decision was already made the first time.
 
@@ -151,7 +151,7 @@ Plain HTTP, LAN-only by design — same trust model as the on-device config form
 
 1. Update this server first and set an admin password from its one-time setup screen (or `ADMIN_PASSWORD`).
 2. Reflash every physical remote with a firmware version that supports pairing (see the [Switchboard README](https://github.com/stumarti/Switchboard)) — an older firmware has no token to send and will get `401`s fetching its config.
-3. Each remote shows up under **Devices** as `pending` on its first boot after reflashing; approve it (assigning its room) from there.
+3. Each remote shows up under **Remotes** as waiting for approval on its first boot after reflashing; approve it (assigning its room) from there.
 
 Existing room profiles, Globals, and any already-compiled theme carry over unchanged — this only affects how a client authenticates, not what's stored.
 
