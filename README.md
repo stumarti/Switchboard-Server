@@ -137,8 +137,8 @@ A viewport is a colour wall-mounted e-ink display, for example the reTerminal E1
     | Type | What it shows |
     |---|---|
     | Weather | now, "later" and the next days |
-    | Energy totals | today's solar, use, export and import |
-    | Energy graph | solar production and consumption against the solar forecast, with grid import and export below the axis |
+    | Energy totals | predicted and generated solar, house use, grid import and export, as tiles or a sidebar list |
+    | Energy graph | two panels: actual solar against the prediction; below it, what the house used, stacked by source (solar, battery, grid), with export to the grid below the line |
     | Home battery | charge, status and time to full, with a colour per status |
     | Status icons | up to 12 icons, each following any entity or attribute; rules set the colour, a different icon, or hide it |
     | Alert lines | "Front door, Garage +1 open", or "All clear" |
@@ -160,7 +160,7 @@ The builder shows a live 800×480 preview of each screen, in the panel's six col
 
 **The server does all the evaluating.** `GET /api/viewports/me/state` returns every screen's finished values: colour indices (0 white, 1 black, 2 red, 3 yellow, 4 green, 5 blue), which icon to draw, alert sentences, times, countdowns and graph buckets. So the device needs no Home Assistant template sensors and no rules of its own. Per refresh, the server makes one `GET /api/states` for every entity. It adds only what the screens need beyond that — weather forecasts, calendar events, and one history request per energy graph — all in parallel.
 
-**Energy graph data.** A series can be a power sensor (averaged per bar) or an energy meter (differenced per bar). The forecast is read from an entity attribute holding an hourly or half-hourly list, as Solcast (`detailedForecast`) and Open-Meteo Solar Forecast provide.
+**Energy graph data.** A series can be a power sensor (averaged per bar) or an energy meter (differenced per bar). Each bar of use is split by source: grid import first (it's metered), then metered battery discharge, then solar up to what it produced. Anything left is counted as battery, so a house with a battery but no battery sensor still adds up. The forecast is read from an entity attribute holding an hourly or half-hourly list, as Solcast (`detailedForecast`) and Open-Meteo Solar Forecast provide.
 
 **Refreshes.** Each screen carries its own ETag, and `?screen=<id>` answers a bodyless `304` when that screen is unchanged, so the device can skip its 15–20 s panel refresh. `refreshInSec` (and the `X-Refresh-In` header) says when to wake next: the refresh interval, or sooner when a meeting starts or ends. The bundle lists every icon the screens can show, so the device can fetch them once from `/api/icons/mdi/<name>` and cache them.
 
