@@ -538,6 +538,12 @@ textarea { min-height: 70px; font-family: ui-monospace, monospace; font-size: 12
   border-radius: 8px;
 }
 
+/* --- Section headings (Rooms page) ------------------------------------------------ */
+
+.section-heading { display: flex; align-items: center; gap: 10px; margin: 28px 0 12px; flex-wrap: wrap; color: var(--text); }
+.section-heading .icon { color: var(--accent); }
+.section-heading .hint { flex: 1 1 260px; }
+
 /* --- Viewport builder --------------------------------------------------------- */
 
 .swatches { display: flex; gap: 4px; flex-wrap: nowrap; }

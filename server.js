@@ -233,7 +233,9 @@ app.get('/api/clients', auth.requireAdminSession, (req, res) => {
     pairing.list().map((d) => ({
       ...d,
       type: clients.normalizeType(d.type),
-      layout: clients.layoutFor(d, d.assignedSlug ? store.getProfile(d.assignedSlug) : null),
+      layout: clients.normalizeType(d.type) === 'viewport'
+        ? viewportLayout(d)
+        : clients.layoutFor(d, d.assignedSlug ? store.getProfile(d.assignedSlug) : null),
       layoutCustomized: Boolean(d.layout)
     }))
   );
@@ -272,6 +274,13 @@ app.get('/api/clients/schema', auth.requireAdminSession, (req, res) => {
 // state — every screen's finished values, each with its own ETag, so the
 // device can skip the panel refresh for a screen that hasn't changed.
 
+// A viewport device's layout: its assigned dashboard's (the UI is defined
+// on the server, the hardware just draws it).
+function viewportLayout(device) {
+  const dash = device.dashboard ? store.getDashboard(device.dashboard) : null;
+  return clients.layoutFor({ ...device, type: 'viewport' }, null, dash && dash.layout);
+}
+
 // The viewport a request is about, or null after answering the error.
 function viewportFor(req, res) {
   const param = String(req.params.mac || '');
@@ -307,8 +316,13 @@ app.get('/api/viewports/:mac/bundle', auth.requireAdminOrDevice, (req, res) => {
   if (!device) return;
   noteViewportHealth(req, device);
   const globals = store.getGlobals();
-  const layout = clients.layoutFor({ ...device, type: 'viewport' });
+  const layout = viewportLayout(device);
+  const dash = device.dashboard ? store.getDashboard(device.dashboard) : null;
   res.json({
+    // false until a dashboard is assigned: the device shows a "not set up"
+    // screen (the placeholder layout's title says so).
+    assigned: Boolean(dash),
+    dashboard: dash ? { slug: dash.slug, name: dash.name } : null,
     name: device.name,
     mac: device.mac,
     layout,
@@ -341,7 +355,7 @@ app.get('/api/viewports/:mac/state', auth.requireAdminOrDevice, async (req, res)
   const device = viewportFor(req, res);
   if (!device) return;
   noteViewportHealth(req, device);
-  const layout = clients.layoutFor({ ...device, type: 'viewport' });
+  const layout = viewportLayout(device);
   const interval = layout.refreshIntervalMin * 60;
   const soonest = (list) => Math.min(interval, ...list.filter((n) => n != null && n > 0));
   try {
@@ -392,6 +406,89 @@ app.post('/api/viewports/import', auth.requireAdminSession, (req, res) => {
 // otherwise the kitchen panel's screens.
 app.get('/api/viewports/defaults', auth.requireAdminSession, (req, res) => {
   res.json({ layout: req.query.kind === 'meetingRoom' ? dashboard.meetingRoomLayout() : dashboard.defaultLayout() });
+});
+
+// --- Dashboards (viewport UIs, defined before or without hardware) ------------
+
+function dashboardSummary(d) {
+  const layout = dashboard.normalizeLayout(d.layout);
+  const devices = Object.values(store.getDevices()).filter((x) => x.dashboard === d.slug);
+  return {
+    slug: d.slug,
+    name: d.name,
+    updatedAt: d.updatedAt || null,
+    screens: layout.screens.map((sc) => ({ title: sc.title, kind: sc.kind, enabled: sc.enabled })),
+    devices: devices.map((x) => ({ mac: x.mac, name: x.name }))
+  };
+}
+
+app.get('/api/dashboards', auth.requireAdminSession, (req, res) => {
+  res.json(store.listDashboards().map(dashboardSummary));
+});
+
+// {name, template: kitchen|meetingRoom|blank} or {name, copyFrom: slug}.
+app.post('/api/dashboards', auth.requireAdminSession, (req, res) => {
+  const b = req.body || {};
+  const name = String(b.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  let layout;
+  if (b.copyFrom) {
+    const src = store.getDashboard(String(b.copyFrom));
+    if (!src) return res.status(404).json({ error: 'no such dashboard to copy' });
+    layout = dashboard.normalizeLayout(src.layout);
+  } else if (b.layout) {
+    layout = dashboard.normalizeLayout(b.layout);
+  } else {
+    layout = b.template === 'meetingRoom' ? dashboard.meetingRoomLayout() : b.template === 'blank' ? dashboard.blankLayout() : dashboard.defaultLayout();
+  }
+  const slug = store.newDashboardSlug(name);
+  const now = new Date().toISOString();
+  store.saveDashboard(slug, { name, createdAt: now, updatedAt: now, layout });
+  res.status(201).json(store.getDashboard(slug));
+});
+
+app.get('/api/dashboards/:slug', auth.requireAdminSession, (req, res) => {
+  const d = store.getDashboard(req.params.slug);
+  if (!d) return res.status(404).json({ error: 'no such dashboard' });
+  res.json({ ...d, layout: dashboard.normalizeLayout(d.layout), devices: dashboardSummary(d).devices });
+});
+
+app.put('/api/dashboards/:slug', auth.requireAdminSession, (req, res) => {
+  const d = store.getDashboard(req.params.slug);
+  if (!d) return res.status(404).json({ error: 'no such dashboard' });
+  const b = req.body || {};
+  const next = {
+    ...d,
+    name: typeof b.name === 'string' && b.name.trim() ? b.name.trim() : d.name,
+    layout: b.layout !== undefined ? dashboard.normalizeLayout(b.layout) : dashboard.normalizeLayout(d.layout),
+    updatedAt: new Date().toISOString()
+  };
+  store.saveDashboard(d.slug, next);
+  res.json(next);
+});
+
+// Displays assigned to a deleted dashboard go back to "not set up".
+app.delete('/api/dashboards/:slug', auth.requireAdminSession, (req, res) => {
+  if (!store.deleteDashboard(req.params.slug)) return res.status(404).json({ error: 'no such dashboard' });
+  const devices = store.getDevices();
+  let changed = false;
+  for (const d of Object.values(devices)) {
+    if (d.dashboard === req.params.slug) {
+      d.dashboard = '';
+      changed = true;
+    }
+  }
+  if (changed) store.saveDevices(devices);
+  res.status(204).end();
+});
+
+// The admin UI's live preview of an unsaved dashboard layout.
+app.post('/api/dashboards/preview', auth.requireAdminSession, async (req, res) => {
+  try {
+    res.json(await viewportScreens(dashboard.normalizeLayout(req.body && req.body.layout)));
+  } catch (e) {
+    haError(res, e);
+  }
 });
 
 // --- Theme (compiled icon/font packs a paired device downloads) ---------
@@ -706,6 +803,27 @@ app.get(/^(?!\/api\/)(?!.*\.[a-z0-9]+$).*/i, (req, res) => {
 });
 
 // --- Startup -------------------------------------------------------------
+
+// Viewports saved before dashboards were their own thing carry their layout
+// on the device record: move each into a dashboard of its own (named after
+// the display) and assign it, once.
+function migrateViewportLayouts() {
+  const devices = store.getDevices();
+  let changed = false;
+  for (const d of Object.values(devices)) {
+    if (clients.normalizeType(d.type) !== 'viewport' || d.dashboard || !d.layout || Array.isArray(d.layout.tiles)) continue;
+    const name = d.name && d.name !== d.mac ? d.name : 'Viewport';
+    const slug = store.newDashboardSlug(name);
+    const now = new Date().toISOString();
+    store.saveDashboard(slug, { name, createdAt: now, updatedAt: now, layout: dashboard.normalizeLayout(d.layout) });
+    d.dashboard = slug;
+    delete d.layout;
+    changed = true;
+    console.log(`[dashboards] moved ${d.mac}'s layout into dashboard "${slug}"`);
+  }
+  if (changed) store.saveDevices(devices);
+}
+migrateViewportLayouts();
 
 app.listen(PORT, HOST, () => {
   console.log(`homeremote-server listening on http://${HOST}:${PORT}`);

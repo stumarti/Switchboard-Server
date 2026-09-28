@@ -10,7 +10,6 @@ import {
 } from './lib.js';
 import { EntityPicker, IconPicker } from './pickers.js';
 import { ItemList } from './rooms.js';
-import { DashboardBuilder } from './viewport.js';
 
 const TYPE_META = {
   remote: { section: 'remotes', icon: 'remote', title: 'Remotes', one: 'remote' },
@@ -27,6 +26,11 @@ function onlineKind(c) {
   return age < 90 ? 'ok' : '';
 }
 
+function dashboardName(dashboards, slug) {
+  const d = (dashboards || []).find((x) => x.slug === slug);
+  return d ? d.name : '';
+}
+
 function roomName(rooms, slug) {
   const r = (rooms || []).find((x) => x.slug === slug);
   return r ? r.name : slug ? slug : '';
@@ -34,7 +38,7 @@ function roomName(rooms, slug) {
 
 // --- List column --------------------------------------------------------------------
 
-export function ClientList({ type, selected, clients, rooms }) {
+export function ClientList({ type, selected, clients, rooms, dashboards }) {
   const meta = TYPE_META[type];
   const all = clients || [];
   // A device still waiting for approval is shown under Remotes whatever it
@@ -62,7 +66,7 @@ export function ClientList({ type, selected, clients, rooms }) {
               <div class="li-icon"><${Icon} name=${c.status === 'pending' ? 'help-circle-outline' : TYPE_META[c.type].icon} size=${20} /></div>
               <div class="li-text">
                 <div class="li-title">${c.name}</div>
-                <div class="li-sub">${c.status === 'pending' ? c.mac : roomName(rooms, c.assignedSlug) || 'No room'} · ${timeAgo(c.lastSeenAt)}</div>
+                <div class="li-sub">${c.status === 'pending' ? c.mac : c.type === 'viewport' ? dashboardName(dashboards, c.dashboard) || 'No layout' : roomName(rooms, c.assignedSlug) || 'No room'} · ${timeAgo(c.lastSeenAt)}</div>
               </div>
               <span class=${`dot dot-${onlineKind(c)}`}></span>
             </a>`
@@ -74,15 +78,19 @@ export function ClientList({ type, selected, clients, rooms }) {
 
 // --- Approval ------------------------------------------------------------------------
 
-function ApproveCard({ client, rooms, reloadClients }) {
+function ApproveCard({ client, rooms, dashboards, reloadClients }) {
   const [name, setName] = useState(client.name === client.mac ? '' : client.name);
   const [type, setType] = useState(client.type || 'remote');
   const [room, setRoom] = useState((rooms && rooms[0] && rooms[0].slug) || '');
+  const [dash, setDash] = useState((dashboards && dashboards[0] && dashboards[0].slug) || '');
   const [msg, flash] = useFlash();
   const approve = async () => {
     try {
-      await api(`/api/pairing/${encodeURIComponent(client.mac)}/approve`, { method: 'POST', body: { slug: room } });
-      await api(`/api/clients/${encodeURIComponent(client.mac)}`, { method: 'PUT', body: { name: name || client.mac, type } });
+      await api(`/api/pairing/${encodeURIComponent(client.mac)}/approve`, { method: 'POST', body: { slug: type === 'remote' ? room : '' } });
+      await api(`/api/clients/${encodeURIComponent(client.mac)}`, {
+        method: 'PUT',
+        body: { name: name || client.mac, type, ...(type === 'viewport' ? { dashboard: dash } : {}) }
+      });
       await reloadClients();
       go(TYPE_META[type].section, client.mac);
     } catch (e) {
@@ -115,9 +123,13 @@ function ApproveCard({ client, rooms, reloadClients }) {
             )}
           </div>
         <//>
-        <${Field} label="Room">
-          <${Select} value=${room} onChange=${setRoom} options=${[{ value: '', label: 'No room yet' }, ...(rooms || []).map((r) => ({ value: r.slug, label: r.name }))]} />
-        <//>
+        ${type === 'remote'
+          ? html`<${Field} label="Room" hint="The remote shows this room's UI.">
+              <${Select} value=${room} onChange=${setRoom} options=${[{ value: '', label: 'No room yet' }, ...(rooms || []).map((r) => ({ value: r.slug, label: r.name }))]} />
+            <//>`
+          : html`<${Field} label="Layout" hint="The display shows this viewport layout. Build layouts on the Layouts page, before or after pairing.">
+              <${Select} value=${dash} onChange=${setDash} options=${[{ value: '', label: 'None yet' }, ...(dashboards || []).map((d) => ({ value: d.slug, label: d.name }))]} />
+            <//>`}
         <div class="row">
           <${Button} kind="primary" icon="check" onClick=${approve}>Approve<//>
           <${Button} kind="danger" icon="close" onClick=${reject}>Reject<//>
@@ -189,7 +201,7 @@ function pageSummary(page, room) {
 }
 
 // Drag-and-drop ordering shared by the carousel and the tile board.
-function useDragOrder(list, onChange) {
+export function useDragOrder(list, onChange) {
   const [drag, setDrag] = useState(null); // index being dragged
   const [over, setOver] = useState(null); // {i, after}
   const props = (i) => ({
@@ -223,7 +235,7 @@ function useDragOrder(list, onChange) {
   return { props, cls };
 }
 
-function CarouselBuilder({ carousel, onChange, room, roomSlug }) {
+export function CarouselBuilder({ carousel, onChange, room, roomSlug }) {
   const { props, cls } = useDragOrder(carousel, onChange);
   let num = 0;
   return html`<${Card} icon="view-carousel-outline" title="Carousel" subtitle="The pages this remote swipes through, left to right. Drag to reorder; switch pages off to skip them.">
@@ -245,7 +257,7 @@ function CarouselBuilder({ carousel, onChange, room, roomSlug }) {
           <div class="pc-title">${meta.label}</div>
           <div class="pc-sub">
             ${!s.ok && c.enabled
-              ? html`<a href=${`#/rooms/${encodeURIComponent(roomSlug)}`} class="badge badge-warn"><${Icon} name="alert-outline" size=${13} />${s.text}</a>`
+              ? html`<a href=${`#/remote-layouts/${encodeURIComponent(roomSlug)}`} class="badge badge-warn"><${Icon} name="alert-outline" size=${13} />${s.text}</a>`
               : s.text}
           </div>
           <div class="pc-move">
@@ -271,7 +283,7 @@ const HUB_TARGETS = [
 ];
 const TOGGLE_DOMAINS = ['light', 'switch', 'fan', 'input_boolean', 'cover', 'media_player', 'automation', 'vacuum'];
 
-function HubBuilder({ hub, onChange }) {
+export function HubBuilder({ hub, onChange }) {
   const h = hub || { quickActionsEnabled: true, items: [] };
   const setItems = (items) => onChange({ ...h, items });
   return html`<${Card} icon="view-grid-plus-outline" title="Quick Access" subtitle="The hub's buttons: the top opens a page, the strip below runs a quick action."
@@ -325,9 +337,12 @@ function useRoom(slug) {
   return room;
 }
 
-function ClientEditor({ client, rooms, reloadClients }) {
+function ClientEditor({ client, rooms, dashboards, reloadClients, reloadDashboards }) {
   const meta = TYPE_META[client.type];
-  const [draft, setDraft] = useState(() => ({ name: client.name, room: client.assignedSlug || '', layout: client.layout }));
+  const isRemote = client.type === 'remote';
+  const [draft, setDraft] = useState(() => ({ name: client.name, room: client.assignedSlug || '', dashboard: client.dashboard || '', layout: client.layout }));
+  // A remote shows its room's UI unless customised for this one remote.
+  const [custom, setCustom] = useState(Boolean(client.layoutCustomized));
   const [dirty, setDirty] = useState(false);
   const [msg, flash] = useFlash();
   const room = useRoom(draft.room);
@@ -339,13 +354,23 @@ function ClientEditor({ client, rooms, reloadClients }) {
 
   const save = async () => {
     try {
-      await api(`/api/clients/${encodeURIComponent(client.mac)}`, { method: 'PUT', body: draft });
+      const body = isRemote
+        ? { name: draft.name, room: draft.room, layout: custom ? draft.layout : null }
+        : { name: draft.name, dashboard: draft.dashboard };
+      await api(`/api/clients/${encodeURIComponent(client.mac)}`, { method: 'PUT', body });
       setDirty(false);
       flash('Saved — the device picks it up on its next refresh');
       reloadClients();
     } catch (e) {
       flash(`Save failed: ${e.message}`, 6000);
     }
+  };
+  // A new dashboard for this display, assigned straight away.
+  const newDashboard = async () => {
+    const d = await api('/api/dashboards', { method: 'POST', body: { name: draft.name || 'Viewport', template: 'blank' } });
+    await api(`/api/clients/${encodeURIComponent(client.mac)}`, { method: 'PUT', body: { dashboard: d.slug } });
+    await Promise.all([reloadClients(), reloadDashboards()]);
+    go('viewport-layouts', d.slug);
   };
   const act = async (what) => {
     const mac = encodeURIComponent(client.mac);
@@ -356,13 +381,8 @@ function ClientEditor({ client, rooms, reloadClients }) {
       if (!confirm(`Forget ${client.name} completely?`)) return;
       await api(`/api/pairing/${mac}`, { method: 'DELETE' });
       go(meta.section);
-    } else if (what === 'reset') {
-      if (!confirm("Discard this device's own layout and go back to the defaults?")) return;
-      const r = await api(`/api/clients/${mac}`, { method: 'PUT', body: { layout: null } });
-      await reloadClients();
-      setDraft((d) => ({ ...d, layout: r.device.layout || d.layout }));
     } else if (what === 'convert') {
-      const to = client.type === 'remote' ? 'viewport' : 'remote';
+      const to = isRemote ? 'viewport' : 'remote';
       if (!confirm(`Make ${client.name} a ${to}? Its layout will be reset.`)) return;
       await api(`/api/clients/${mac}`, { method: 'PUT', body: { type: to } });
       await reloadClients();
@@ -372,6 +392,7 @@ function ClientEditor({ client, rooms, reloadClients }) {
   };
 
   const approved = client.status === 'approved';
+  const roomLabel = roomName(rooms, draft.room);
   return html`<div class="page">
     <div class="page-head">
       <div class="ph-icon"><${Icon} name=${meta.icon} size=${26} /></div>
@@ -387,7 +408,6 @@ function ClientEditor({ client, rooms, reloadClients }) {
           ${client.health && client.health.rssi != null && html`<${Badge} icon="wifi">${client.health.rssi} dBm<//>`}
           ${client.health && client.health.firmware && html`<${Badge} icon="chip">fw ${client.health.firmware}<//>`}
           <${Badge} icon="chip">${client.mac}<//>
-          ${client.layoutCustomized ? html`<${Badge} kind="accent" icon="pencil-outline">Own layout<//>` : html`<${Badge} icon="content-copy">Room defaults<//>`}
         </div>
       </div>
       <div class="page-actions">
@@ -396,25 +416,48 @@ function ClientEditor({ client, rooms, reloadClients }) {
       </div>
     </div>
     <div class="stack">
-      <div class="grid">
-        <${Card} icon="sofa-outline" title="Room" subtitle=${client.type === 'viewport' ? 'Optional: the room this display hangs in.' : `Which room's entities this ${meta.one} shows.`}>
-          <${Select} value=${draft.room} onChange=${(v) => set('room', v)}
-            options=${[{ value: '', label: 'No room' }, ...(rooms || []).map((r) => ({ value: r.slug, label: r.name }))]} />
-          ${draft.room && html`<a href=${`#/rooms/${encodeURIComponent(draft.room)}`} class="hint"><${Icon} name="open-in-new" size=${14} /> Edit this room's entities</a>`}
-        <//>
-        <${Card} icon="update" title="Refresh" subtitle="How often it wakes to fetch new state. Less often = longer battery.">
-          <${Select} value=${String(draft.layout.refreshIntervalMin)} onChange=${(v) => setLayout('refreshIntervalMin', Number(v))}
-            options=${REFRESH_CHOICES.map((n) => ({ value: String(n), label: REFRESH_LABELS[n] }))} />
-        <//>
-      </div>
-      ${client.type === 'remote'
-        ? html`<${CarouselBuilder} carousel=${draft.layout.carousel} onChange=${(c) => setLayout('carousel', c)} room=${room} roomSlug=${draft.room} />
-            <${HubBuilder} hub=${draft.layout.hub} onChange=${(h) => setLayout('hub', h)} />`
-        : html`<${DashboardBuilder} mac=${client.mac} layout=${draft.layout} onChange=${(l) => set('layout', l)} rooms=${rooms} useDragOrder=${useDragOrder} />`}
+      ${isRemote
+        ? html`<div class="grid">
+              <${Card} icon="sofa-outline" title="Room" subtitle="The room whose layout this remote shows.">
+                <${Select} value=${draft.room} onChange=${(v) => set('room', v)}
+                  options=${[{ value: '', label: 'No room' }, ...(rooms || []).map((r) => ({ value: r.slug, label: r.name }))]} />
+                ${draft.room && html`<a href=${`#/remote-layouts/${encodeURIComponent(draft.room)}`} class="hint"><${Icon} name="open-in-new" size=${14} /> Edit ${roomLabel}</a>`}
+              <//>
+              <${Card} icon=${custom ? 'pencil-outline' : 'content-copy'} title=${custom ? 'Customised for this remote' : `Uses ${roomLabel || 'its room'}'s layout`}
+                subtitle=${custom ? "This remote has its own pages, Quick Access and refresh, below." : "Pages, their order, Quick Access and refresh come from the room's layout, so every remote in it matches."}>
+                <div>
+                  ${custom
+                    ? html`<${Button} icon="restore" onClick=${() => {
+                        setCustom(false);
+                        setDirty(true);
+                      }}>Use the room's layout instead<//>`
+                    : html`<${Button} icon="pencil-outline" onClick=${() => {
+                        setCustom(true);
+                        setDirty(true);
+                      }}>Customise for this remote<//>`}
+                </div>
+              <//>
+            </div>
+            ${custom &&
+            html`<${Card} icon="update" title="Refresh" subtitle="How often it wakes to fetch new state. Less often = longer battery.">
+                <${Select} value=${String(draft.layout.refreshIntervalMin)} onChange=${(v) => setLayout('refreshIntervalMin', Number(v))}
+                  options=${REFRESH_CHOICES.map((n) => ({ value: String(n), label: REFRESH_LABELS[n] }))} />
+              <//>
+              <${CarouselBuilder} carousel=${draft.layout.carousel} onChange=${(c) => setLayout('carousel', c)} room=${room} roomSlug=${draft.room} />
+              <${HubBuilder} hub=${draft.layout.hub} onChange=${(h) => setLayout('hub', h)} />`}`
+        : html`<div class="grid">
+            <${Card} icon="view-dashboard-outline" title="Layout" subtitle="The UI this display shows. Viewport layouts live on the Layouts page and can be built before any display is paired.">
+              <${Select} value=${draft.dashboard} onChange=${(v) => set('dashboard', v)}
+                options=${[{ value: '', label: 'None — shows “not set up”' }, ...(dashboards || []).map((d) => ({ value: d.slug, label: d.name }))]} />
+              <div class="row">
+                ${draft.dashboard && html`<a href=${`#/viewport-layouts/${encodeURIComponent(draft.dashboard)}`} class="btn"><${Icon} name="pencil-outline" size=${18} /><span>Edit layout</span></a>`}
+                <${Button} icon="plus" onClick=${newDashboard}>New layout for this display<//>
+              </div>
+            <//>
+          </div>`}
       <${Card} icon="wrench-outline" title="Manage">
         <div class="row">
-          ${client.layoutCustomized && html`<${Button} icon="restore" onClick=${() => act('reset')}>Reset layout<//>`}
-          <${Button} icon="swap-horizontal" onClick=${() => act('convert')}>Make it a ${client.type === 'remote' ? 'viewport' : 'remote'}<//>
+          <${Button} icon="swap-horizontal" onClick=${() => act('convert')}>Make it a ${isRemote ? 'viewport' : 'remote'}<//>
           ${approved && html`<${Button} kind="danger" icon="link-variant-off" onClick=${() => act('revoke')}>Revoke<//>`}
           <${Button} kind="danger" icon="trash-can-outline" onClick=${() => act('delete')}>Forget device<//>
         </div>
@@ -423,7 +466,7 @@ function ClientEditor({ client, rooms, reloadClients }) {
   </div>`;
 }
 
-export function ClientPage({ type, mac, clients, rooms, reloadClients }) {
+export function ClientPage({ type, mac, clients, rooms, dashboards, reloadClients, reloadDashboards }) {
   const meta = TYPE_META[type];
   if (clients === null) return html`<div class="page"><p class="hint">Loading…</p></div>`;
   const client = mac && clients.find((c) => c.mac === mac);
@@ -431,11 +474,12 @@ export function ClientPage({ type, mac, clients, rooms, reloadClients }) {
     return html`<div class="page">
       <${Empty} icon=${meta.icon} title=${mac ? 'Device not found' : `Choose a ${meta.one}`}>
         ${type === 'remote'
-          ? 'Pick a remote on the left to build its carousel and Quick Access hub. A new remote shows up here as soon as it asks to pair.'
-          : 'Viewports are colour wall-mounted e-ink displays. Pick one on the left to lay out its tiles.'}
+          ? "Pick a remote on the left to choose its room. A remote shows its room's layout, built on the Layouts page. A new remote shows up here as soon as it asks to pair."
+          : 'Viewports are colour wall-mounted e-ink displays. Pick one on the left to choose its layout; viewport layouts are built on the Layouts page, before or after a display is paired.'}
       <//>
     </div>`;
   }
-  if (client.status === 'pending') return html`<${ApproveCard} key=${client.mac} client=${client} rooms=${rooms} reloadClients=${reloadClients} />`;
-  return html`<${ClientEditor} key=${client.mac} client=${client} rooms=${rooms} reloadClients=${reloadClients} />`;
+  const props = { client, rooms, dashboards, reloadClients, reloadDashboards };
+  if (client.status === 'pending') return html`<${ApproveCard} key=${client.mac} ...${props} />`;
+  return html`<${ClientEditor} key=${client.mac} ...${props} />`;
 }

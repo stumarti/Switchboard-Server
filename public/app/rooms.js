@@ -1,12 +1,18 @@
-// Rooms: what's in each room (which Home Assistant entities), one card per
-// function. How a room is PRESENTED — which carousel pages, in what order,
-// the Quick Access buttons — belongs to each remote/viewport instead.
+// Layouts: every UI, defined on the server before (or without) any hardware.
+//   Remote layouts    one per room: its Home Assistant entities, one card
+//                     per function, and the remote UI — which carousel
+//                     pages, in what order, the Quick Access buttons, how
+//                     often it refreshes. Every remote assigned the room
+//                     shows it (unless customised).
+//   Viewport layouts  (dashboards.js; "dashboards" in the API and store),
+//                     each assigned to any number of displays.
 
 import {
   html, useState, useEffect, api, go, Icon, Card, Field, TextInput, SecretInput, Select, Toggle, Button, Badge,
   Empty, useFlash, setIn, getIn, moveItem, timeAgo
 } from './lib.js';
 import { EntityPicker, IconPicker, useHaStatus } from './pickers.js';
+import { CarouselBuilder, HubBuilder } from './clients.js';
 
 // --- A reorderable list of items (lights, scenes, blinds, sensors, games) ---
 
@@ -302,7 +308,7 @@ function RoomEditor({ slug, clients, reloadRooms }) {
     if (!confirm(`Delete the room “${room.name}”? Devices assigned to it will have no room.`)) return;
     await api(`/api/devices/${encodeURIComponent(slug)}`, { method: 'DELETE' });
     reloadRooms();
-    go('rooms');
+    go('layouts');
   };
 
   const download = () => {
@@ -314,12 +320,12 @@ function RoomEditor({ slug, clients, reloadRooms }) {
     URL.revokeObjectURL(a.href);
   };
 
-  const users = (clients || []).filter((c) => c.assignedSlug === slug);
+  const users = (clients || []).filter((c) => c.assignedSlug === slug && c.type !== 'viewport');
   const cardProps = { room, set };
 
   return html`<div class="page">
     <div class="page-head">
-      <${Button} kind="ghost" icon="arrow-left" title="All rooms" onClick=${() => go('rooms')} />
+      <${Button} kind="ghost" icon="arrow-left" title="All layouts" onClick=${() => go('layouts')} />
       <div class="ph-icon"><${Icon} name="sofa-outline" size=${26} /></div>
       <div class="ph-text">
         <input type="text" class="title-input" value=${room.name} onInput=${(e) => set(['name'], e.target.value)} style="font-size:20px;font-weight:600;border-color:transparent;padding:4px 6px;background:transparent" />
@@ -353,13 +359,38 @@ function RoomEditor({ slug, clients, reloadRooms }) {
       <${XboxCard} ...${cardProps} />
       <${ConnectionCard} ...${cardProps} />
     </div>
+    <div class="section-heading"><${Icon} name="remote" size=${22} /><h2>What its remotes show</h2><span class="hint">Every remote in this room shows this (a remote can be customised on its own page).</span></div>
+    <div class="stack">
+      <${Card} icon="update" title="Refresh" subtitle="How often its remotes wake to fetch new state. Less often = longer battery.">
+        <${Select} value=${String(getIn(room, ['standby', 'refreshIntervalMin'], 30))} onChange=${(v) => set(['standby', 'refreshIntervalMin'], Number(v))}
+          options=${[{ value: '15', label: 'Every 15 minutes' }, { value: '30', label: 'Every 30 minutes' }, { value: '60', label: 'Every hour' }]} />
+      <//>
+      <${CarouselBuilder} carousel=${carouselFromScreens(room.screens)} onChange=${(c) => set(['screens'], screensFromCarousel(c, room.screens))} room=${room} roomSlug=${slug} />
+      <${HubBuilder} hub=${room.hub} onChange=${(h) => set(['hub'], h)} />
+    </div>
   </div>`;
+}
+
+// The room's carousel (screens.* flags + screens.order) as the carousel
+// builder's list, and back — the same rules the server uses for remotes.
+const PAGE_FLAGS = { status: null, lighting: 'lighting', blinds: 'blinds', music: 'music', tv: 'tv', xbox: 'xbox', wifi: 'wifi', climate: 'climate' };
+function carouselFromScreens(screens) {
+  const sc = screens || {};
+  const ids = [...(sc.order || []), ...Object.keys(PAGE_FLAGS)].filter((id, i, all) => id in PAGE_FLAGS && all.indexOf(id) === i);
+  return ids.map((id) => ({ page: id, enabled: PAGE_FLAGS[id] ? sc[PAGE_FLAGS[id]] !== false : true }));
+}
+function screensFromCarousel(carousel, screens) {
+  const out = { ...(screens || {}), order: carousel.map((c) => c.page) };
+  for (const c of carousel) if (PAGE_FLAGS[c.page]) out[PAGE_FLAGS[c.page]] = c.enabled;
+  return out;
 }
 
 // --- Overview ------------------------------------------------------------------------
 
-function RoomsOverview({ rooms, clients, reloadRooms }) {
+function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboards }) {
   const [name, setName] = useState('');
+  const [dashName, setDashName] = useState('');
+  const [template, setTemplate] = useState('kitchen');
   const [msg, flash] = useFlash();
 
   const create = async (e) => {
@@ -369,7 +400,20 @@ function RoomsOverview({ rooms, clients, reloadRooms }) {
       const room = await api('/api/devices', { method: 'POST', body: { name: name.trim() } });
       setName('');
       await reloadRooms();
-      go('rooms', room.slug);
+      go('remote-layouts', room.slug);
+    } catch (err) {
+      flash(err.message, 5000);
+    }
+  };
+
+  const createDashboard = async (e) => {
+    e.preventDefault();
+    if (!dashName.trim()) return;
+    try {
+      const d = await api('/api/dashboards', { method: 'POST', body: { name: dashName.trim(), template } });
+      setDashName('');
+      await reloadDashboards();
+      go('viewport-layouts', d.slug);
     } catch (err) {
       flash(err.message, 5000);
     }
@@ -388,52 +432,54 @@ function RoomsOverview({ rooms, clients, reloadRooms }) {
       if (!slug) throw new Error('no slug in the file');
       await api(`/api/devices/${encodeURIComponent(slug)}/config`, { method: 'POST', body });
       await reloadRooms();
-      go('rooms', slug);
+      go('remote-layouts', slug);
     } catch (err) {
       flash(`Import failed: ${err.message}`, 6000);
     }
   };
 
-  const byRoom = (slug) => (clients || []).filter((c) => c.assignedSlug === slug);
+  const remotesIn = (slug) => (clients || []).filter((c) => c.assignedSlug === slug && c.type !== 'viewport');
+  const deviceBadges = (list, icon, section) =>
+    list.length
+      ? list.map((c) => html`<a class="badge badge-accent" href=${`#/${section}/${encodeURIComponent(c.mac)}`} onClick=${(e) => e.stopPropagation()}><${Icon} name=${icon} size=${13} />${c.name}</a>`)
+      : html`<${Badge} icon="link-variant-off">No devices yet<//>`;
 
   return html`<div class="page">
     <div class="page-head">
-      <div class="ph-icon"><${Icon} name="home-group" size=${26} /></div>
+      <div class="ph-icon"><${Icon} name="view-dashboard-edit-outline" size=${26} /></div>
       <div class="ph-text">
-        <h1>Rooms</h1>
-        <p class="hint">Each room is a set of Home Assistant entities. Remotes and viewports each show one room.</p>
+        <h1>Layouts</h1>
+        <p class="hint">Every UI lives here, ready before any hardware: remote layouts (one per room) above, viewport layouts below. Devices are just assigned to one.</p>
       </div>
       <div class="page-actions">
         <span class="flash flash-bad">${msg}</span>
-        <label class="btn" title="Import a room from a JSON file">
-          <${Icon} name="upload-outline" size=${18} /><span>Import</span>
-          <input type="file" accept="application/json,.json" hidden onChange=${importJson} />
-        </label>
       </div>
+    </div>
+
+    <div class="section-heading">
+      <${Icon} name="remote" size=${22} /><h2>Remote layouts</h2>
+      <span class="hint">One per room: its entities and what its remotes show. Remotes in the room use it.</span>
+      <label class="btn btn-small" style="margin-left:auto" title="Import a room from a JSON file">
+        <${Icon} name="upload-outline" size=${16} /><span>Import</span>
+        <input type="file" accept="application/json,.json" hidden onChange=${importJson} />
+      </label>
     </div>
     ${rooms === null && html`<p class="hint">Loading…</p>`}
     <div class="grid">
-      ${(rooms || []).map((r) => {
-        const users = byRoom(r.slug);
-        return html`<a class="card" href=${`#/rooms/${encodeURIComponent(r.slug)}`} style="text-decoration:none;color:inherit">
+      ${(rooms || []).map(
+        (r) => html`<a class="card" href=${`#/remote-layouts/${encodeURIComponent(r.slug)}`} style="text-decoration:none;color:inherit">
           <div class="card-head">
             <div class="card-icon"><${Icon} name="sofa-outline" size=${22} /></div>
             <div class="card-titles"><h2>${r.name}</h2><p class="hint">Updated ${timeAgo(r.updatedAt)}</p></div>
             <${Icon} name="chevron-right" size=${22} />
           </div>
-          <div class="card-body">
-            <div class="chips">
-              ${users.length
-                ? users.map((c) => html`<${Badge} kind="accent" icon=${c.type === 'viewport' ? 'tablet-dashboard' : 'remote'}>${c.name}<//>`)
-                : html`<${Badge} icon="link-variant-off">No devices<//>`}
-            </div>
-          </div>
-        </a>`;
-      })}
+          <div class="card-body"><div class="chips">${deviceBadges(remotesIn(r.slug), 'remote', 'remotes')}</div></div>
+        </a>`
+      )}
       <form class="card" onSubmit=${create}>
         <div class="card-head">
           <div class="card-icon"><${Icon} name="plus" size=${22} /></div>
-          <div class="card-titles"><h2>New room</h2></div>
+          <div class="card-titles"><h2>New remote layout</h2><p class="hint">For a room</p></div>
         </div>
         <div class="card-body">
           <div class="input-with-button">
@@ -443,12 +489,46 @@ function RoomsOverview({ rooms, clients, reloadRooms }) {
         </div>
       </form>
     </div>
-    ${rooms && !rooms.length && html`<${Empty} icon="sofa-outline" title="No rooms yet">Create one to start adding lights, blinds and more.<//>`}
+
+    <div class="section-heading">
+      <${Icon} name="tablet-dashboard" size=${22} /><h2>Viewport layouts</h2>
+      <span class="hint">Whole wall-display UIs. Assign one to any number of displays.</span>
+    </div>
+    ${dashboards === null && html`<p class="hint">Loading…</p>`}
+    <div class="grid">
+      ${(dashboards || []).map(
+        (d) => html`<a class="card" href=${`#/viewport-layouts/${encodeURIComponent(d.slug)}`} style="text-decoration:none;color:inherit">
+          <div class="card-head">
+            <div class="card-icon"><${Icon} name=${d.screens.some((sc) => sc.kind === 'meetingRoom') ? 'calendar-account-outline' : 'view-dashboard-outline'} size=${22} /></div>
+            <div class="card-titles"><h2>${d.name}</h2><p class="hint">${d.screens.filter((sc) => sc.enabled).map((sc) => sc.title || 'Untitled').join(' · ')}</p></div>
+            <${Icon} name="chevron-right" size=${22} />
+          </div>
+          <div class="card-body"><div class="chips">${deviceBadges(d.devices, 'tablet-dashboard', 'viewports')}</div></div>
+        </a>`
+      )}
+      <form class="card" onSubmit=${createDashboard}>
+        <div class="card-head">
+          <div class="card-icon"><${Icon} name="plus" size=${22} /></div>
+          <div class="card-titles"><h2>New viewport layout</h2></div>
+        </div>
+        <div class="card-body">
+          <div class="chips">
+            ${[['kitchen', 'Home panel', 'home-outline'], ['meetingRoom', 'Meeting room', 'calendar-account-outline'], ['blank', 'Blank', 'file-outline']].map(
+              ([v, label, icon]) => html`<button type="button" class=${`chip ${template === v ? 'on' : ''}`} onClick=${() => setTemplate(v)}><${Icon} name=${icon} size=${15} />${label}</button>`
+            )}
+          </div>
+          <div class="input-with-button">
+            <input type="text" placeholder="e.g. Kitchen wall" value=${dashName} onInput=${(e) => setDashName(e.target.value)} />
+            <${Button} type="submit" kind="primary" icon="plus" disabled=${!dashName.trim()}>Create<//>
+          </div>
+        </div>
+      </form>
+    </div>
   </div>`;
 }
 
-export function RoomsPage({ slug, rooms, clients, reloadRooms }) {
+export function RoomsPage({ slug, rooms, clients, dashboards, reloadRooms, reloadDashboards }) {
   return slug
     ? html`<${RoomEditor} key=${slug} slug=${slug} clients=${clients} reloadRooms=${reloadRooms} />`
-    : html`<${RoomsOverview} rooms=${rooms} clients=${clients} reloadRooms=${reloadRooms} />`;
+    : html`<${RoomsOverview} rooms=${rooms} clients=${clients} dashboards=${dashboards} reloadRooms=${reloadRooms} reloadDashboards=${reloadDashboards} />`;
 }

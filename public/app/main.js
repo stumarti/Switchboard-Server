@@ -4,15 +4,21 @@
 
 import { html, render, useState, useEffect, useCallback, api, setUnauthorizedHandler, Icon, Button } from './lib.js';
 import { RoomsPage } from './rooms.js';
+import { DashboardPage } from './dashboards.js';
 import { ClientList, ClientPage } from './clients.js';
 import { SettingsPage } from './settings.js';
 
 // --- Routing ----------------------------------------------------------------
-// #/rooms, #/rooms/<slug>, #/remotes/<mac>, #/viewports/<mac>, #/settings/<tab>
+// #/rooms, #/remote-layouts/<slug>, #/remotes/<mac>, #/viewports/<mac>, #/settings/<tab>
 
+// Links from before the Layouts page (#/rooms/<slug>, #/dashboards/<slug>)
+// still work.
+const ALIASES = { rooms: 'remote-layouts', dashboards: 'viewport-layouts' };
 function parseHash() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
-  return { section: parts[0] || 'rooms', id: parts[1] || '' };
+  let section = ALIASES[parts[0]] || parts[0] || 'layouts';
+  if (section === 'remote-layouts' && !parts[1]) section = 'layouts';
+  return { section, id: parts[1] || '' };
 }
 
 function useRoute() {
@@ -32,18 +38,21 @@ function useRoute() {
 function useAppData(signedIn) {
   const [rooms, setRooms] = useState(null);
   const [clients, setClients] = useState(null);
+  const [dashboards, setDashboards] = useState(null);
   const reloadRooms = useCallback(() => api('/api/devices').then(setRooms).catch(() => {}), []);
   const reloadClients = useCallback(() => api('/api/clients').then(setClients).catch(() => {}), []);
+  const reloadDashboards = useCallback(() => api('/api/dashboards').then(setDashboards).catch(() => {}), []);
   useEffect(() => {
     if (!signedIn) return undefined;
     reloadRooms();
     reloadClients();
+    reloadDashboards();
     const t = setInterval(() => {
       if (!document.hidden) reloadClients();
     }, 5000);
     return () => clearInterval(t);
   }, [signedIn]);
-  return { rooms, clients, reloadRooms, reloadClients, setClients };
+  return { rooms, clients, dashboards, reloadRooms, reloadClients, reloadDashboards, setClients };
 }
 
 // --- Sign in ------------------------------------------------------------------
@@ -94,7 +103,7 @@ function AuthGate({ needsSetup, onDone }) {
 // --- Rail ---------------------------------------------------------------------
 
 const SECTIONS = [
-  { id: 'rooms', label: 'Rooms', icon: 'home-group' },
+  { id: 'layouts', label: 'Layouts', icon: 'view-dashboard-edit-outline' },
   { id: 'remotes', label: 'Remotes', icon: 'remote' },
   { id: 'viewports', label: 'Viewports', icon: 'tablet-dashboard' },
   { id: 'settings', label: 'Settings', icon: 'cog-outline' }
@@ -137,24 +146,20 @@ function App() {
   const pendingCount = (data.clients || []).filter((c) => c.status === 'pending').length;
 
   let main;
-  if (section === 'rooms') {
-    main = html`<${RoomsPage} slug=${id} rooms=${data.rooms} clients=${data.clients} reloadRooms=${data.reloadRooms} />`;
+  if (section === 'layouts' || section === 'remote-layouts') {
+    main = html`<${RoomsPage} slug=${section === 'remote-layouts' ? id : ''} ...${data} />`;
+  } else if (section === 'viewport-layouts') {
+    main = html`<${DashboardPage} key=${id} slug=${id} ...${data} />`;
   } else if (clientType) {
-    main = html`<${ClientPage}
-      type=${clientType}
-      mac=${id}
-      clients=${data.clients}
-      rooms=${data.rooms}
-      reloadClients=${data.reloadClients}
-    />`;
+    main = html`<${ClientPage} type=${clientType} mac=${id} ...${data} />`;
   } else {
     main = html`<${SettingsPage} tab=${id} onSignOut=${checkAuth} />`;
   }
 
   return html`<div class="shell">
-    <${Rail} section=${section} pendingCount=${pendingCount} />
+    <${Rail} section=${section.endsWith('layouts') ? 'layouts' : section} pendingCount=${pendingCount} />
     ${clientType
-      ? html`<${ClientList} type=${clientType} selected=${id} clients=${data.clients} rooms=${data.rooms} />`
+      ? html`<${ClientList} type=${clientType} selected=${id} clients=${data.clients} rooms=${data.rooms} dashboards=${data.dashboards} />`
       : html`<div></div>`}
     <main class="main">${main}</main>
   </div>`;
