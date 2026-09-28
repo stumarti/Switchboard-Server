@@ -524,7 +524,7 @@ app.post('/api/dashboards/preview', auth.requireAdminSession, async (req, res) =
 // --- Pictures, prepared for the device (album art, box art) ----------------
 //
 // GET /api/art?src=<entity_picture path or http(s) URL>&size=280 (or w=&h=)
-// &fmt=mask1|spectra|png — the picture resized and dithered into exactly
+// &fmt=mask1|spectra|png|mask1png — the picture resized and dithered into exactly
 // what the device draws (lib/art.js), so it never decodes a JPEG. Cached,
 // with an ETag, so a repeat is a bodyless 304.
 app.get('/api/art', auth.requireAdminOrDevice, async (req, res) => {
@@ -838,6 +838,27 @@ app.get('/api/devices/:slug/state', auth.requireAdminOrDevice, async (req, res) 
       await new Promise((r) => setTimeout(r, Math.min(STATE_WAIT_STEP_MS, left)));
       if (closed) return undefined;
     }
+  } catch (e) {
+    res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
+  }
+});
+
+// The room editor's screen previews: the state the remote would get for the
+// room as it is in the editor, saved or not — the same entities and the same
+// trimming as /state, so the preview shows what the device would draw.
+app.post('/api/devices/:slug/state/preview', auth.requireAdminSession, async (req, res) => {
+  const existing = store.getProfile(req.params.slug);
+  const profile = normalizeProfile(req.body, existing);
+  try {
+    const result = await haState.fetchRoomState(profile, store.getGlobals());
+    const rx = profile.receiver;
+    if (rx && rx.mediaPlayerEntity) {
+      result.receiver = await enigma2.receiverInfo(rx, {
+        haState: result.states[rx.mediaPlayerEntity],
+        piconSrc: enigma2.piconSrcFor(req.params.slug)
+      });
+    }
+    res.json(result);
   } catch (e) {
     res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
   }
