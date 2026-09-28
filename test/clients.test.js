@@ -100,7 +100,7 @@ test('refresh on the clock: the room and a customised remote carry it, with a st
   assert.equal(clients.staggerFor('aa:00:00:00:00:03', devices), 7);
   assert.equal(clients.staggerFor('aa:00:00:00:00:02', devices), 0);
   const many = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`bb:${String(i).padStart(2, '0')}`, { type: 'remote', status: 'approved' }]));
-  assert.ok(Object.keys(many).every((m) => clients.staggerFor(m, many) < 180)); // wraps at 3 minutes
+  assert.equal(clients.staggerFor('bb:29', many), 29 * 7); // no cap: every remote its own slot
 
   const cfg = clients.composeDeviceConfig({ ...room, slug: 'den' }, { type: 'remote' }, { staggerSec: 14, utcOffsetMin: 60 });
   assert.deepEqual(

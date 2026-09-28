@@ -247,7 +247,7 @@ export function ClockAlign({ checked, minutes, onChange }) {
   return html`<div style="margin-top:12px">
     <${Toggle} checked=${checked} onChange=${onChange} label="On the clock" />
     <p class="hint">${checked
-      ? `Refreshes at ${MARKS[minutes] || 'the marks'} (server time), not ${minutes} minutes after the remote last slept. Each remote is a few seconds later than the last (up to 3 minutes), so they don't all ask the server at once.`
+      ? `Refreshes at ${MARKS[minutes] || 'the marks'} (server time), not ${minutes} minutes after the remote last slept. Each remote is 7 seconds later than the one before, so they don't all ask the server at once.`
       : `Each remote refreshes ${minutes} minutes after it last went to sleep.`}</p>
   </div>`;
 }
