@@ -106,10 +106,80 @@ function WifiTab() {
   </div>`;
 }
 
+// The server's clock against this browser's: fetched once a minute, ticked
+// locally in between (with the fetch's round trip halved out). Remotes set
+// their clock from the server's HTTP Date header, and viewports get their
+// times from it, so this is the clock that matters.
+function useServerTime() {
+  const [t, setT] = useState(null); // {offsetMs, timeZone, ntpServer, error}
+  const [, tick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      const sent = Date.now();
+      api('/api/time')
+        .then((r) => {
+          const got = Date.now();
+          const server = Date.parse(r.now) + (got - sent) / 2;
+          if (alive) setT({ offsetMs: server - got, timeZone: r.timeZone, ntpServer: r.ntpServer });
+        })
+        .catch((e) => alive && setT({ error: e.message }));
+    };
+    load();
+    const poll = setInterval(load, 60000);
+    const sec = setInterval(() => tick((n) => n + 1), 1000);
+    return () => {
+      alive = false;
+      clearInterval(poll);
+      clearInterval(sec);
+    };
+  }, []);
+  return t;
+}
+
+const fmtClock = (ms, timeZone) =>
+  new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone }).format(new Date(ms));
+const fmtDate = (ms, timeZone) => new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone }).format(new Date(ms));
+// Within 5 s counts as in step (a page's own timers aren't more exact).
+const driftOf = (t) => (t && !t.error ? Math.round(t.offsetMs / 1000) : null);
+
+// A compact "Server time" chip for the Settings header, on every tab.
+function ServerTimeChip() {
+  const t = useServerTime();
+  if (!t) return null;
+  if (t.error) return html`<${Badge} kind="bad" icon="clock-alert-outline">Server time unavailable<//>`;
+  const drift = driftOf(t);
+  const ok = Math.abs(drift) <= 5;
+  return html`<a href="#/settings/clock" class="time-chip" title=${ok ? 'The server’s clock matches this browser’s' : `The server’s clock is ${Math.abs(drift)} s ${drift > 0 ? 'ahead of' : 'behind'} this browser’s`}>
+    <${Badge} kind=${ok ? 'ok' : 'warn'} icon=${ok ? 'clock-check-outline' : 'clock-alert-outline'}>Server time ${fmtClock(Date.now() + t.offsetMs, t.timeZone)}<//>
+  </a>`;
+}
+
+function ServerTimeCard() {
+  const t = useServerTime();
+  const drift = driftOf(t);
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return html`<${Card} icon="clock-check-outline" title="Server time" subtitle="Check the server's clock and time zone against yours: remotes set their clock from it, and every time a viewport shows is formatted with it.">
+    ${!t
+      ? html`<p class="hint">Asking the server…</p>`
+      : t.error
+        ? html`<p class="text-bad">${t.error}</p>`
+        : html`<div class="time-compare">
+            <div><div class="hint">This server</div><div class="time-big">${fmtClock(Date.now() + t.offsetMs, t.timeZone)}</div><div class="hint">${fmtDate(Date.now() + t.offsetMs, t.timeZone)} · ${t.timeZone}</div></div>
+            <div><div class="hint">This browser</div><div class="time-big">${fmtClock(Date.now(), browserTz)}</div><div class="hint">${fmtDate(Date.now(), browserTz)} · ${browserTz}</div></div>
+          </div>
+          ${Math.abs(drift) <= 5
+            ? html`<p><${Badge} kind="ok" icon="check-circle-outline">In step<//> <span class="hint">${drift === 0 ? 'Same second.' : `${Math.abs(drift)} s apart.`}</span></p>`
+            : html`<p><${Badge} kind="warn" icon="clock-alert-outline">${Math.abs(drift)} s ${drift > 0 ? 'ahead' : 'behind'}<//> <span class="hint">The server's clock is off. Check its host's time sync (NTP): remotes would show the same error.</span></p>`}
+          ${t.timeZone !== browserTz && html`<p class="hint"><${Icon} name="earth" size=${14} /> The server's time zone (${t.timeZone}) differs from this browser's (${browserTz}). Viewports show the server's; set TZ on the server (e.g. <code>TZ=Europe/London</code> in docker-compose) if that's wrong.</p>`}`}
+  <//>`;
+}
+
 function ClockTab() {
   const g = useGlobals();
   if (!g.globals) return html`<p class="hint">Loading…</p>`;
   return html`<div class="grid">
+    <${ServerTimeCard} />
     <${Card} icon="clock-outline" title="Time server" subtitle="Devices set their clock from this NTP server.">
       <${Field} label="NTP server"><${TextInput} value=${g.globals.ntpServer} placeholder="pool.ntp.org" onInput=${(v) => g.set(['ntpServer'], v)} /><//>
       <${SaveBar} g=${g} />
@@ -279,6 +349,46 @@ function ThemeTab() {
   </div>`;
 }
 
+function PasswordCard() {
+  const [account, , reloadAccount] = useApi('/api/auth/account');
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [again, setAgain] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, flash] = useFlash();
+  const problem = next && next.length < 8 ? 'At least 8 characters.' : again && next !== again ? 'The two new passwords don’t match.' : '';
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api('/api/auth/password', { method: 'POST', body: { current, password: next } });
+      setCurrent('');
+      setNext('');
+      setAgain('');
+      flash('Password changed. Other signed-in browsers were signed out.', 6000);
+      if (reloadAccount) reloadAccount();
+    } catch (err) {
+      flash(`Failed: ${err.message}`, 6000);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return html`<${Card} icon="lock-reset" title="Change password" subtitle=${account && account.passwordChangedAt ? `Last changed ${new Date(account.passwordChangedAt).toLocaleString()}.` : 'The admin password for this page.'}>
+    ${account && account.passwordFromEnv &&
+    html`<p class="banner-inline"><${Icon} name="alert-outline" size=${16} /> <span>ADMIN_PASSWORD is set on this server, so it replaces the password on every restart. Change it there (e.g. docker-compose) to make a new one stick.</span></p>`}
+    <form class="stack" onSubmit=${save}>
+      <label class="field"><span class="field-label">Current password</span><input type="password" autocomplete="current-password" value=${current} onInput=${(e) => setCurrent(e.target.value)} required /></label>
+      <label class="field"><span class="field-label">New password</span><input type="password" autocomplete="new-password" value=${next} onInput=${(e) => setNext(e.target.value)} required /></label>
+      <label class="field"><span class="field-label">New password again</span><input type="password" autocomplete="new-password" value=${again} onInput=${(e) => setAgain(e.target.value)} required /></label>
+      ${problem && html`<p class="hint text-bad">${problem}</p>`}
+      <div class="row" style="align-items:center">
+        <${Button} type="submit" kind="primary" icon="lock-check-outline" disabled=${busy || !current || !next || next !== again || next.length < 8}>${busy ? 'Saving…' : 'Change password'}<//>
+        <span class=${`flash ${msg.startsWith('Failed') ? 'flash-bad' : ''}`}>${msg}</span>
+      </div>
+    </form>
+  <//>`;
+}
+
 function AccountTab({ onSignOut }) {
   const [health] = useApi('/api/health');
   const signOut = async () => {
@@ -290,11 +400,12 @@ function AccountTab({ onSignOut }) {
       ${health &&
       html`<dl class="kv">
         <dt>Version</dt><dd>${health.version}</dd>
-        <dt>mDNS name</dt><dd>${health.mdnsHostname}.local:${health.port}</dd>
+        <dt>mDNS name</dt><dd>${String(health.mdnsHostname).replace(/\.local$/, '')}.local:${health.port}</dd>
         <dt>Service</dt><dd>${health.mdnsServiceType}</dd>
         <dt>Data folder</dt><dd>${health.dataDir}</dd>
       </dl>`}
     <//>
+    <${PasswordCard} />
     <${Card} icon="account-circle-outline" title="Admin session">
       <div><${Button} icon="logout" onClick=${signOut}>Sign out<//></div>
     <//>
@@ -313,6 +424,7 @@ export function SettingsPage({ tab, onSignOut }) {
     <div class="page-head">
       <div class="ph-icon"><${Icon} name="cog-outline" size=${26} /></div>
       <div class="ph-text"><h1>Settings</h1><p class="hint">Shared by every room and device.</p></div>
+      <div class="page-actions"><${ServerTimeChip} /></div>
     </div>
     <nav class="tabs">
       ${TABS.map(

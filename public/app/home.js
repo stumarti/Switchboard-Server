@@ -1,4 +1,5 @@
-// Home: how the whole Switchboard setup is doing (GET /api/overview).
+// Switchboard (the home page, the rail's logo): how the whole setup is doing
+// (GET /api/overview).
 //
 //   Tiles           remotes and viewports online, devices waiting for
 //                   approval, low batteries, Home Assistant
@@ -154,7 +155,7 @@ function ServerCard({ server }) {
     <div class="kv kv-home">
       <span>Version</span><b>${server.version}</b>
       <span>Running since</span><b>${timeAgo(server.startedAt)}</b>
-      <span>Devices find it at</span><b><code>${server.mdnsHostname}.local:${server.port}</code></b>
+      <span>Devices find it at</span><b><code>${String(server.mdnsHostname).replace(/\.local$/, '')}.local:${server.port}</code></b>
     </div>
   <//>`;
 }
@@ -169,9 +170,9 @@ export function HomePage() {
   const haKind = !ha.configured || ha.reachable === false ? 'bad' : ha.lastHour && ha.lastHour.errors ? 'warn' : ha.reachable ? 'ok' : '';
   return html`<div class="page">
     <div class="page-head">
-      <div class="ph-icon"><${Icon} name="home-outline" size=${26} /></div>
+      <div class="ph-icon"><${Icon} name="remote-tv" size=${26} /></div>
       <div class="ph-text">
-        <h1>Home</h1>
+        <h1>Switchboard</h1>
         <p class="hint">How every remote, viewport and the link to Home Assistant is doing.</p>
       </div>
       ${error && html`<div class="page-actions"><span class="flash flash-bad">${error}</span></div>`}

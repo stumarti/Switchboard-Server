@@ -25,7 +25,7 @@ This is step one. Get this running and set up at least one room *before* you fla
 </tr>
 </table>
 
-- **Home** — how the whole setup is doing, and what needs attention, worst first, each linking to where it's fixed:
+- **Switchboard** (the logo at the top of the menu) — how the whole setup is doing, and what needs attention, worst first, each linking to where it's fixed:
   - remotes and viewports online, devices waiting for approval, low batteries, and Home Assistant's response time;
   - critical and low batteries (10% / 20%), devices not heard from (a remote in a day, a viewport in three refresh intervals), weak Wi-Fi, devices without a room or layout, and remotes on different firmware versions;
   - Home Assistant: not set up, unreachable, or requests failing in the last hour (with the recent errors), and any entity a room or viewport layout names that Home Assistant doesn't have (a typo, or one renamed in HA);
@@ -36,7 +36,7 @@ This is step one. Get this running and set up at least one room *before* you fla
 - **Remotes** — every handheld remote, in a list beside the menu. Pick one to choose its room; optionally customise its pages and Quick Access for just that remote. New devices waiting for approval appear at the top; approve one as a remote (choosing its room) or a viewport (choosing its layout) in one step. See "Pairing" below.
 - **Enigma2 receiver** — a room's receiver page works from Home Assistant's Enigma2 integration alone (channel, the programme on now, and the channel's picon if the integration's "Use channel icon" is on). Give the room the box's address (its OpenWebif, e.g. `http://192.168.1.50`, or `http://root:password@vu.local`) and the server also reads the programme on next and each favourite channel's picon from the box; **Check** on the Receiver card shows what the box reports. The address stays on the server — remotes never see it, and picons reach them through `/api/art` as ready-to-draw bitmaps.
 - **Viewports** — every wall display. Pick one to choose which viewport layout it shows. The display itself holds no UI: until it has a layout it shows "not set up".
-- **Settings** — the shared Home Assistant connection (with a connection test), the Wi-Fi remotes join plus guest networks shown as join-QR codes, the clock's NTP server, and the **Theme**: pick a font and re-skin any of the ~107 icons the firmware draws, compiled by this server and downloaded automatically by every paired remote. See "Theme" below.
+- **Settings** — the server's time beside your browser's on every tab (the Clock tab says if they drift or the time zones differ: remotes set their clock from the server), the shared Home Assistant connection (with a connection test), the Wi-Fi remotes join plus guest networks shown as join-QR codes, the clock's NTP server, changing the admin password (Account; `ADMIN_PASSWORD`, if set, still replaces it on every restart), and the **Theme**: pick a font and re-skin any of the ~107 icons the firmware draws, compiled by this server and downloaded automatically by every paired remote. See "Theme" below.
 
 > **⚠️ Upgrading from an older version?** This release adds auth: the admin UI now requires a password, and remotes must pair before they can fetch config. See "Auth" and "Pairing" below, and the **Migrating from an unauthenticated version** section — existing already-flashed remotes need reflashing plus a one-time pairing approval.
 
