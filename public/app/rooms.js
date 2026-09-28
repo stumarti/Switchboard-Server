@@ -256,7 +256,60 @@ function ConnectionCard({ room, set }) {
 
 // --- Room editor ------------------------------------------------------------------
 
+// One page's settings at a time, picked from the carousel above.
+function pageEditor(page, cardProps, room, set) {
+  switch (page) {
+    case 'status': return html`<${StatusCard} ...${cardProps} />`;
+    case 'lighting': return html`<${LightingCard} ...${cardProps} />`;
+    case 'climate': return html`<${ClimateCard} ...${cardProps} />`;
+    case 'blinds': return html`<${BlindsCard} ...${cardProps} />`;
+    case 'music': return html`<${MusicCard} ...${cardProps} />`;
+    case 'tv': return html`<${TvCard} ...${cardProps} />`;
+    case 'xbox': return html`<${XboxCard} ...${cardProps} />`;
+    case 'wifi':
+      return html`<${Card} icon="wifi-star" title="Guest Wi-Fi" subtitle="Join-QR codes for your guest networks.">
+        <p class="hint">This page shows the guest networks set in <a href="#/settings/wifi">Settings → Wi-Fi</a>, the same in every room. Nothing to set here.</p>
+      <//>`;
+    case 'quick':
+      return html`<${HubBuilder} hub=${room.hub} onChange=${(h) => set(['hub'], h)} />`;
+    case 'room':
+      return html`<div class="grid">
+        <${Card} icon="update" title="Refresh" subtitle="How often this room's remotes wake to fetch new state. Less often = longer battery.">
+          <${Select} value=${String(getIn(room, ['standby', 'refreshIntervalMin'], 30))} onChange=${(v) => set(['standby', 'refreshIntervalMin'], Number(v))}
+            options=${[{ value: '15', label: 'Every 15 minutes' }, { value: '30', label: 'Every 30 minutes' }, { value: '60', label: 'Every hour' }]} />
+        <//>
+        <${ConnectionCard} ...${cardProps} />
+      </div>`;
+    default:
+      return null;
+  }
+}
+
+// The last page picked, per room, for this browser session.
+function usePagePick(slug) {
+  const key = `sb.roomPage.${slug}`;
+  const read = () => {
+    try {
+      return sessionStorage.getItem(key) || 'status';
+    } catch {
+      return 'status';
+    }
+  };
+  const [page, setPage] = useState(read);
+  useEffect(() => setPage(read()), [slug]);
+  const pick = (p) => {
+    setPage(p);
+    try {
+      sessionStorage.setItem(key, p);
+    } catch {
+      /* private mode: just not remembered */
+    }
+  };
+  return [page, pick];
+}
+
 function RoomEditor({ slug, clients, reloadRooms }) {
+  const [page, selectPage] = usePagePick(slug);
   const [room, setRoom] = useState(null);
   const [error, setError] = useState(null);
   const [dirty, setDirty] = useState(false);
@@ -322,6 +375,11 @@ function RoomEditor({ slug, clients, reloadRooms }) {
 
   const users = (clients || []).filter((c) => c.assignedSlug === slug && c.type !== 'viewport');
   const cardProps = { room, set };
+  const hubCount = ((room.hub && room.hub.items) || []).length;
+  const extras = [
+    { id: 'quick', label: 'Quick Access', icon: 'view-grid-plus-outline', sub: `${hubCount} button${hubCount === 1 ? '' : 's'}` },
+    { id: 'room', label: 'Refresh & connection', icon: 'tune-variant', sub: `Every ${getIn(room, ['standby', 'refreshIntervalMin'], 30)} min` }
+  ];
 
   return html`<div class="page">
     <div class="page-head">
@@ -349,24 +407,17 @@ function RoomEditor({ slug, clients, reloadRooms }) {
     html`<div class="banner"><${Icon} name="home-alert-outline" size=${20} />
       <span>Home Assistant isn't reachable (${ha.error}), so entity search is off — type entity ids by hand, or <a href="#/settings/home-assistant">fix the connection</a>.</span>
     </div>`}
-    <div class="grid">
-      <${StatusCard} ...${cardProps} />
-      <${LightingCard} ...${cardProps} />
-      <${ClimateCard} ...${cardProps} />
-      <${BlindsCard} ...${cardProps} />
-      <${MusicCard} ...${cardProps} />
-      <${TvCard} ...${cardProps} />
-      <${XboxCard} ...${cardProps} />
-      <${ConnectionCard} ...${cardProps} />
-    </div>
-    <div class="section-heading"><${Icon} name="remote" size=${22} /><h2>What its remotes show</h2><span class="hint">Every remote in this room shows this (a remote can be customised on its own page).</span></div>
-    <div class="stack">
-      <${Card} icon="update" title="Refresh" subtitle="How often its remotes wake to fetch new state. Less often = longer battery.">
-        <${Select} value=${String(getIn(room, ['standby', 'refreshIntervalMin'], 30))} onChange=${(v) => set(['standby', 'refreshIntervalMin'], Number(v))}
-          options=${[{ value: '15', label: 'Every 15 minutes' }, { value: '30', label: 'Every 30 minutes' }, { value: '60', label: 'Every hour' }]} />
-      <//>
-      <${CarouselBuilder} carousel=${carouselFromScreens(room.screens)} onChange=${(c) => set(['screens'], screensFromCarousel(c, room.screens))} room=${room} roomSlug=${slug} />
-      <${HubBuilder} hub=${room.hub} onChange=${(h) => set(['hub'], h)} />
+    <${CarouselBuilder}
+      carousel=${carouselFromScreens(room.screens)}
+      onChange=${(c) => set(['screens'], screensFromCarousel(c, room.screens))}
+      room=${room}
+      roomSlug=${slug}
+      selected=${page}
+      onSelect=${selectPage}
+      extras=${extras}
+      subtitle="What every remote in this room shows (a remote can be customised on its own page). Click a page to set it up; drag to reorder; switch pages off to skip them." />
+    <div class="page-editor">
+      ${pageEditor(page, cardProps, room, set)}
     </div>
   </div>`;
 }
