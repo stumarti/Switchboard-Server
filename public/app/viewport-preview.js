@@ -60,6 +60,19 @@ function Weather({ d }) {
 }
 
 function Energy({ d }) {
+  if (d.style === 'list') {
+    const row = (icon, label, m, col, extra) => html`<div class="vp-erow">
+      <${Icon} name=${icon} size=${24} />
+      <div style="flex:1"><div class="vp-tiny">${label}</div><div class="vp-big" style=${col ? { color: c(col) } : null}>${val(m)}</div>${extra && html`<div class="vp-small">${extra}</div>`}</div>
+    </div>`;
+    return html`<div>
+      ${row('weather-sunny-alert', 'Predicted', d.solarExpected, null)}
+      ${row('solar-power-variant', 'Generated', d.solarToday, 3, d.solarPct != null ? `${d.solarPct}% of predicted` : '')}
+      ${row('home-lightning-bolt-outline', 'House used', d.loadToday, null)}
+      ${row('transmission-tower-import', 'From grid', d.gridImport, 2)}
+      ${row('transmission-tower-export', 'To grid', d.gridExport, 4)}
+    </div>`;
+  }
   const cell = (icon, m, label, col) => html`<div><${Icon} name=${icon} size=${20} /><div class="vp-med" style=${col ? { color: c(col) } : null}>${val(m)}</div><div class="vp-tiny">${label}</div></div>`;
   return html`<div class="vp-grid2">
     ${cell('solar-power-variant', d.solarToday, d.solarExpected ? `of ${val(d.solarExpected)}` : 'solar', 3)}
@@ -69,52 +82,86 @@ function Energy({ d }) {
   </div>`;
 }
 
-// Solar (yellow bars) and consumption (black line) against the forecast
-// (blue dashed); grid import (red) and export (green) below the axis.
+// Hour labels + a "now" marker, shared by both panels.
+function Axis({ d, W, y, bw }) {
+  const n = d.labels.length;
+  return html`${d.labels.map((l, i) => i % Math.ceil(n / 8) === 0 && html`<text x=${i * bw + 1} y=${y} font-size="13" fill="#555">${l}</text>`)}`;
+}
+
+const kwh = (v) => (v == null ? '' : ` ${v} kWh`);
+const Key = ({ color, dashed, children }) =>
+  html`<span class="vp-small"><span class=${`vp-key ${dashed ? 'vp-key-dash' : ''}`} style=${dashed ? { borderColor: c(color) } : { background: c(color) }}></span>${children}</span>`;
+
+// Top: actual solar (bars) against the forecast (dashed). Bottom:
+// consumption stacked by source — solar, battery, grid — with export to the
+// grid below the line.
 function EnergyGraph({ d }) {
-  const W = 760;
-  const H = 220;
-  const top = 8;
-  const axis = 150;
-  const below = H - axis - 22;
+  const W = 520;
   const n = d.labels.length;
   const bw = W / n;
-  const max = Math.max(0.5, d.max || 0);
-  const y = (v) => axis - (v / max) * (axis - top);
-  const gy = (v) => (v / max) * below;
-  const s = d.series;
   const col = d.colors;
-  const line = (vals) => {
-    if (!vals) return '';
-    let path = '';
-    vals.forEach((v, i) => {
-      if (v == null) return;
-      path += `${path && vals[i - 1] != null ? 'L' : 'M'}${(i + 0.5) * bw},${y(v)}`;
-    });
-    return path;
-  };
-  const legend = [
-    ['solar', 'Solar'],
-    ['forecast', 'Forecast'],
-    ['load', 'Use'],
-    ['gridImport', 'Import'],
-    ['gridExport', 'Export']
-  ].filter(([k]) => s[k]);
+  const nowX = d.nowIndex != null ? (d.nowIndex + 0.5) * bw : null;
+
+  // Top panel.
+  const TH = 120;
+  const tMax = Math.max(0.5, d.solar.max || 0);
+  const ty = (v) => TH - (v / tMax) * (TH - 6);
+  let fpath = '';
+  (d.solar.forecast || []).forEach((v, i, a) => {
+    if (v == null) return;
+    fpath += `${fpath && a[i - 1] != null ? 'L' : 'M'}${(i + 0.5) * bw},${ty(v)}`;
+  });
+
+  // Bottom panel: the axis sits where the export share of the range puts it.
+  const u = d.usage;
+  const upMax = Math.max(0.5, u.max || 0);
+  const downMax = u.exportMax || 0;
+  const BH = 150;
+  const up = (BH - 4) * (upMax / (upMax + downMax));
+  const axisY = 2 + up;
+  const scale = up / upMax;
+  const bars = [];
+  for (let i = 0; i < n; i++) {
+    let yTop = axisY;
+    for (const [k, ck] of [['fromGrid', 'fromGrid'], ['fromBattery', 'fromBattery'], ['fromSolar', 'fromSolar']]) {
+      const v = u[k][i];
+      if (!v) continue;
+      const h = v * scale;
+      yTop -= h;
+      bars.push(html`<rect x=${i * bw + 1.5} y=${yTop} width=${bw - 3} height=${h} fill=${c(col[ck])} />`);
+    }
+    const e = u.export[i];
+    if (e) bars.push(html`<rect x=${i * bw + 1.5} y=${axisY} width=${bw - 3} height=${e * scale} fill=${c(col.gridExport)} />`);
+  }
+  const t = d.totals;
   return html`<div>
-    <svg viewBox=${`0 0 ${W} ${H}`} width="100%" style="display:block">
-      ${s.solar && s.solar.map((v, i) => v != null && html`<rect x=${i * bw + 2} y=${y(v)} width=${bw - 4} height=${axis - y(v)} fill=${c(col.solar)} />`)}
-      ${s.gridImport && s.gridImport.map((v, i) => v != null && html`<rect x=${i * bw + 2} y=${axis} width=${(bw - 4) / 2} height=${gy(v)} fill=${c(col.gridImport)} />`)}
-      ${s.gridExport && s.gridExport.map((v, i) => v != null && html`<rect x=${i * bw + 2 + (bw - 4) / 2} y=${axis} width=${(bw - 4) / 2} height=${gy(v)} fill=${c(col.gridExport)} />`)}
-      ${s.forecast && html`<path d=${line(s.forecast)} fill="none" stroke=${c(col.forecast)} stroke-width="3" stroke-dasharray="7 5" />`}
-      ${s.load && html`<path d=${line(s.load)} fill="none" stroke=${c(col.load)} stroke-width="3" />`}
-      <line x1="0" x2=${W} y1=${axis} y2=${axis} stroke="#111" stroke-width="2" />
-      ${d.nowIndex != null && html`<line x1=${(d.nowIndex + 0.5) * bw} x2=${(d.nowIndex + 0.5) * bw} y1=${top} y2=${H - 20} stroke="#111" stroke-width="1" stroke-dasharray="2 3" />`}
-      ${d.labels.map((l, i) => i % Math.ceil(n / 12) === 0 && html`<text x=${i * bw + 2} y=${H - 4} font-size="13" fill="#555">${l}</text>`)}
-      <text x=${W - 4} y=${top + 12} font-size="13" fill="#555" text-anchor="end">${max.toFixed(1)} kW</text>
-    </svg>
-    <div class="vp-row" style="gap:14px;flex-wrap:wrap">
-      ${legend.map(([k, label]) => html`<span class="vp-small"><span class="vp-key" style=${{ background: c(col[k]) }}></span>${label} ${d.totals[k] == null ? '' : `${d.totals[k]} kWh`}</span>`)}
+    <div class="vp-row" style="gap:12px;flex-wrap:wrap">
+      <b class="vp-small">Solar</b>
+      <${Key} color=${col.solar}>Actual${kwh(t.solar)}<//>
+      <${Key} color=${col.forecast} dashed>Predicted${kwh(t.forecast)}<//>
     </div>
+    <svg viewBox=${`0 0 ${W} ${TH + 18}`} width="100%" style="display:block">
+      ${(d.solar.actual || []).map((v, i) => v != null && html`<rect x=${i * bw + 1.5} y=${ty(v)} width=${bw - 3} height=${TH - ty(v)} fill=${c(col.solar)} />`)}
+      ${fpath && html`<path d=${fpath} fill="none" stroke=${c(col.forecast)} stroke-width="3" stroke-dasharray="7 5" />`}
+      <line x1="0" x2=${W} y1=${TH} y2=${TH} stroke="#111" stroke-width="2" />
+      ${nowX != null && html`<line x1=${nowX} x2=${nowX} y1="0" y2=${TH} stroke="#111" stroke-dasharray="2 3" />`}
+      <text x=${W - 2} y="12" font-size="12" fill="#555" text-anchor="end">${tMax.toFixed(1)} kW</text>
+      <${Axis} d=${d} W=${W} y=${TH + 15} bw=${bw} />
+    </svg>
+    <div class="vp-row" style="gap:12px;flex-wrap:wrap;margin-top:4px">
+      <b class="vp-small">Use</b>
+      <${Key} color=${col.fromSolar}>Solar${kwh(t.fromSolar)}<//>
+      <${Key} color=${col.fromBattery}>Battery${kwh(t.fromBattery)}<//>
+      <${Key} color=${col.fromGrid}>Grid${kwh(t.fromGrid)}<//>
+      <${Key} color=${col.gridExport}>Exported${kwh(t.gridExport)}<//>
+    </div>
+    <svg viewBox=${`0 0 ${W} ${BH + 18}`} width="100%" style="display:block">
+      ${bars}
+      <line x1="0" x2=${W} y1=${axisY} y2=${axisY} stroke="#111" stroke-width="2" />
+      ${nowX != null && html`<line x1=${nowX} x2=${nowX} y1="0" y2=${BH} stroke="#111" stroke-dasharray="2 3" />`}
+      <text x=${W - 2} y="12" font-size="12" fill="#555" text-anchor="end">${upMax.toFixed(1)} kW</text>
+      <${Axis} d=${d} W=${W} y=${BH + 15} bw=${bw} />
+    </svg>
   </div>`;
 }
 

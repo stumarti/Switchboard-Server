@@ -86,12 +86,9 @@ function newSection(type) {
         ...base,
         range: 'today',
         bucketMin: 60,
-        solar: { entity: '', kind: 'power' },
-        load: { entity: '', kind: 'power' },
-        gridImport: { entity: '', kind: 'power' },
-        gridExport: { entity: '', kind: 'power' },
+        ...Object.fromEntries(SERIES.map(([k]) => [k, { entity: '', kind: 'power' }])),
         forecast: { entity: '', attribute: '', unit: 'auto' },
-        colors: { solar: 3, load: 1, gridImport: 2, gridExport: 4, forecast: 5 }
+        colors: { solar: 3, forecast: 5, fromSolar: 3, fromBattery: 5, fromGrid: 2, gridExport: 4 }
       };
     case 'battery':
       return { ...base, soc: '', status: '', eta: '', colors: { charging: 4, full: 4, discharging: 3, critical: 2, idle: 1 } };
@@ -224,16 +221,32 @@ function WeatherEditor({ s, set }) {
 }
 
 function EnergyEditor({ s, set }) {
-  return html`<div class="row">${sensorField(s, set, 'solarToday', 'Solar today')}${sensorField(s, set, 'solarExpected', 'Solar forecast today')}</div>
+  return html`<div class="chips">
+      ${[['grid', 'Tiles (2 × 2)', 'view-grid-outline'], ['list', 'List (for a sidebar)', 'format-list-bulleted']].map(
+        ([v, label, icon]) => html`<button type="button" class=${`chip ${s.style === v ? 'on' : ''}`} onClick=${() => set({ ...s, style: v })}><${Icon} name=${icon} size=${15} />${label}</button>`
+      )}
+    </div>
+    <div class="row">${sensorField(s, set, 'solarToday', 'Solar today')}${sensorField(s, set, 'solarExpected', 'Solar forecast today')}</div>
     <div class="row">${sensorField(s, set, 'loadToday', 'Used today')}${sensorField(s, set, 'gridExport', 'Exported today')}</div>
     ${sensorField(s, set, 'gridImport', 'Imported today')}`;
 }
 
 const SERIES = [
-  ['solar', 'Solar production'],
-  ['load', 'Consumption'],
-  ['gridImport', 'Grid import'],
-  ['gridExport', 'Grid export']
+  ['solar', 'Solar production', ''],
+  ['load', 'House consumption', ''],
+  ['gridImport', 'Grid import', ''],
+  ['gridExport', 'Grid export', ''],
+  ['batteryCharge', 'Battery charging', 'Optional.'],
+  ['batteryDischarge', 'Battery discharging', 'Optional: without it, use that solar didn’t cover counts as from the battery.']
+];
+
+const GRAPH_COLORS = [
+  ['solar', 'Actual solar (top bars)'],
+  ['forecast', 'Predicted solar (top line)'],
+  ['fromSolar', 'Use from solar'],
+  ['fromBattery', 'Use from battery'],
+  ['fromGrid', 'Use from grid'],
+  ['gridExport', 'Export (below the line)']
 ];
 
 function EnergyGraphEditor({ s, set }) {
@@ -243,11 +256,11 @@ function EnergyGraphEditor({ s, set }) {
       <${Field} label="Range"><${Select} value=${s.range} onChange=${(v) => set({ ...s, range: v })} options=${[{ value: 'today', label: 'Today (midnight to midnight)' }, { value: '24h', label: 'Last 24 hours' }]} /><//>
       <${Field} label="Bars every"><${Select} value=${String(s.bucketMin)} onChange=${(v) => set({ ...s, bucketMin: Number(v) })} options=${[{ value: '60', label: 'Hour' }, { value: '30', label: '30 minutes' }, { value: '15', label: '15 minutes' }]} /><//>
     </div>
+    <p class="hint">Top panel: actual solar against the prediction. Bottom panel: what the house used, stacked by where it came from (grid, battery, solar), with export to the grid below the line.</p>
     ${SERIES.map(
-      ([k, label]) => html`<div class="row" style="align-items:flex-end">
-        <${Field} label=${label}><${EntityPicker} domains=${['sensor']} value=${s[k].entity} onChange=${(id, e) => set({ ...s, [k]: { ...s[k], entity: id, kind: e && e.unit && /Wh$/.test(e.unit) ? 'energy' : e && e.unit && /W$/.test(e.unit) ? 'power' : s[k].kind } })} /><//>
+      ([k, label, hint]) => html`<div class="row" style="align-items:flex-end">
+        <${Field} label=${label} hint=${hint}><${EntityPicker} domains=${['sensor']} value=${s[k].entity} onChange=${(id, e) => set({ ...s, [k]: { ...s[k], entity: id, kind: e && e.unit && /Wh$/.test(e.unit) ? 'energy' : e && e.unit && /W$/.test(e.unit) ? 'power' : s[k].kind } })} /><//>
         <div style="width:190px"><${Field} label="It measures"><${Select} value=${s[k].kind} onChange=${(v) => set({ ...s, [k]: { ...s[k], kind: v } })} options=${[{ value: 'power', label: 'Power (W / kW)' }, { value: 'energy', label: 'Energy meter (kWh)' }]} /><//></div>
-        <${ColorPicker} value=${s.colors[k]} onChange=${(v) => set({ ...s, colors: { ...s.colors, [k]: v } })} />
       </div>`
     )}
     <div class="row" style="align-items:flex-end">
@@ -256,8 +269,10 @@ function EnergyGraphEditor({ s, set }) {
       <//>
       <div style="width:170px"><${Field} label="Attribute"><${SuggestInput} value=${s.forecast.attribute} placeholder="detailedForecast" suggestions=${attrs} onInput=${(v) => set({ ...s, forecast: { ...s.forecast, attribute: v } })} /><//></div>
       <div style="width:110px"><${Field} label="Unit"><${Select} value=${s.forecast.unit} onChange=${(v) => set({ ...s, forecast: { ...s.forecast, unit: v } })} options=${[{ value: 'auto', label: 'Auto' }, { value: 'kW', label: 'kW' }, { value: 'W', label: 'W' }]} /><//></div>
-      <${ColorPicker} value=${s.colors.forecast} onChange=${(v) => set({ ...s, colors: { ...s.colors, forecast: v } })} />
-    </div>`;
+    </div>
+    <${Field} label="Colours">
+      ${GRAPH_COLORS.map(([k, label]) => html`<div class="row" style="align-items:center"><span style="width:200px">${label}</span><${ColorPicker} value=${s.colors[k]} onChange=${(v) => set({ ...s, colors: { ...s.colors, [k]: v } })} /></div>`)}
+    <//>`;
 }
 
 function BatteryEditor({ s, set }) {

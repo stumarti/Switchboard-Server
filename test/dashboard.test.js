@@ -6,7 +6,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const dashboard = require('../lib/dashboard');
-const { evalCond, statusIconLook, alertLine, stepAverage, buildScreens, screenEtag, iconsUsed } = require('../lib/dashboard-state');
+const { evalCond, splitConsumption, statusIconLook, alertLine, stepAverage, buildScreens, screenEtag, iconsUsed } = require('../lib/dashboard-state');
 
 const TZ = 'Europe/London';
 const NOW = new Date('2026-09-28T12:30:00Z'); // 13:30 in London (BST)
@@ -369,25 +369,43 @@ test('security sections: alarm, openings, motion, cameras', () => {
   assert.equal(sectionData(s, 'ca').cameras[0].when, '12:00');
 });
 
-test('energy graph: power averaged and meters differenced per hour, forecast from an attribute', () => {
+test('energy graph: solar vs forecast on top; power averaged and meters differenced per hour', () => {
   const g = sectionData(build().energy, 'g');
   assert.equal(g.labels.length, 24);
   assert.equal(g.labels[0], '00');
   assert.equal(g.nowIndex, 13);
   // Solar: 1 kW until 12:00 local, 2.5 kW after; 13:00-13:30 so far is 2.5.
-  assert.equal(g.series.solar[11], 1);
-  assert.equal(g.series.solar[12], 2.5);
-  assert.equal(g.series.solar[13], 2.5);
-  assert.equal(g.series.solar[14], null); // the future
-  // Load meter: 3.0 -> 4.0 over 11:00-12:00 local is 1 kW; 13:00-13:30 adds 1.5 kWh in half an hour.
-  assert.equal(g.series.load[11], 1);
-  assert.equal(g.series.load[13], 3);
+  assert.equal(g.solar.actual[11], 1);
+  assert.equal(g.solar.actual[12], 2.5);
+  assert.equal(g.solar.actual[13], 2.5);
+  assert.equal(g.solar.actual[14], null); // the future
   // Forecast: 09:00 local averages its two half-hours; 10:00 holds 3 kW.
-  assert.equal(g.series.forecast[9], 1.5);
-  assert.equal(g.series.forecast[10], 3);
-  assert.equal(g.series.forecast[8], null);
-  assert.equal(g.series.gridImport, null); // not configured
+  assert.equal(g.solar.forecast[9], 1.5);
+  assert.equal(g.solar.forecast[10], 3);
+  assert.equal(g.solar.forecast[8], null);
+  assert.equal(g.solar.max, 3);
   assert.equal(g.totals.forecast, 4.5);
+  // Load meter: 3.0 -> 4.0 over 11:00-12:00 local is 1 kW; 13:00-13:30 adds 1.5 kWh in half an hour.
+  // No grid or battery sensors here, so it's all from solar while solar covers it.
+  assert.equal(g.usage.fromSolar[11], 1);
+  assert.equal(g.usage.fromSolar[13], 2.5);
+  assert.equal(g.usage.fromBattery[13], 0.5); // 3 kW used, 2.5 kW of solar
+  assert.equal(g.usage.fromGrid[13], 0);
+  assert.equal(g.totals.gridImport, null); // not configured
+});
+
+test('consumption splits into grid first, then battery, then solar', () => {
+  // Metered grid import and battery discharge.
+  assert.deepEqual(splitConsumption(3, 1, 0.5, 1.5), { fromSolar: 1, fromBattery: 1.5, fromGrid: 0.5 });
+  // Grid import can't exceed what the house used.
+  assert.deepEqual(splitConsumption(1, 0, 4, 0), { fromSolar: 0, fromBattery: 0, fromGrid: 1 });
+  // No battery sensor: what solar didn't cover came from the battery.
+  assert.deepEqual(splitConsumption(3, 2, 0, null), { fromSolar: 2, fromBattery: 1, fromGrid: 0 });
+  // Solar beyond consumption (exported or charging) isn't counted as used.
+  assert.deepEqual(splitConsumption(1, 4, 0, null), { fromSolar: 1, fromBattery: 0, fromGrid: 0 });
+  // Metered battery says 0, but solar can't have covered it all: the gap is battery.
+  assert.deepEqual(splitConsumption(2.2, 1.6, 0, 0), { fromSolar: 1.6, fromBattery: 0.6, fromGrid: 0 });
+  assert.deepEqual(splitConsumption(null, 4, 0, null), { fromSolar: null, fromBattery: null, fromGrid: null });
 });
 
 test('meeting room: in use, back-to-back blocks, and when to wake next', () => {
