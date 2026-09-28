@@ -302,6 +302,8 @@ function XboxCard({ room, set }) {
           options=${[{ value: 'configured', label: 'The list below' }, { value: 'browse', label: 'Browse the console live' }]} />
       <//>
     </div>
+    ${x.listSource === 'browse' &&
+    html`<p class="hint">The server reads the console's installed games and apps from Home Assistant's media browser (up to 36, re-read every 30 minutes) and sends them to the remote as its library. The remote shows them from its next refresh.</p>`}
     ${x.listSource !== 'browse' &&
     html`<${Field} label="Games">
       <${ItemList}

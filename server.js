@@ -66,6 +66,7 @@ const art = require('./lib/art');
 const haMonitor = require('./lib/ha-monitor');
 const overview = require('./lib/overview');
 const enigma2 = require('./lib/enigma2');
+const xboxLibrary = require('./lib/xbox-library');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
 const fontsCompiler = require('./lib/assets/fonts');
@@ -730,12 +731,18 @@ app.post('/api/devices', auth.requireAdminSession, (req, res) => {
 
 // A device gets the room with its own layout folded in (lib/clients.js's
 // composeDeviceConfig); the admin UI gets the room exactly as stored.
+// A room whose Xbox library is "Browse" gets the console's games from Home
+// Assistant's media browser (lib/xbox-library.js), cached here.
+function deviceConfig(profile, device) {
+  const base = haState.haBase(store.getGlobals());
+  return clients.composeDeviceConfig(xboxLibrary.withLibrary(profile, base), device);
+}
 app.get('/api/devices/:slug/config', auth.requireAdminOrDevice, (req, res) => {
   const profile = store.getProfile(req.params.slug);
   if (!profile) {
     return res.status(404).json({ error: 'no such profile' });
   }
-  res.json(req.device ? clients.composeDeviceConfig(profile, req.device) : profile);
+  res.json(req.device ? deviceConfig(profile, req.device) : profile);
 });
 
 // Everything a remote needs to know about its room, in one response: the
@@ -751,7 +758,7 @@ app.get('/api/devices/:slug/bundle', auth.requireAdminOrDevice, (req, res) => {
   }
   const theme = store.getTheme();
   res.json({
-    config: req.device ? clients.composeDeviceConfig(profile, req.device) : profile,
+    config: req.device ? deviceConfig(profile, req.device) : profile,
     globals: store.getGlobals(),
     theme: {
       iconsVersion: theme.iconsVersion || '',
