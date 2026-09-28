@@ -12,7 +12,7 @@ import {
   Empty, useFlash, setIn, getIn, moveItem, timeAgo
 } from './lib.js';
 import { EntityPicker, IconPicker, useHaStatus, useEntity } from './pickers.js';
-import { CarouselBuilder, HubBuilder } from './clients.js';
+import { CarouselBuilder, HubBuilder, ClockAlign } from './clients.js';
 import { RemotePreviews } from './remote-preview.js';
 
 // --- A reorderable list of items (lights, scenes, blinds, sensors, games) ---
@@ -359,6 +359,8 @@ function pageEditor(page, cardProps, room, set) {
         <${Card} icon="update" title="Refresh" subtitle="How often this room's remotes wake to fetch new state. Less often = longer battery.">
           <${Select} value=${String(getIn(room, ['standby', 'refreshIntervalMin'], 30))} onChange=${(v) => set(['standby', 'refreshIntervalMin'], Number(v))}
             options=${[{ value: '15', label: 'Every 15 minutes' }, { value: '30', label: 'Every 30 minutes' }, { value: '60', label: 'Every hour' }]} />
+          <${ClockAlign} checked=${getIn(room, ['standby', 'refreshAligned'], false)} minutes=${getIn(room, ['standby', 'refreshIntervalMin'], 30)}
+            onChange=${(v) => set(['standby', 'refreshAligned'], v)} />
         <//>
         <${ConnectionCard} ...${cardProps} />
       </div>`;

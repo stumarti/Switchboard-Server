@@ -733,16 +733,21 @@ app.post('/api/devices', auth.requireAdminSession, (req, res) => {
 // composeDeviceConfig); the admin UI gets the room exactly as stored.
 // A room whose Xbox library is "Browse" gets the console's games from Home
 // Assistant's media browser (lib/xbox-library.js), cached here.
-function deviceConfig(profile, device) {
+// A remote also learns when to wake if its room refreshes on the clock: its
+// place in the house's stagger (lib/clients.js staggerFor) and the local UTC
+// offset.
+function deviceConfig(profile, device, mac) {
   const base = haState.haBase(store.getGlobals());
-  return clients.composeDeviceConfig(xboxLibrary.withLibrary(profile, base), device);
+  return clients.composeDeviceConfig(xboxLibrary.withLibrary(profile, base), device, {
+    staggerSec: clients.staggerFor(mac, store.getDevices())
+  });
 }
 app.get('/api/devices/:slug/config', auth.requireAdminOrDevice, (req, res) => {
   const profile = store.getProfile(req.params.slug);
   if (!profile) {
     return res.status(404).json({ error: 'no such profile' });
   }
-  res.json(req.device ? deviceConfig(profile, req.device) : profile);
+  res.json(req.device ? deviceConfig(profile, req.device, req.deviceMac) : profile);
 });
 
 // Everything a remote needs to know about its room, in one response: the
@@ -758,7 +763,7 @@ app.get('/api/devices/:slug/bundle', auth.requireAdminOrDevice, (req, res) => {
   }
   const theme = store.getTheme();
   res.json({
-    config: req.device ? deviceConfig(profile, req.device) : profile,
+    config: req.device ? deviceConfig(profile, req.device, req.deviceMac) : profile,
     globals: store.getGlobals(),
     theme: {
       iconsVersion: theme.iconsVersion || '',
