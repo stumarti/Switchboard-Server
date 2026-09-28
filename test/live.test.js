@@ -45,3 +45,14 @@ test('spectra: palette indices, two pixels a byte, high nibble first', () => {
   assert.deepEqual([...art.packNibbles(idx, 6, 1)], [0x01, 0x23, 0x45]);
   assert.deepEqual([...art.packNibbles(Uint8Array.from([5, 4, 3]), 3, 1)], [0x54, 0x30]);
 });
+
+test('entity_picture drops the rotating HA access token', () => {
+  const { stablePicture } = require('../lib/ha-state');
+  assert.equal(
+    stablePicture('/api/media_player_proxy/media_player.x?token=abc123&cache=9f8e'),
+    '/api/media_player_proxy/media_player.x?cache=9f8e'
+  );
+  assert.equal(stablePicture('/api/media_player_proxy/media_player.x?token=abc'), '/api/media_player_proxy/media_player.x');
+  assert.equal(stablePicture('https://store-images.example/box.jpg'), 'https://store-images.example/box.jpg');
+  assert.equal(stablePicture(undefined), undefined);
+});
