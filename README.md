@@ -76,7 +76,7 @@ If this repo is private, GHCR images are private by default too — `docker logi
 
 ## What it does
 
-- **Remote layouts** — one per room (lighting, blinds, media, climate, TV, Xbox): which Home Assistant entities it has, and what its remotes show, one card per function. Entity fields search Home Assistant's own entity list (through the server, which holds the token), show each entity's live state, flag ids HA doesn't know, and fill in names, icons and supported light controls for you. With HA unreachable they fall back to plain text boxes.
+- **Remote layouts** — one per room (lighting, blinds, media, climate, TV, Xbox, an Enigma2 receiver): which Home Assistant entities it has, and what its remotes show, one card per function. Entity fields search Home Assistant's own entity list (through the server, which holds the token), show each entity's live state, flag ids HA doesn't know, and fill in names, icons and supported light controls for you. With HA unreachable they fall back to plain text boxes.
 - **Dumb hardware, server control.** Every UI — a room's remote layout, a wall display's viewport layout — is defined here, on the Layouts page, before any device exists. A device is only ever *assigned* one: a remote to a room, a viewport to a layout.
 - **Remotes** and **Viewports** — every paired device, listed beside the menu. A remote shows its room's carousel, Quick Access hub and refresh interval, or its own if customised. A viewport shows its assigned layout. New devices appear under Remotes to approve, as either kind.
 - **Settings** for the Home Assistant connection (with a connection test), device and guest Wi-Fi, the clock's NTP server, and the theme (icon and font packs, custom icons).
@@ -283,7 +283,7 @@ Each room profile, in full:
 A few things worth knowing:
 
 - `homeAssistant.useGlobal: true` (the default for a new room) means this room uses the Globals connection instead of its own host/port/token.
-- `screens` just turns carousel pages on/off per room — a bedroom with no Xbox unchecks it.
+- `screens` just turns carousel pages on/off per room — a bedroom with no Xbox unchecks it. The receiver page starts off.
 - `lighting.lights`, `lighting.scenes`, `blinds.items`, `climate.additionalSensors`, `xbox.games` are all open-ended lists — add/remove as many as the room needs.
 - `tv.apps` is fixed to three slots (YouTube / Netflix / tvMate); `xbox.games` isn't — a console's library keeps growing.
 - `xbox.listSource` picks whether the device shows the `games` list below or browses the console live via Home Assistant's `browse_media`. Either way, the now-playing hero art isn't stored here — the device reads that live from the media player entity's own `entity_picture`/`media_image_url`. A game's `art` field is only for its library row, and only used when `listSource` is `"configured"`.

@@ -150,7 +150,8 @@ const PAGE_META = {
   tv: { label: 'TV', icon: 'television' },
   xbox: { label: 'Xbox', icon: 'microsoft-xbox' },
   wifi: { label: 'Guest Wi-Fi', icon: 'wifi-star' },
-  climate: { label: 'Climate', icon: 'thermostat' }
+  climate: { label: 'Climate', icon: 'thermostat' },
+  receiver: { label: 'Receiver', icon: 'satellite-variant' }
 };
 
 // What each page will show, from the room — or why it would be empty.
@@ -195,6 +196,11 @@ function pageSummary(page, room) {
     }
     case 'wifi':
       return { text: 'Networks from Settings', ok: true };
+    case 'receiver': {
+      const r = room.receiver || {};
+      const k = n(r.channels);
+      return r.mediaPlayerEntity ? { text: k ? plural(k, 'favourite') : 'No favourites', ok: true } : { text: 'No receiver', ok: false };
+    }
     default:
       return { text: '', ok: true };
   }
@@ -295,6 +301,7 @@ const HUB_TARGETS = [
   { value: 'lighting', label: 'Lighting', icon: 'lightbulb-group-outline' },
   { value: 'tv', label: 'TV', icon: 'television' },
   { value: 'xbox', label: 'Xbox', icon: 'microsoft-xbox' },
+  { value: 'receiver', label: 'Receiver', icon: 'satellite-variant' },
   { value: 'guestwifi', label: 'Guest Wi-Fi', icon: 'wifi-star' },
   { value: 'vacuum', label: 'Vacuum', icon: 'robot-vacuum' }
 ];

@@ -823,6 +823,7 @@ app.post('/api/devices/:slug/config', auth.requireAdminSession, (req, res) => {
     climate: normalized.climate,
     tv: normalized.tv,
     xbox: normalized.xbox,
+    receiver: normalized.receiver,
     hub: normalized.hub
   };
 
