@@ -378,6 +378,9 @@ function CalendarEditor({ s, set }) {
     <div class="row">
       <${Field} label="Days ahead"><${NumberInput} min="1" max="31" value=${s.days} onChange=${(v) => set({ ...s, days: v })} /><//>
       <${Field} label="Lines shown"><${NumberInput} min="1" max="8" value=${s.lines} onChange=${(v) => set({ ...s, lines: v })} /><//>
+      <${Field} label="Lines while a conditional section shows" hint="Makes room for e.g. Now playing in the same column. 0 = keep them all.">
+        <${NumberInput} min="0" max="8" value=${s.shrinkTo ?? 2} onChange=${(v) => set({ ...s, shrinkTo: v })} />
+      <//>
     </div>`;
 }
 
@@ -505,6 +508,39 @@ const WAKE_ONLY = {
   transport: 'Departures count down on their own.'
 };
 
+// When a section shows: always, while its players play (Now playing), or while
+// an entity matches — and how often the display wakes while it's showing.
+const LIVE_CHOICES = [0, 1, 2, 3, 5, 10, 15, 30].map((n) => ({ value: String(n), label: n ? `Every ${n} min while it shows` : 'Only when the display wakes anyway' }));
+
+function ShowWhenEditor({ s, set }) {
+  const w = s.showWhen || { mode: 'always', entity: '', cond: 'eq', value: '', liveMin: 0 };
+  const put = (patch) => {
+    const next = { ...w, ...patch };
+    if (patch.mode && patch.mode !== 'always' && w.mode === 'always' && !w.liveMin) next.liveMin = 3;
+    set({ ...s, showWhen: next });
+  };
+  const modes = [
+    { value: 'always', label: 'Always' },
+    ...(s.type === 'media' ? [{ value: 'playing', label: 'Only while something is playing' }] : []),
+    { value: 'entity', label: 'Only when an entity…' }
+  ];
+  return html`<div class="show-when">
+    <${Field} label="Show" hint=${w.mode === 'always' ? 'A conditional section appears only when its condition holds; the rest of its column makes room for it.' : ''}>
+      <${Select} value=${w.mode} onChange=${(v) => put({ mode: v })} options=${modes} />
+    <//>
+    ${w.mode === 'entity' &&
+    html`<div class="row" style="align-items:flex-end">
+      <${Field} label="Entity"><${EntityPicker} value=${w.entity} onChange=${(id) => put({ entity: id })} /><//>
+      <div style="width:130px"><${Field} label="Is"><${CondSelect} value=${w.cond} onChange=${(v) => put({ cond: v })} /><//></div>
+      <div style="width:160px"><${Field} label="Value"><${TextInput} value=${w.value} placeholder="on" onInput=${(v) => put({ value: v })} /><//></div>
+    </div>`}
+    ${w.mode !== 'always' &&
+    html`<${Field} label="While it shows" hint="The display wakes this often while the section is up, and goes back to its normal refresh when it's gone. It appears at the next wake after the condition starts.">
+      <${Select} value=${String(w.liveMin ?? 3)} onChange=${(v) => put({ liveMin: Number(v) })} options=${LIVE_CHOICES} />
+    <//>`}
+  </div>`;
+}
+
 // --- A section, as a collapsible card ---------------------------------------------------------------
 
 function SectionCard({ s, set, remove, duplicate, move, moveColumn, columnLabels, colIndex, open, onToggle, ctx }) {
@@ -513,7 +549,7 @@ function SectionCard({ s, set, remove, duplicate, move, moveColumn, columnLabels
   return html`<section class=${`card section-card ${open ? 'open' : ''}`}>
     <header class="card-head" onClick=${onToggle} style="cursor:pointer;padding-bottom:12px">
       <div class="card-icon"><${Icon} name=${meta.icon} size=${20} /></div>
-      <div class="card-titles"><h2>${s.title || meta.label}</h2><p class="hint">${s.title ? meta.label : meta.about}</p></div>
+      <div class="card-titles"><h2>${s.title || meta.label}${s.showWhen && s.showWhen.mode !== 'always' && html` <${Badge} kind="accent" icon="eye-outline">${s.showWhen.mode === 'playing' ? 'While playing' : 'Conditional'}<//>`}</h2><p class="hint">${s.title ? meta.label : meta.about}</p></div>
       <div class="card-actions" onClick=${(e) => e.stopPropagation()}>
         <${Button} kind="ghost" small icon="chevron-up" title="Move up" disabled=${!move.up} onClick=${move.up} />
         <${Button} kind="ghost" small icon="chevron-down" title="Move down" disabled=${!move.down} onClick=${move.down} />
@@ -526,10 +562,11 @@ function SectionCard({ s, set, remove, duplicate, move, moveColumn, columnLabels
     </header>
     ${open &&
     html`<div class="card-body">
-      ${WAKE_ONLY[s.type] &&
+      ${WAKE_ONLY[s.type] && !(s.showWhen && s.showWhen.mode !== 'always' && s.showWhen.liveMin) &&
       html`<p class="hint wake-note"><${Icon} name="battery-clock-outline" size=${16} /> ${WAKE_ONLY[s.type]} It updates when the display wakes (every ${ctx.refreshMin} min${s.type === 'transport' ? ', or sooner when a departure turns imminent' : ''}), never in between — battery comes first.</p>`}
       <${Field} label="Heading (optional)"><${TextInput} value=${s.title} placeholder=${meta.label} onInput=${(v) => set({ ...s, title: v })} /><//>
       <${Editor} s=${s} set=${set} ctx=${ctx} presets=${ctx.presets} />
+      <${ShowWhenEditor} s=${s} set=${set} />
     </div>`}
   </section>`;
 }

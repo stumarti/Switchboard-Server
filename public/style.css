@@ -742,3 +742,5 @@ a.att-item:hover { background: var(--panel-2); }
 .page-editor { margin-top: 16px; }
 
 .box-check { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+
+.show-when { border-top: 1px dashed var(--border); margin-top: 12px; padding-top: 10px; }
