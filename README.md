@@ -87,6 +87,8 @@ Every Switchboard remote already talks to this: `Settings → Select room` calls
 | GET | `/api/devices/<slug>/config` | One room's full config | session or device |
 | GET | `/api/devices/<slug>/bundle` | Room config + globals + theme versions in one response (`304` when unchanged, via `If-None-Match`) | session or device |
 | GET | `/api/devices/<slug>/state` | Live Home Assistant state for every entity the room's pages show, fetched in parallel by the server and trimmed to what the remote reads (`502` if HA is unreachable from the server) | session or device |
+| GET | `/api/devices/<slug>/state?page=music&wait=25` | Just one live page's entities, held open (with `If-None-Match`) until they change or `wait` seconds pass (`304`); the response's `live` says which pages are live (playing, moving) or passive | session or device |
+| GET | `/api/art?src=<entity_picture or URL>&size=280&fmt=mask1\|spectra\|png` | A picture resized and dithered into exactly what the device draws: `mask1` (the remote's 1-bit icon format), `spectra` (six-colour palette indices, 4 bits a pixel) or `png` (the admin preview); cached, `304` on repeat | session or device |
 | POST | `/api/devices/<slug>/config` | Create/update a room | session |
 | POST | `/api/devices` | Create a room from just a name | session |
 | DELETE | `/api/devices/<slug>` | Remove a room | session |
@@ -166,6 +168,11 @@ The layout builder shows a live 800×480 preview of each screen, in the panel's 
 **Energy graph data.** A series can be a power sensor (averaged per bar) or an energy meter (differenced per bar). Each bar of use is split by source: grid import first (it's metered), then metered battery discharge, then solar up to what it produced. Anything left is counted as battery, so a house with a battery but no battery sensor still adds up. The forecast is read from an entity attribute holding an hourly or half-hourly list, as Solcast (`detailedForecast`) and Open-Meteo Solar Forecast provide.
 
 **Refreshes.** Each screen carries its own ETag, and `?screen=<id>` answers a bodyless `304` when that screen is unchanged, so the device can skip its 15–20 s panel refresh. `refreshInSec` (and the `X-Refresh-In` header) says when to wake next: the refresh interval, or sooner when a meeting starts or ends. The bundle lists every icon the screens can show, so the device can fetch them once from `/api/icons/mdi/<name>` and cache them.
+
+**Live and passive content.** Most of what a device shows is passive: it only changes when someone presses a button, so it's drawn from cache and fetched on each wake. Some content is live: a player that's playing, blinds that are moving, departures counting down.
+- **Remotes:** while a live page is on screen and the Wi-Fi is up, the remote holds one request open (`?page=…&wait=…`) that answers the moment something changes. The Wi-Fi idle timeout still switches the radio off, and changing page or the screen timing out stops it.
+- **Viewports:** they run on battery and never stay awake for live content. Live sections update when the display wakes. A display with departures also wakes early, when the next one turns imminent.
+- **Album and box art** are prepared here (`/api/art`), so neither kind of device decodes a JPEG.
 
 **Health.** The device can send `X-Battery`, `X-Temperature`, `X-RSSI` and `X-Firmware` headers; the Viewports page shows them.
 

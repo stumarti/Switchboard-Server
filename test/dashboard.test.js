@@ -451,3 +451,10 @@ test('screen etags change only when that screen changes; icons used are listed',
   assert.notEqual(screenEtag(a.presence), screenEtag(b.presence));
   assert.deepEqual(iconsUsed(layout()), ['bus', 'lock', 'lock-open-variant', 'shield-home', 'trash-can']);
 });
+
+test('a screen with departures wakes when the next one turns imminent', () => {
+  const { presence, home } = build();
+  // 3 min is already imminent (threshold 5); 20 min turns imminent in 15.
+  assert.equal(presence.nextChangeInSec, 15 * 60);
+  assert.equal(home.nextChangeInSec, null);
+});

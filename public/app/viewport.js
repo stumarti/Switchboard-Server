@@ -484,6 +484,13 @@ const EDITORS = {
   cameras: ({ s, set }) => html`<${NamedList} items=${s.cameras} onChange=${(l) => set({ ...s, cameras: l })} domains=${['binary_sensor', 'sensor', 'camera', 'event']} max=${10} addLabel="Add camera" />`
 };
 
+// Sections whose content changes on its own. A viewport runs on battery,
+// so they only update when it wakes.
+const WAKE_ONLY = {
+  media: 'What’s playing changes on its own.',
+  transport: 'Departures count down on their own.'
+};
+
 // --- A section, as a collapsible card ---------------------------------------------------------------
 
 function SectionCard({ s, set, remove, duplicate, move, moveColumn, columnLabels, colIndex, open, onToggle, ctx }) {
@@ -505,6 +512,8 @@ function SectionCard({ s, set, remove, duplicate, move, moveColumn, columnLabels
     </header>
     ${open &&
     html`<div class="card-body">
+      ${WAKE_ONLY[s.type] &&
+      html`<p class="hint wake-note"><${Icon} name="battery-clock-outline" size=${16} /> ${WAKE_ONLY[s.type]} It updates when the display wakes (every ${ctx.refreshMin} min${s.type === 'transport' ? ', or sooner when a departure turns imminent' : ''}), never in between — battery comes first.</p>`}
       <${Field} label="Heading (optional)"><${TextInput} value=${s.title} placeholder=${meta.label} onInput=${(v) => set({ ...s, title: v })} /><//>
       <${Editor} s=${s} set=${set} ctx=${ctx} presets=${ctx.presets} />
     </div>`}
@@ -787,7 +796,7 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder }) {
   const setScreens = (screens) => onChange({ ...layout, screens });
   const setScreen = (next) => setScreens(layout.screens.map((s) => (s.id === next.id ? next : s)));
   const allSections = layout.screens.flatMap((s) => (s.kind === 'sections' ? s.columns.flat() : []));
-  const ctx = { rooms, allSections, presets };
+  const ctx = { rooms, allSections, presets, refreshMin: layout.refreshIntervalMin };
   const errors = preview.state && preview.state.errors ? Object.entries(preview.state.errors) : [];
   return html`<div class="stack">
     <${CarouselCard} layout=${layout} onChange=${onChange} />
