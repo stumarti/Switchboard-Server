@@ -39,11 +39,31 @@ test('mask1: 1 bpp, rows padded to bytes, MSB first, 0 = ink', () => {
 });
 
 test('spectra: palette indices, two pixels a byte, high nibble first', () => {
-  const rgb = Buffer.from([255, 255, 255, 0, 0, 0, 180, 30, 30, 230, 196, 0, 46, 125, 50, 30, 70, 160]);
-  const idx = art.toSpectraIndices(rgb, 6, 1);
-  assert.deepEqual([...idx], [0, 1, 2, 3, 4, 5]);
+  // Each colour lands on its own ink. Green is a real-world green: a pure
+  // 0,255,0 is far brighter than the panel's dark green ink, so its nearest
+  // is yellow (asserted below, so a palette change that alters it is seen).
+  const inks = [[255, 255, 255], [0, 0, 0], [255, 0, 0], [255, 255, 0], [34, 139, 34], [0, 0, 255]];
+  const idx = inks.map((c) => art.toSpectraIndices(Buffer.from(c), 1, 1)[0]);
+  assert.deepEqual(idx, [0, 1, 2, 3, 4, 5]);
+  assert.equal(art.toSpectraIndices(Buffer.from([0, 255, 0]), 1, 1)[0], 3);
   assert.deepEqual([...art.packNibbles(idx, 6, 1)], [0x01, 0x23, 0x45]);
   assert.deepEqual([...art.packNibbles(Uint8Array.from([5, 4, 3]), 3, 1)], [0x54, 0x30]);
+});
+
+test('spectra: the picture is fitted into the panel\'s measured range', () => {
+  const fit = art.fitToPanel(Buffer.from([255, 255, 255, 0, 0, 0]));
+  assert.deepEqual([...fit.slice(0, 3)], art.SPECTRA[0]); // white -> the white ink, no error
+  assert.deepEqual([...fit.slice(3, 6)], art.SPECTRA[1]); // black -> the black ink
+  // A mid grey dithers to a mix of white and black ink, nothing coloured.
+  const grey = Buffer.alloc(16 * 16 * 3, 128);
+  const idx = art.toSpectraIndices(grey, 16, 16);
+  assert.ok([...idx].every((v) => v === 0 || v === 1));
+  const whites = [...idx].filter((v) => v === 0).length;
+  assert.ok(whites > 96 && whites < 160, `about half white, got ${whites}/256`);
+  // Realistic greens (foliage, sleeve art) find the green ink.
+  const leaf = Buffer.from(Array(16 * 16).fill([34, 139, 34]).flat());
+  const greens = [...art.toSpectraIndices(leaf, 16, 16)].filter((v) => v === 4).length;
+  assert.ok(greens > 200, `mostly green ink, got ${greens}/256`);
 });
 
 test('entity_picture drops the rotating HA access token', () => {
