@@ -224,17 +224,47 @@ function TvCard({ room, set }) {
 
 // An Enigma2 satellite/cable box (Home Assistant's enigma2 media_player):
 // channel up/down, favourite channels as buttons, volume, mute and power.
+// What the box reports, for the Receiver card's Check button.
+function BoxCheck({ receiver }) {
+  const [state, setState] = useState(null); // {busy} | {result} | {error}
+  const check = () => {
+    setState({ busy: true });
+    api('/api/receiver/check', { method: 'POST', body: { receiver } })
+      .then((result) => setState({ result }))
+      .catch((e) => setState({ error: e.message }));
+  };
+  const r = state && state.result;
+  return html`<div class="box-check">
+    <${Button} small icon="lan-check" disabled=${!receiver.boxUrl || (state && state.busy)} onClick=${check}>${state && state.busy ? 'Checking…' : 'Check'}<//>
+    ${state && state.error && html`<span class="text-bad">${state.error}</span>`}
+    ${r &&
+    html`<span class="hint">
+      <b>${r.channel || 'Nothing on'}</b>${r.now ? ` · Now ${r.now.time} ${r.now.title}` : ''}${r.next ? ` · Next ${r.next.time} ${r.next.title}` : ''}
+      ${r.channels != null ? ` · ${r.channels} channels listed` : ''}
+      ${r.favourites.length ? ` · favourites found: ${r.favourites.filter((f) => f.found).length} of ${r.favourites.length}` : ''}
+    </span>`}
+  </div>`;
+}
+
 function ReceiverCard({ room, set }) {
-  const r = room.receiver || { name: 'Receiver', mediaPlayerEntity: '', channels: [] };
+  const r = room.receiver || { name: 'Receiver', mediaPlayerEntity: '', boxUrl: '', channels: [] };
   const entity = useEntity(r.mediaPlayerEntity);
   const sources = (entity && entity.capabilities && entity.capabilities.sources) || [];
   const listId = `rx-sources-${room.slug || 'room'}`;
+  const hasBox = Boolean(r.boxUrl);
   return html`<${Card} icon="satellite-variant" title="Receiver" subtitle="An Enigma2 box (Vu+, Dreambox, …) through Home Assistant's Enigma2 integration.">
     <div class="row">
       <${Field} label="Media player"><${EntityPicker} domains=${['media_player']} value=${r.mediaPlayerEntity} onChange=${(id, e) => set(['receiver'], { ...r, mediaPlayerEntity: id, name: r.name && r.name !== 'Receiver' ? r.name : (e && e.name) || r.name })} /><//>
       <${Field} label="Name on the page"><${TextInput} value=${r.name} placeholder="Receiver" onInput=${(v) => set(['receiver', 'name'], v)} /><//>
     </div>
-    <${Field} label="Favourite channels" hint=${`Up to six buttons. The channel is its name as the box lists it${sources.length ? ` — pick from the ${sources.length} it reports` : ''}. The icon is optional.`}>
+    <${Field} label="Box address (optional)" hint="The box's own web interface (OpenWebif). With it, the page also shows the programme on next, and favourites can show the channel's picon. It stays on this server: remotes never see it.">
+      <div class="row" style="align-items:center">
+        <div style="flex:1"><${TextInput} value=${r.boxUrl || ''} placeholder="http://192.168.1.50  (or http://root:password@vu.local)" onInput=${(v) => set(['receiver', 'boxUrl'], v)} /></div>
+      </div>
+      <${BoxCheck} receiver=${r} />
+    <//>
+    <p class="hint">The channel on now shows its picon too: from the box with an address, else from Home Assistant when its Enigma2 integration has "Use channel icon" on.</p>
+    <${Field} label="Favourite channels" hint=${`Up to six buttons. The channel is its name as the box lists it${sources.length ? ` — pick from the ${sources.length} it reports` : ''}. The icon is optional${hasBox ? ', or use the channel’s own picon' : ''}.`}>
       <datalist id=${listId}>${sources.map((src) => html`<option value=${src} />`)}</datalist>
       <${ItemList}
         items=${r.channels || []}
@@ -242,7 +272,7 @@ function ReceiverCard({ room, set }) {
         max=${6}
         addLabel="Add channel"
         empty="No favourites yet. Channel up/down, volume and power work without any."
-        newItem=${() => ({ id: newItemId(), name: '', source: '', icon: '' })}
+        newItem=${() => ({ id: newItemId(), name: '', source: '', icon: '', usePicon: hasBox })}
         render=${(it, upd) => html`<div class="row" style="align-items:flex-end">
           <${IconPicker} value=${it.icon} title="Icon (optional)" onChange=${(icon) => upd({ ...it, icon })} />
           <${Field} label="Channel">
@@ -250,7 +280,8 @@ function ReceiverCard({ room, set }) {
               onInput=${(e) => upd({ ...it, source: e.target.value, name: !it.name || it.name === it.source ? e.target.value : it.name })} />
           <//>
           <${Field} label="Label"><${TextInput} value=${it.name} placeholder="BBC One" onInput=${(v) => upd({ ...it, name: v })} /><//>
-        </div>`}
+        </div>
+        ${hasBox && html`<${Toggle} checked=${Boolean(it.usePicon)} onChange=${(v) => upd({ ...it, usePicon: v })} label="Use the channel’s picon from the box (instead of the icon)" />`}`}
       />
     <//>
   <//>`;
