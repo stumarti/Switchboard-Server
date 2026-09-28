@@ -3,7 +3,8 @@
 //   Carousel     how it moves between screens: stay put (buttons only), auto-
 //                advance, or return to the first screen, every N minutes
 //   Screens      the pages, as cards: drag to reorder, switch off, duplicate,
-//                add (a sections screen or a meeting room)
+//                add (a sections screen, a meeting room, or a room finder —
+//                the other rooms that are free)
 //   The screen   its template (sidebar | two columns | single) and, per
 //                column, its sections — any type, any order, each fully
 //                configured — with a live preview beside it
@@ -121,7 +122,20 @@ function newSection(type) {
 
 function newScreen(kind) {
   if (kind === 'meetingRoom') {
-    return { id: newId(), title: 'Meeting room', enabled: true, kind, meeting: { calendar: '', name: '', occupancy: '', hideTitles: false, soonMin: 10, emptyMin: 10, upcoming: 4 } };
+    return {
+      id: newId(), title: 'Meeting room', enabled: true, kind,
+      meeting: {
+        calendar: '', name: '', occupancy: '', hideTitles: false, soonMin: 10, emptyMin: 10, upcoming: 4,
+        freeIcon: 'door-open', occupiedIcon: 'account-group', timelineHours: 2,
+        climate: { show: false, temperature: '', humidity: '', co2: '' }
+      }
+    };
+  }
+  if (kind === 'roomFinder') {
+    return {
+      id: newId(), title: 'Other rooms', enabled: true, kind,
+      finder: { rooms: [], showBusy: true, soonMin: 10, emptyMin: 10, freeIcon: 'door-open', occupiedIcon: 'account-group' }
+    };
   }
   return { id: newId(), title: 'New screen', enabled: true, kind: 'sections', template: 'sidebar', columns: [[], []] };
 }
@@ -597,9 +611,31 @@ function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId }) {
   </div>`;
 }
 
+const SCREEN_KIND_META = {
+  meetingRoom: { icon: 'calendar-account-outline', label: 'Meeting room' },
+  roomFinder: { icon: 'door-sliding-open', label: 'Room finder' }
+};
+
+const TIMELINE_CHOICES = [
+  { value: '0', label: 'Off' },
+  { value: '1', label: 'Next hour' },
+  { value: '2', label: 'Next 2 hours' },
+  { value: '3', label: 'Next 3 hours' }
+];
+
+// Free / in use icons: the meeting room's status bar and the room finder's rows.
+function StatusIconsFields({ m, set }) {
+  return html`<div class="row">
+    <${Field} label="Free icon"><${IconPicker} value=${m.freeIcon} onChange=${(v) => set('freeIcon', v || 'door-open')} /><//>
+    <${Field} label="In use icon"><${IconPicker} value=${m.occupiedIcon} onChange=${(v) => set('occupiedIcon', v || 'account-group')} /><//>
+  </div>`;
+}
+
 function MeetingEditor({ screen, setScreen }) {
   const m = screen.meeting;
   const set = (k, v) => setScreen({ ...screen, meeting: { ...m, [k]: v } });
+  const cl = m.climate || { show: false, temperature: '', humidity: '', co2: '' };
+  const setCl = (k, v) => set('climate', { ...cl, [k]: v });
   return html`<div class="grid">
     <${Card} icon="calendar-account-outline" title="Room" subtitle="A whole screen for one room's bookings — for a display by a conference room door.">
       <${Field} label="Room calendar" hint="Any Home Assistant calendar: Google, Outlook/Exchange, CalDAV…"><${EntityPicker} domains=${['calendar']} value=${m.calendar} onChange=${(id, e) => setScreen({ ...screen, meeting: { ...m, calendar: id, name: m.name || (e && e.name) || '' } })} /><//>
@@ -612,6 +648,77 @@ function MeetingEditor({ screen, setScreen }) {
         <${Field} label="“Starting soon” (min before)"><${NumberInput} min="0" max="60" value=${m.soonMin} onChange=${(v) => set('soonMin', v)} /><//>
         <${Field} label="“No one here” after (min)"><${NumberInput} min="0" max="60" value=${m.emptyMin} onChange=${(v) => set('emptyMin', v)} /><//>
         <${Field} label="Later meetings shown"><${NumberInput} min="0" max="8" value=${m.upcoming} onChange=${(v) => set('upcoming', v)} /><//>
+      </div>
+    <//>
+    <${Card} icon="view-agenda-outline" title="Status bar" subtitle="The icon beside Available / In use, and a timeline of the next hours under the bar.">
+      <${StatusIconsFields} m=${m} set=${set} />
+      <${Field} label="Timeline under the bar" hint="Bookings as blocks. It moves on each quarter hour, when the display wakes.">
+        <${Select} value=${String(m.timelineHours ?? 2)} onChange=${(v) => set('timelineHours', Number(v))} options=${TIMELINE_CHOICES} />
+      <//>
+    <//>
+    <${Card} icon="thermometer" title="Room climate" subtitle="Temperature, humidity and CO2 in the bottom-right corner.">
+      <${Toggle} checked=${cl.show} onChange=${(v) => setCl('show', v)} label="Show the room's climate" />
+      ${cl.show &&
+      html`<${Field} label="Temperature" hint="A thermostat or a temperature sensor."><${EntityPicker} domains=${['climate', 'sensor']} value=${cl.temperature} onChange=${(id) => setCl('temperature', id)} /><//>
+        <div class="row">
+          <${Field} label="Humidity (optional)" hint="A thermostat's own humidity is used if it has one."><${EntityPicker} domains=${['sensor']} value=${cl.humidity} onChange=${(id) => setCl('humidity', id)} /><//>
+          <${Field} label="CO2 (optional)" hint="Yellow from 1000 ppm, red from 1500."><${EntityPicker} domains=${['sensor']} value=${cl.co2} onChange=${(id) => setCl('co2', id)} /><//>
+        </div>`}
+    <//>
+  </div>`;
+}
+
+// The other rooms, and whether a busy one is listed at all.
+function FinderEditor({ screen, setScreen, layout }) {
+  const f = screen.finder;
+  const set = (k, v) => setScreen({ ...screen, finder: { ...f, [k]: v } });
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  // Every meeting-room sign's room, except this layout's own and any listed.
+  const importSigns = () => {
+    setBusy(true);
+    api('/api/dashboards')
+      .then((list) => {
+        const own = new Set(layout.screens.filter((x) => x.kind === 'meetingRoom').map((x) => x.meeting.calendar));
+        const have = new Set(f.rooms.map((r) => r.calendar));
+        const added = [];
+        for (const d of list) {
+          for (const r of d.meetingRooms || []) {
+            if (own.has(r.calendar) || have.has(r.calendar)) continue;
+            have.add(r.calendar);
+            added.push({ id: newId(), calendar: r.calendar, name: r.name, occupancy: r.occupancy });
+          }
+        }
+        set('rooms', [...f.rooms, ...added].slice(0, 12));
+        setNote(added.length ? `Added ${added.length} room${added.length === 1 ? '' : 's'}.` : 'No other meeting-room signs to add.');
+      })
+      .catch((e) => setNote(e.message))
+      .finally(() => setBusy(false));
+  };
+  return html`<div class="grid">
+    <${Card} icon="door-sliding-open" title="Rooms" subtitle="Each by its calendar. Free rooms are listed first, the longest free at the top."
+      actions=${html`<${Button} small icon="import" disabled=${busy} onClick=${importSigns}>Add the other meeting-room signs<//>`}>
+      ${note && html`<p class="hint">${note}</p>`}
+      <${ItemList}
+        items=${f.rooms}
+        onChange=${(l) => set('rooms', l)}
+        max=${12}
+        addLabel="Add room"
+        empty="No rooms yet. Add them one by one, or from the other meeting-room signs."
+        newItem=${() => ({ id: newId(), calendar: '', name: '', occupancy: '' })}
+        render=${(it, upd) => html`<div class="row">
+          <${Field} label="Calendar"><${EntityPicker} domains=${['calendar']} value=${it.calendar} onChange=${(id, e) => upd({ ...it, calendar: id, name: it.name || (e && e.name) || '' })} /><//>
+          <${Field} label="Name"><${TextInput} value=${it.name} placeholder="Boardroom" onInput=${(v) => upd({ ...it, name: v })} /><//>
+          <${Field} label="Occupancy (optional)"><${EntityPicker} domains=${['binary_sensor']} value=${it.occupancy} onChange=${(id) => upd({ ...it, occupancy: id })} /><//>
+        </div>`}
+      />
+    <//>
+    <${Card} icon="tune-variant" title="Options" subtitle="Meeting titles are never shown here.">
+      <${Toggle} checked=${f.showBusy} onChange=${(v) => set('showBusy', v)} label="List busy rooms too (after the free ones)" />
+      <${StatusIconsFields} m=${f} set=${set} />
+      <div class="row">
+        <${Field} label="“Starting soon” (min before)"><${NumberInput} min="0" max="60" value=${f.soonMin} onChange=${(v) => set('soonMin', v)} /><//>
+        <${Field} label="“No one here” after (min)"><${NumberInput} min="0" max="60" value=${f.emptyMin} onChange=${(v) => set('emptyMin', v)} /><//>
       </div>
     <//>
   </div>`;
@@ -630,9 +737,10 @@ function ScreensCard({ screens, selected, onSelect, onChange, useDragOrder }) {
   return html`<${Card} icon="view-carousel-outline" title="Screens" subtitle="The pages the left/right buttons step through. Drag to reorder; click one to edit it."
     actions=${html`<${Button} small icon="plus" disabled=${screens.length >= 12} onClick=${() => setAdding(!adding)}>Add screen<//>`}>
     ${adding &&
-    html`<div class="section-palette" style="grid-template-columns:1fr 1fr">
+    html`<div class="section-palette" style="grid-template-columns:1fr 1fr 1fr">
       <button type="button" class="palette-item" onClick=${() => add('sections')}><${Icon} name="view-dashboard-edit-outline" size=${26} /><span><b>Sections</b><br /><span class="hint">Pick an arrangement and fill it with any sections</span></span></button>
-      <button type="button" class="palette-item" onClick=${() => add('meetingRoom')}><${Icon} name="calendar-account-outline" size=${26} /><span><b>Meeting room</b><br /><span class="hint">Free / in use, current and next meetings</span></span></button>
+      <button type="button" class="palette-item" onClick=${() => add('meetingRoom')}><${Icon} name="calendar-account-outline" size=${26} /><span><b>Meeting room</b><br /><span class="hint">Free / in use, a timeline, current and next meetings</span></span></button>
+      <button type="button" class="palette-item" onClick=${() => add('roomFinder')}><${Icon} name="door-sliding-open" size=${26} /><span><b>Room finder</b><br /><span class="hint">Which other rooms are free now</span></span></button>
     </div>`}
     <div class="carousel">
       ${screens.map((s, i) => {
@@ -644,9 +752,9 @@ function ScreensCard({ screens, selected, onSelect, onChange, useDragOrder }) {
             <span class="spacer"></span>
             <${Toggle} checked=${s.enabled} onChange=${(v) => onChange(screens.map((x, j) => (j === i ? { ...x, enabled: v } : x)))} />
           </div>
-          <div class="pc-screen"><${Icon} name=${s.kind === 'meetingRoom' ? 'calendar-account-outline' : (TEMPLATES.find((t) => t.value === s.template) || TEMPLATES[0]).icon} size=${36} /></div>
+          <div class="pc-screen"><${Icon} name=${SCREEN_KIND_META[s.kind] ? SCREEN_KIND_META[s.kind].icon : (TEMPLATES.find((t) => t.value === s.template) || TEMPLATES[0]).icon} size=${36} /></div>
           <div class="pc-title">${s.title || 'Untitled'}</div>
-          <div class="pc-sub">${s.kind === 'meetingRoom' ? 'Meeting room' : `${count} section${count === 1 ? '' : 's'}`}</div>
+          <div class="pc-sub">${s.kind === 'roomFinder' ? `${s.finder.rooms.length} room${s.finder.rooms.length === 1 ? '' : 's'}` : SCREEN_KIND_META[s.kind] ? SCREEN_KIND_META[s.kind].label : `${count} section${count === 1 ? '' : 's'}`}</div>
           <div class="pc-move" onClick=${(e) => e.stopPropagation()}>
             <${Button} kind="ghost" small icon="chevron-left" title="Move left" disabled=${i === 0} onClick=${() => onChange(moveItem(screens, i, i - 1))} />
             <${Button} kind="ghost" small icon="content-copy" title="Duplicate" disabled=${screens.length >= 12} onClick=${() => {
@@ -805,7 +913,7 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder }) {
       setOpenId(null);
     }} onChange=${setScreens} useDragOrder=${useDragOrder} />
     ${screen &&
-    html`<${Card} icon=${screen.kind === 'meetingRoom' ? 'calendar-account-outline' : 'view-dashboard-edit-outline'}
+    html`<${Card} icon=${SCREEN_KIND_META[screen.kind] ? SCREEN_KIND_META[screen.kind].icon : 'view-dashboard-edit-outline'}
         title=${html`<input type="text" class="inline-title" value=${screen.title} onInput=${(e) => setScreen({ ...screen, title: e.target.value })} />`}
         subtitle="Live preview from Home Assistant, including unsaved changes."
         actions=${html`${preview.loading && html`<${Badge} icon="refresh">Updating<//>`}${errors.length > 0 && html`<${Badge} kind="warn" icon="alert-outline">${errors.length} couldn't load<//>`}`}>
@@ -815,6 +923,8 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder }) {
       <//>
       ${screen.kind === 'meetingRoom'
         ? html`<${MeetingEditor} screen=${screen} setScreen=${setScreen} />`
+        : screen.kind === 'roomFinder'
+        ? html`<${FinderEditor} screen=${screen} setScreen=${setScreen} layout=${layout} />`
         : html`<${SectionsScreenEditor} screen=${screen} setScreen=${setScreen} ctx=${ctx} openId=${openId} setOpenId=${setOpenId} />`}`}
     <${SettingsCard} layout=${layout} onChange=${onChange} />
   </div>`;

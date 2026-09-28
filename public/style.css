@@ -603,8 +603,25 @@ textarea { min-height: 70px; font-family: ui-monospace, monospace; font-size: 12
 .wake-note { display: flex; gap: 6px; align-items: flex-start; }
 .vp-erow { display: flex; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid #ddd; }
 .vp-erow:last-child { border-bottom: 0; }
-.vp-meeting { display: flex; flex-direction: column; height: 480px; }
-.vp-meeting-band { color: #fff; padding: 22px 28px; display: flex; flex-direction: column; gap: 4px; }
+.vp-meeting { position: relative; display: flex; flex-direction: column; height: 480px; }
+.vp-meeting-band { color: #fff; padding: 20px 28px; display: flex; align-items: center; gap: 24px; }
+.vp-meeting-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.vp-timeline { padding: 12px 28px 0; }
+.vp-tl-bar { position: relative; height: 34px; border: 2px solid #111; background: #fff; }
+.vp-tl-block { position: absolute; top: 0; bottom: 0; color: #fff; overflow: hidden; border-right: 2px solid #fff; }
+.vp-tl-block span { display: block; padding: 6px 8px; font-size: 14px; font-weight: 700; white-space: nowrap; }
+.vp-tl-ticks { position: relative; height: 20px; }
+.vp-tl-tick { position: absolute; top: 2px; transform: translateX(-50%); font-size: 13px; font-weight: 600; }
+.vp-tl-tick:first-child { transform: none; }
+.vp-tl-tick:last-child { transform: translateX(-100%); }
+.vp-meeting-body.with-climate { padding-right: 200px; }
+.vp-meeting-climate { position: absolute; right: 28px; bottom: 18px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.vp-finder { display: flex; flex-direction: column; gap: 8px; padding: 22px 28px; height: 480px; }
+.vp-finder-head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 3px solid #111; padding-bottom: 8px; }
+.vp-finder-row { display: flex; align-items: center; gap: 16px; padding: 6px 0; border-bottom: 1px solid #ddd; }
+.vp-finder-icon { color: #fff; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; flex: none; }
+.vp-finder-name { font-size: 24px; font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-finder-status { display: flex; flex-direction: column; align-items: flex-end; }
 .vp-meeting-name { font-size: 22px; font-weight: 600; opacity: 0.9; }
 .vp-meeting-status { font-size: 56px; font-weight: 800; line-height: 1.05; }
 .vp-meeting-until { font-size: 22px; font-weight: 600; }

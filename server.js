@@ -419,6 +419,10 @@ function dashboardSummary(d) {
     name: d.name,
     updatedAt: d.updatedAt || null,
     screens: layout.screens.map((sc) => ({ title: sc.title, kind: sc.kind, enabled: sc.enabled })),
+    // Its meeting rooms, so another sign's room finder can list them.
+    meetingRooms: layout.screens
+      .filter((sc) => sc.kind === 'meetingRoom' && sc.meeting.calendar)
+      .map((sc) => ({ calendar: sc.meeting.calendar, name: sc.meeting.name, occupancy: sc.meeting.occupancy })),
     devices: devices.map((x) => ({ mac: x.mac, name: x.name }))
   };
 }
