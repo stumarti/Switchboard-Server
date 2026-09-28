@@ -10,6 +10,7 @@ import {
 } from './lib.js';
 import { EntityPicker, IconPicker } from './pickers.js';
 import { ItemList } from './rooms.js';
+import { DashboardBuilder } from './viewport.js';
 
 const TYPE_META = {
   remote: { section: 'remotes', icon: 'remote', title: 'Remotes', one: 'remote' },
@@ -312,85 +313,6 @@ function HubBuilder({ hub, onChange }) {
   <//>`;
 }
 
-// --- Viewport: tile board ------------------------------------------------------------------
-
-const TILE_META = {
-  clock: { label: 'Clock', icon: 'clock-outline', domains: null },
-  weather: { label: 'Weather', icon: 'weather-partly-cloudy', domains: ['weather'] },
-  forecast: { label: 'Forecast', icon: 'calendar-week', domains: ['weather'] },
-  climate: { label: 'Climate', icon: 'thermostat', domains: ['climate'] },
-  lights: { label: 'Lights', icon: 'lightbulb-group-outline', domains: ['light'] },
-  blinds: { label: 'Blinds', icon: 'blinds', domains: ['cover'] },
-  media: { label: 'Now playing', icon: 'music-circle-outline', domains: ['media_player'] },
-  sensor: { label: 'Sensor', icon: 'gauge', domains: ['sensor', 'binary_sensor'] }
-};
-const SIZES = [
-  { value: 'small', label: 'Small', icon: 'square-outline' },
-  { value: 'wide', label: 'Wide', icon: 'rectangle-outline' },
-  { value: 'large', label: 'Large', icon: 'checkbox-blank-outline' }
-];
-
-function TileBoard({ tiles, onChange }) {
-  const [sel, setSel] = useState(null);
-  const { props, cls } = useDragOrder(tiles, (next) => {
-    const moved = sel !== null ? next.indexOf(tiles[sel]) : null;
-    onChange(next);
-    setSel(moved);
-  });
-  const add = (type) => {
-    onChange([...tiles, { type, size: 'small', entity: '', title: '' }]);
-    setSel(tiles.length);
-  };
-  const t = sel !== null ? tiles[sel] : null;
-  const upd = (next) => onChange(tiles.map((x, i) => (i === sel ? next : x)));
-  return html`<${Card} icon="view-dashboard-outline" title="Screen" subtitle="Tiles fill the display left to right, top to bottom. Drag to reorder; click one to edit it.">
-    <div class="tiles">
-      ${tiles.map((tile, i) => {
-        const m = TILE_META[tile.type] || { label: tile.type, icon: 'card-outline' };
-        return html`<div class=${`tile size-${tile.size} ${sel === i ? 'selected' : ''} ${cls(i)}`} key=${i} onClick=${() => setSel(i)} ...${props(i)}>
-          <span class="t-icon"><${Icon} name=${m.icon} size=${tile.size === 'large' ? 44 : 28} /></span>
-          <span class="t-title">${tile.title || m.label}</span>
-          <span class="t-sub">${tile.entity || (m.domains ? "Room's default" : '')}</span>
-        </div>`;
-      })}
-    </div>
-    <${Field} label="Add a tile">
-      <div class="chips">
-        ${Object.entries(TILE_META).map(
-          ([type, m]) => html`<button type="button" class="chip" onClick=${() => add(type)}><${Icon} name=${m.icon} size=${15} />${m.label}</button>`
-        )}
-      </div>
-    <//>
-    ${t &&
-    html`<div class="item">
-      <div class="item-body">
-        <div class="row" style="align-items:center">
-          <${Icon} name=${TILE_META[t.type].icon} size=${22} />
-          <h3 style="flex:1">${TILE_META[t.type].label} tile</h3>
-          <${Button} kind="danger" small icon="trash-can-outline" onClick=${() => {
-            onChange(tiles.filter((_, i) => i !== sel));
-            setSel(null);
-          }}>Remove<//>
-        </div>
-        <${Field} label="Size">
-          <div class="chips">
-            ${SIZES.map(
-              (s) => html`<button type="button" class=${`chip ${t.size === s.value ? 'on' : ''}`} onClick=${() => upd({ ...t, size: s.value })}>
-                <${Icon} name=${s.icon} size=${15} />${s.label}
-              </button>`
-            )}
-          </div>
-        <//>
-        ${TILE_META[t.type].domains &&
-        html`<${Field} label="Entity" hint="Leave empty to use the room's own.">
-          <${EntityPicker} domains=${TILE_META[t.type].domains} value=${t.entity} onChange=${(id, e) => upd({ ...t, entity: id, title: t.title || (e && e.name) || '' })} />
-        <//>`}
-        <${Field} label="Title (optional)"><${TextInput} value=${t.title} onInput=${(v) => upd({ ...t, title: v })} /><//>
-      </div>
-    </div>`}
-  <//>`;
-}
-
 // --- Device page ------------------------------------------------------------------------------
 
 function useRoom(slug) {
@@ -460,6 +382,10 @@ function ClientEditor({ client, rooms, reloadClients }) {
             ? html`<${Badge} kind=${onlineKind(client) === 'ok' ? 'ok' : ''} icon="access-point">Seen ${timeAgo(client.lastSeenAt)}<//>`
             : html`<${Badge} kind="bad" icon="cancel">Revoked<//>`}
           <${Badge} icon="ip-network-outline">${client.lastIp || '—'}<//>
+          ${client.health && client.health.battery != null && html`<${Badge} kind=${client.health.battery <= 15 ? 'bad' : ''} icon="battery-outline">${client.health.battery}%<//>`}
+          ${client.health && client.health.temperature != null && html`<${Badge} icon="thermometer">${client.health.temperature}°<//>`}
+          ${client.health && client.health.rssi != null && html`<${Badge} icon="wifi">${client.health.rssi} dBm<//>`}
+          ${client.health && client.health.firmware && html`<${Badge} icon="chip">fw ${client.health.firmware}<//>`}
           <${Badge} icon="chip">${client.mac}<//>
           ${client.layoutCustomized ? html`<${Badge} kind="accent" icon="pencil-outline">Own layout<//>` : html`<${Badge} icon="content-copy">Room defaults<//>`}
         </div>
@@ -471,7 +397,7 @@ function ClientEditor({ client, rooms, reloadClients }) {
     </div>
     <div class="stack">
       <div class="grid">
-        <${Card} icon="sofa-outline" title="Room" subtitle=${`Which room's entities this ${meta.one} shows.`}>
+        <${Card} icon="sofa-outline" title="Room" subtitle=${client.type === 'viewport' ? 'Optional: the room this display hangs in.' : `Which room's entities this ${meta.one} shows.`}>
           <${Select} value=${draft.room} onChange=${(v) => set('room', v)}
             options=${[{ value: '', label: 'No room' }, ...(rooms || []).map((r) => ({ value: r.slug, label: r.name }))]} />
           ${draft.room && html`<a href=${`#/rooms/${encodeURIComponent(draft.room)}`} class="hint"><${Icon} name="open-in-new" size=${14} /> Edit this room's entities</a>`}
@@ -484,7 +410,7 @@ function ClientEditor({ client, rooms, reloadClients }) {
       ${client.type === 'remote'
         ? html`<${CarouselBuilder} carousel=${draft.layout.carousel} onChange=${(c) => setLayout('carousel', c)} room=${room} roomSlug=${draft.room} />
             <${HubBuilder} hub=${draft.layout.hub} onChange=${(h) => setLayout('hub', h)} />`
-        : html`<${TileBoard} tiles=${draft.layout.tiles} onChange=${(t) => setLayout('tiles', t)} />`}
+        : html`<${DashboardBuilder} mac=${client.mac} layout=${draft.layout} onChange=${(l) => set('layout', l)} rooms=${rooms} useDragOrder=${useDragOrder} />`}
       <${Card} icon="wrench-outline" title="Manage">
         <div class="row">
           ${client.layoutCustomized && html`<${Button} icon="restore" onClick=${() => act('reset')}>Reset layout<//>`}

@@ -10,7 +10,7 @@ import { EntityPicker, IconPicker, useHaStatus } from './pickers.js';
 
 // --- A reorderable list of items (lights, scenes, blinds, sensors, games) ---
 
-export function ItemList({ items, onChange, newItem, addLabel = 'Add', render, empty }) {
+export function ItemList({ items, onChange, newItem, addLabel = 'Add', render, empty, max }) {
   const list = items || [];
   const update = (i, next) => onChange(list.map((it, j) => (j === i ? next : it)));
   return html`<div class="items">
@@ -25,7 +25,10 @@ export function ItemList({ items, onChange, newItem, addLabel = 'Add', render, e
         </div>
       </div>`
     )}
-    <div><${Button} small icon="plus" onClick=${() => onChange([...list, newItem()])}>${addLabel}<//></div>
+    <div>
+      <${Button} small icon="plus" disabled=${max != null && list.length >= max} onClick=${() => onChange([...list, newItem()])}>${addLabel}<//>
+      ${max != null && list.length >= max && html`<span class="hint"> (${max} at most)</span>`}
+    </div>
   </div>`;
 }
 

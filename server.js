@@ -60,6 +60,8 @@ const auth = require('./lib/auth');
 const pairing = require('./lib/pairing');
 const haState = require('./lib/ha-state');
 const clients = require('./lib/clients');
+const dashboard = require('./lib/dashboard');
+const dashboardState = require('./lib/dashboard-state');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
 const fontsCompiler = require('./lib/assets/fonts');
@@ -248,10 +250,129 @@ app.get('/api/clients/schema', auth.requireAdminSession, (req, res) => {
   res.json({
     types: clients.CLIENT_TYPES,
     remotePages: clients.REMOTE_PAGES.map((p) => p.id),
-    viewportTileTypes: clients.VIEWPORT_TILE_TYPES,
-    viewportTileSizes: clients.VIEWPORT_TILE_SIZES,
+    viewportScreens: dashboard.SCREENS,
+    dashboardColors: dashboard.COLORS,
+    dashboardConditions: dashboard.CONDITIONS,
+    dashboardLimits: dashboard.LIMITS,
     refreshChoices: clients.REFRESH_CHOICES
   });
+});
+
+// --- Viewports (the colour wall display's dashboard) ----------------------
+//
+// A viewport device calls these with its own token, as `me` (or its own
+// MAC); the admin UI calls them for any viewport. Two requests per wake,
+// like a remote: the bundle (its layout, plus the Wi-Fi networks and clock
+// server; Express answers an unchanged one with a bodyless 304) and the
+// state — every screen's finished values, each with its own ETag, so the
+// device can skip the panel refresh for a screen that hasn't changed.
+
+// The viewport a request is about, or null after answering the error.
+function viewportFor(req, res) {
+  const param = String(req.params.mac || '');
+  if (req.device) {
+    if (param !== 'me' && store.normalizeMac(param) !== req.device.mac) {
+      res.status(403).json({ error: 'a device can only read its own viewport' });
+      return null;
+    }
+    return req.device;
+  }
+  const d = store.getDevices()[store.normalizeMac(param)];
+  if (!d) {
+    res.status(404).json({ error: 'no such device' });
+    return null;
+  }
+  return d;
+}
+
+// Battery %, panel temperature, Wi-Fi signal and firmware, as the device
+// reports them on every request.
+function noteViewportHealth(req, device) {
+  if (!req.device) return;
+  pairing.recordHealth(device.mac, {
+    battery: req.get('X-Battery'),
+    temperature: req.get('X-Temperature'),
+    rssi: req.get('X-RSSI'),
+    firmware: req.get('X-Firmware')
+  });
+}
+
+app.get('/api/viewports/:mac/bundle', auth.requireAdminOrDevice, (req, res) => {
+  const device = viewportFor(req, res);
+  if (!device) return;
+  noteViewportHealth(req, device);
+  const globals = store.getGlobals();
+  res.json({
+    name: device.name,
+    mac: device.mac,
+    layout: clients.layoutFor({ ...device, type: 'viewport' }),
+    wifiNetworks: globals.wifiNetworks || [],
+    ntpServer: globals.ntpServer || 'pool.ntp.org',
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+  });
+});
+
+async function viewportScreens(layout) {
+  const inputs = await dashboardState.fetchInputs(layout, store.getGlobals());
+  const screens = dashboardState.buildScreens(layout, inputs);
+  return { screens, errors: inputs.errors, generatedAt: inputs.now.toISOString() };
+}
+
+function haError(res, e) {
+  res.status(e.code === 'NO_HA' ? 409 : 502).json({ error: e.message });
+}
+
+// ?screen=main -> that screen alone ({screen, etag, data}), with an ETag
+// header and a bodyless 304 when it matches If-None-Match. No `screen` ->
+// every screen at once, each with its etag, for a device that caches them
+// all so page turns need no network.
+app.get('/api/viewports/:mac/state', auth.requireAdminOrDevice, async (req, res) => {
+  const device = viewportFor(req, res);
+  if (!device) return;
+  noteViewportHealth(req, device);
+  const layout = clients.layoutFor({ ...device, type: 'viewport' });
+  const refreshInSec = layout.refreshIntervalMin * 60;
+  try {
+    const { screens, errors, generatedAt } = await viewportScreens(layout);
+    const wanted = req.query.screen ? String(req.query.screen) : '';
+    if (wanted) {
+      if (!dashboard.SCREENS.includes(wanted)) return res.status(400).json({ error: 'unknown screen' });
+      const etag = dashboardState.screenEtag(screens[wanted]);
+      res.set('ETag', etag);
+      res.set('Cache-Control', 'no-cache');
+      if (req.get('If-None-Match') === etag) return res.status(304).end();
+      return res.json({ screen: wanted, etag, refreshInSec, generatedAt, data: screens[wanted] });
+    }
+    const out = {};
+    for (const sid of dashboard.SCREENS) out[sid] = { etag: dashboardState.screenEtag(screens[sid]), data: screens[sid] };
+    res.json({ refreshInSec, generatedAt, errors, screens: out });
+  } catch (e) {
+    haError(res, e);
+  }
+});
+
+// The admin UI's live preview: the state an unsaved layout would produce.
+app.post('/api/viewports/:mac/preview', auth.requireAdminSession, async (req, res) => {
+  const device = viewportFor(req, res);
+  if (!device) return;
+  try {
+    const layout = dashboard.normalizeLayout(req.body && req.body.layout);
+    res.json(await viewportScreens(layout));
+  } catch (e) {
+    haError(res, e);
+  }
+});
+
+// The kitchen panel's own settings (its GET /api/config JSON) as a layout,
+// for the admin UI to review and save.
+app.post('/api/viewports/import', auth.requireAdminSession, (req, res) => {
+  const config = req.body && req.body.config;
+  if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config (the panel\'s /api/config JSON) is required' });
+  res.json({ layout: dashboard.fromKitchenPanel(config) });
+});
+
+app.get('/api/viewports/defaults', auth.requireAdminSession, (req, res) => {
+  res.json({ layout: dashboard.defaultLayout() });
 });
 
 // --- Theme (compiled icon/font packs a paired device downloads) ---------
