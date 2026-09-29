@@ -241,6 +241,17 @@ export function useDragOrder(list, onChange) {
   return { props, cls };
 }
 
+// The Refresh card's "on the clock" switch (room editor and a customised remote).
+const MARKS = { 5: ':00, :05, :10 …', 10: ':00, :10, :20 …', 15: ':00, :15, :30 and :45', 30: ':00 and :30', 60: 'on the hour' };
+export function ClockAlign({ checked, minutes, onChange }) {
+  return html`<div style="margin-top:12px">
+    <${Toggle} checked=${checked} onChange=${onChange} label="On the clock" />
+    <p class="hint">${checked
+      ? `Refreshes at ${MARKS[minutes] || 'the marks'} (server time), not ${minutes} minutes after the remote last slept. Each remote is 7 seconds later than the one before, so they don't all ask the server at once.`
+      : `Each remote refreshes ${minutes} minutes after it last went to sleep.`}</p>
+  </div>`;
+}
+
 // `selected`/`onSelect` (the room editor): the cards double as a picker for
 // which page's settings show below, and `extras` adds cards after the pages
 // for settings that aren't a page ({id, label, icon, sub}).
@@ -472,6 +483,8 @@ function ClientEditor({ client, rooms, dashboards, reloadClients, reloadDashboar
             html`<${Card} icon="update" title="Refresh" subtitle="How often it wakes to fetch new state. Less often = longer battery.">
                 <${Select} value=${String(draft.layout.refreshIntervalMin)} onChange=${(v) => setLayout('refreshIntervalMin', Number(v))}
                   options=${REFRESH_CHOICES.map((n) => ({ value: String(n), label: REFRESH_LABELS[n] }))} />
+                <${ClockAlign} checked=${Boolean(draft.layout.refreshAligned)} minutes=${draft.layout.refreshIntervalMin}
+                  onChange=${(v) => setLayout('refreshAligned', v)} />
               <//>
               <${CarouselBuilder} carousel=${draft.layout.carousel} onChange=${(c) => setLayout('carousel', c)} room=${room} roomSlug=${draft.room} />
               <${HubBuilder} hub=${draft.layout.hub} onChange=${(h) => setLayout('hub', h)} />`}`

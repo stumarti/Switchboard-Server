@@ -82,3 +82,34 @@ test('receiver: an Enigma2 box with favourite channels; its page starts off', ()
   const layout = clients.layoutFor({ type: 'remote' }, normalizeProfile({ screens: { receiver: true } }, p));
   assert.equal(layout.carousel.find((c) => c.page === 'receiver').enabled, true);
 });
+
+test('refresh on the clock: the room and a customised remote carry it, with a stagger per remote', () => {
+  const { normalizeProfile } = require('../lib/validate');
+  const room = normalizeProfile({ name: 'Den', standby: { refreshIntervalMin: 30, refreshAligned: true } }, null);
+  assert.equal(room.standby.refreshAligned, true);
+  assert.equal(normalizeProfile({ name: 'Old' }, null).standby.refreshAligned, false);
+
+  const devices = {
+    'aa:00:00:00:00:03': { type: 'remote', status: 'approved' },
+    'aa:00:00:00:00:01': { type: 'remote', status: 'approved' },
+    'aa:00:00:00:00:02': { type: 'remote', status: 'pending' },
+    'aa:00:00:00:00:04': { type: 'viewport', status: 'approved' }
+  };
+  // Approved remotes in MAC order, 7 s apart; anything else gets none.
+  assert.equal(clients.staggerFor('aa:00:00:00:00:01', devices), 0);
+  assert.equal(clients.staggerFor('aa:00:00:00:00:03', devices), 7);
+  assert.equal(clients.staggerFor('aa:00:00:00:00:02', devices), 0);
+  const many = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`bb:${String(i).padStart(2, '0')}`, { type: 'remote', status: 'approved' }]));
+  assert.equal(clients.staggerFor('bb:29', many), 29 * 7); // no cap: every remote its own slot
+
+  const cfg = clients.composeDeviceConfig({ ...room, slug: 'den' }, { type: 'remote' }, { staggerSec: 14, utcOffsetMin: 60 });
+  assert.deepEqual(
+    [cfg.standby.refreshIntervalMin, cfg.standby.refreshAligned, cfg.standby.refreshStaggerSec, cfg.standby.utcOffsetMin],
+    [30, true, 14, 60]
+  );
+  // A remote customised on its own page keeps its own choice.
+  const own = clients.composeDeviceConfig({ ...room, slug: 'den' }, { type: 'remote', layoutCustomized: true, layout: { refreshIntervalMin: 15, refreshAligned: false } });
+  assert.equal(own.standby.refreshIntervalMin, 15);
+  assert.equal(own.standby.refreshAligned, false);
+  assert.equal(clients.utcOffsetMin(new Date('2026-01-15T12:00:00Z')), -new Date('2026-01-15T12:00:00Z').getTimezoneOffset());
+});
