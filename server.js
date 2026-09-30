@@ -1005,6 +1005,22 @@ app.put('/api/firmware/settings', auth.requireAdminSession, (req, res) => {
   }
 });
 
+// "Update now" (the Home page): every remote offered the release installs it
+// at its next wake, whatever the schedule. DELETE takes it back.
+app.post('/api/firmware/update-now', auth.requireAdminSession, (req, res) => {
+  try {
+    firmware.updateNow({ everyone: Boolean(req.body && req.body.everyone) });
+    res.json(firmware.summary(store.getDevices()));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/firmware/update-now', auth.requireAdminSession, (req, res) => {
+  firmware.cancelUpdateNow();
+  res.json(firmware.summary(store.getDevices()));
+});
+
 app.post('/api/firmware/upload', auth.requireAdminSession, express.raw({ type: 'application/octet-stream', limit: '8mb' }), (req, res) => {
   try {
     res.json({ build: firmware.addBuild(req.body, `upload ${new Date().toISOString().slice(0, 10)}`) });
@@ -1116,6 +1132,7 @@ app.get('/api/overview', auth.requireAdminSession, (req, res) => {
       ha: haMonitor.snapshot(),
       haConfigured: Boolean(haCfg.host && haCfg.token),
       updates: firmware.overview().settings.enabled ? firmware.status(store.getDevices()) : [],
+      updateSummary: firmware.summary(store.getDevices()),
       server: {
         version: APP_VERSION,
         startedAt: STARTED_AT.toISOString(),

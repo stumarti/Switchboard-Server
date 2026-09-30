@@ -129,3 +129,44 @@ test('firmware: your own GitHub repositories — listed, tidied, and the only on
   await assert.rejects(firmware.importLatest({ fetchImpl }), /Add a GitHub repository first/);
   firmware.updateSettings({ repos: ['stumarti/Switchboard'] });
 });
+
+test('firmware: "update now" — every remote due the release, at its next wake, until it has tried', () => {
+  firmware.updateSettings({ enabled: true, release: 'v0.2.0', stage: 'everyone', schedule: { enabled: false } });
+  const devices = { [PILOT]: { ...remote('v0.1.0'), mac: PILOT }, [OTHER]: { ...remote('v0.2.0'), mac: OTHER } };
+  assert.equal(firmware.configFor(PILOT, remote('v0.1.0')).now, false); // not pressed yet
+  assert.equal(firmware.summary(devices).pending, 1);
+
+  firmware.updateNow();
+  assert.equal(firmware.configFor(PILOT, remote('v0.1.0')).now, true); // with no schedule at all
+  assert.equal(firmware.configFor(OTHER, remote('v0.2.0')).now, false); // already on it
+  assert.deepEqual(firmware.summary(devices).now.waiting, 1);
+
+  // Once it has tried (here, failed), it isn't asked again every wake.
+  firmware.report(PILOT, { version: 'v0.2.0', from: 'v0.1.0', ok: false, error: 'checksum mismatch' });
+  assert.equal(firmware.configFor(PILOT, remote('v0.1.0')).now, false);
+  assert.equal(firmware.summary(devices).now.waiting, 0);
+
+  // Pressing again asks again; a new release, or Cancel, clears it.
+  firmware.updateNow();
+  assert.equal(firmware.configFor(PILOT, remote('v0.1.0')).now, true);
+  firmware.cancelUpdateNow();
+  assert.equal(firmware.configFor(PILOT, remote('v0.1.0')).now, false);
+  firmware.updateNow();
+  firmware.updateSettings({ release: 'v0.3.0' });
+  assert.equal(firmware.overview().settings.updateNow, null);
+
+  firmware.updateSettings({ enabled: false });
+  assert.throws(() => firmware.updateNow(), /off/);
+});
+
+test('firmware: "update now" can skip the pilot: the release goes to every remote', () => {
+  firmware.updateSettings({ enabled: true, release: 'v0.2.0' }); // with the pilots
+  firmware.updateSettings({ stage: 'pilot', pilot: [PILOT] });
+  const devices = { [PILOT]: { ...remote('v0.1.0'), mac: PILOT }, [OTHER]: { ...remote('v0.1.0'), mac: OTHER } };
+  const s = firmware.summary(devices);
+  assert.deepEqual([s.pending, s.pendingEveryone], [1, 2]);
+  firmware.updateNow({ everyone: true });
+  assert.equal(firmware.overview().settings.stage, 'everyone');
+  assert.equal(firmware.configFor(OTHER, remote('v0.1.0')).now, true);
+  assert.equal(firmware.summary(devices).now.waiting, 2);
+});
