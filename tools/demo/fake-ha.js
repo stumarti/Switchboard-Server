@@ -5,7 +5,8 @@
  * the manual's screenshots: lights, blinds, speakers, a TV, an Xbox, an
  * Enigma2 box, heating, solar and a home battery, calendars and departures.
  * It answers the REST calls Switchboard Server makes (states, forecasts,
- * history, calendars, album art) and nothing else.
+ * history, calendars, album art, and setting states for published battery
+ * sensors) and nothing else.
  *
  *   node tools/demo/fake-ha.js [port]      (default 48123, token "demo-token")
  */
@@ -230,7 +231,23 @@ http.createServer((req, res) => {
     if (url.pathname === '/api/config') return json({ location_name: 'Demo house', time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone, unit_system: { temperature: '°C' }, version: '2026.9.0' });
     if (url.pathname === '/api/states') return json(states);
     if (url.pathname.startsWith('/api/states/')) {
-      const st = byId[decodeURIComponent(url.pathname.slice(12))];
+      const id = decodeURIComponent(url.pathname.slice(12));
+      // Set or remove a state, as Switchboard's battery publishing does.
+      if (req.method === 'POST') {
+        const b = JSON.parse(body || '{}');
+        const st = S(id, String(b.state), b.attributes || {}, 0);
+        if (!byId[id]) states.push(st);
+        else states[states.indexOf(byId[id])] = st;
+        byId[id] = st;
+        return json(st, 201);
+      }
+      if (req.method === 'DELETE') {
+        if (!byId[id]) return json({ message: 'Entity not found.' }, 404);
+        states.splice(states.indexOf(byId[id]), 1);
+        delete byId[id];
+        return json({ message: 'Entity removed.' });
+      }
+      const st = byId[id];
       return st ? json(st) : json({ message: 'Entity not found.' }, 404);
     }
     if (url.pathname.startsWith('/api/services/weather/get_forecasts')) {

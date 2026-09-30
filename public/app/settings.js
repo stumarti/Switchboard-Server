@@ -2,7 +2,7 @@
 // connection, Wi-Fi, the clock, the theme (icon + font packs), sign out.
 
 import {
-  html, useState, useEffect, api, Icon, Card, Field, TextInput, SecretInput, Button, Badge, useFlash, useApi, setIn
+  html, useState, useEffect, api, Icon, Card, Field, TextInput, SecretInput, Button, Badge, useFlash, useApi, setIn, Toggle, timeAgo
 } from './lib.js';
 import { haStatus, useHaStatus, IconPickerModal, IconPreview } from './pickers.js';
 import { ItemList } from './rooms.js';
@@ -78,7 +78,31 @@ function HomeAssistantTab() {
         <${Button} icon="lan-connect" disabled=${testing || g.dirty} onClick=${test}>${testing ? 'Testing…' : 'Test'}<//>
       </div>
     <//>
+    <${PublishCard} g=${g} />
   </div>`;
+}
+
+// Battery sensors published back to Home Assistant (lib/ha-publish.js).
+function PublishCard({ g }) {
+  const on = Boolean((g.globals.homeAssistant || {}).publishBattery);
+  const [st, setSt] = useState(null);
+  const load = () => api('/api/ha/publish').then(setSt).catch(() => {});
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 10000);
+    return () => clearInterval(t);
+  }, []);
+  const entities = (st && st.entities) || [];
+  return html`<${Card} icon="battery-sync-outline" title="Battery in Home Assistant"
+    subtitle="Each remote's and viewport's battery, and the days it has left, as Home Assistant sensors."
+    actions=${st && st.enabled && (st.error ? html`<${Badge} kind="bad" icon="alert-circle-outline">Not publishing<//>` : st.lastSyncAt ? html`<${Badge} kind="ok" icon="check-circle-outline">Publishing<//>` : null)}>
+    <${Toggle} checked=${on} onChange=${(v) => g.set(['homeAssistant', 'publishBattery'], v)} label="Publish battery to Home Assistant" />
+    <p class="hint">Two sensors a device, such as <code>sensor.switchboard_kitchen_remote_battery</code> and <code>…_battery_days_left</code>, with its room, firmware and drain rate as attributes. Nothing to install in Home Assistant. It keeps them up to date and puts them back after Home Assistant restarts; switching this off removes them.</p>
+    ${st && st.enabled && st.error && html`<p class="hint" style="color:var(--bad)">${st.error}</p>`}
+    ${st && st.enabled && !st.error && st.lastSyncAt && html`<p class="hint">${entities.length} sensor${entities.length === 1 ? '' : 's'}, last sent ${timeAgo(st.lastSyncAt)}.</p>`}
+    ${entities.length > 0 && st.enabled && html`<details class="hint"><summary>Entities</summary><ul style="margin:6px 0 0;padding-left:18px">${entities.map((e) => html`<li><code>${e}</code></li>`)}</ul></details>`}
+    <${SaveBar} g=${g} after=${() => setTimeout(load, 7000)} />
+  <//>`;
 }
 
 function WifiTab() {

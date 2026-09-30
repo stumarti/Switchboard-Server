@@ -114,7 +114,7 @@ async function room(name, patch) {
 async function seed() {
   await api('POST', '/api/auth/setup', { password: PASSWORD }).catch(() => api('POST', '/api/auth/login', { password: PASSWORD }));
   await api('POST', '/api/globals', {
-    homeAssistant: { host: '127.0.0.1', port: HA_PORT, token: 'demo-token' },
+    homeAssistant: { host: '127.0.0.1', port: HA_PORT, token: 'demo-token', publishBattery: true },
     wifi: { ssid: 'Home', password: 'correct-horse' },
     wifiNetworks: [
       { name: 'Home', password: 'correct-horse' },
