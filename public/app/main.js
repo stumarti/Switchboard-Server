@@ -120,7 +120,25 @@ const SECTIONS = [
   { id: 'settings', label: 'Settings', icon: 'cog-outline' }
 ];
 
-function Rail({ section, pendingCount, alertCount }) {
+// The manual (GitHub Pages, beside the web flasher): the page for where you
+// are, so help opens on the thing you're looking at.
+const MANUAL = 'https://stumarti.github.io/Switchboard/manual/';
+const MANUAL_PAGES = {
+  home: 'server/home.html',
+  'remote-layouts': 'server/remote-layouts.html',
+  layouts: 'server/remote-layouts.html',
+  'viewport-layouts': 'server/viewports.html',
+  remotes: 'server/remotes.html',
+  viewports: 'server/viewports.html',
+  settings: 'server/settings.html'
+};
+const MANUAL_SETTINGS = { theme: 'server/theme.html', updates: 'server/remote-updates.html' };
+export function manualUrl({ section, id }) {
+  const page = (section === 'settings' && MANUAL_SETTINGS[id]) || MANUAL_PAGES[section] || '';
+  return MANUAL + page;
+}
+
+function Rail({ section, route, pendingCount, alertCount }) {
   return html`<nav class="rail">
     <a class=${`rail-logo ${section === 'home' ? 'active' : ''}`} href="#/home" title="Switchboard — how everything is doing">
       <${Icon} name="remote-tv" size=${30} />
@@ -134,6 +152,10 @@ function Rail({ section, pendingCount, alertCount }) {
       </a>`
     )}
     <div class="rail-spacer"></div>
+    <a class="rail-item" href=${manualUrl(route)} target="_blank" rel="noopener" title="The Switchboard manual, on this page">
+      <${Icon} name="book-open-page-variant-outline" size=${24} />
+      <span>Manual</span>
+    </a>
   </nav>`;
 }
 
@@ -173,7 +195,7 @@ function App() {
   }
 
   return html`<div class="shell">
-    <${Rail} section=${section.endsWith('layouts') ? 'layouts' : section} pendingCount=${pendingCount} alertCount=${data.alertCount} />
+    <${Rail} section=${section.endsWith('layouts') ? 'layouts' : section} route=${route} pendingCount=${pendingCount} alertCount=${data.alertCount} />
     ${clientType
       ? html`<${ClientList} type=${clientType} selected=${id} clients=${data.clients} rooms=${data.rooms} dashboards=${data.dashboards} />`
       : html`<div></div>`}
