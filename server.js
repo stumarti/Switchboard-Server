@@ -912,7 +912,8 @@ app.post('/api/devices/:slug/config', auth.requireAdminSession, (req, res) => {
     tv: normalized.tv,
     xbox: normalized.xbox,
     receiver: normalized.receiver,
-    hub: normalized.hub
+    hub: normalized.hub,
+    developerMenu: normalized.developerMenu
   };
 
   store.saveProfile(slug, profile);

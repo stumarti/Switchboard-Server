@@ -113,3 +113,16 @@ test('refresh on the clock: the room and a customised remote carry it, with a st
   assert.equal(own.standby.refreshAligned, false);
   assert.equal(clients.utcOffsetMin(new Date('2026-01-15T12:00:00Z')), -new Date('2026-01-15T12:00:00Z').getTimezoneOffset());
 });
+
+test('developer menu: on unless the room (or a customised remote) hides it', () => {
+  const { normalizeProfile } = require('../lib/validate');
+  const shown = normalizeProfile({ name: 'Den' }, null);
+  assert.equal(clients.composeDeviceConfig({ ...shown, slug: 'den' }, { type: 'remote' }).developerMenu, true);
+  const hidden = normalizeProfile({ developerMenu: false }, shown);
+  assert.equal(hidden.developerMenu, false);
+  assert.equal(normalizeProfile({ name: 'Den again' }, hidden).developerMenu, false); // kept on a save without it
+  assert.equal(clients.composeDeviceConfig({ ...hidden, slug: 'den' }, { type: 'remote' }).developerMenu, false);
+  // A remote with its own layout decides for itself.
+  const own = clients.composeDeviceConfig({ ...hidden, slug: 'den' }, { type: 'remote', layout: { developerMenu: true } });
+  assert.equal(own.developerMenu, true);
+});
