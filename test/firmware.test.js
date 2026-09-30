@@ -106,3 +106,26 @@ test('firmware: a GitHub release is added only if it matches its published check
   assert.equal(b.version, 'v0.3.0');
   assert.equal(firmware.build('v0.3.0').source, 'github:stumarti/Switchboard@v0.3.0');
 });
+
+test('firmware: your own GitHub repositories — listed, tidied, and the only ones read', async () => {
+  const s = firmware.updateSettings({ repos: ['https://github.com/me/Switchboard-fork.git', 'stumarti/Switchboard', 'ME/switchboard-fork'] });
+  assert.deepEqual(s.repos, ['me/Switchboard-fork', 'stumarti/Switchboard']); // URL tidied, duplicate dropped
+  assert.throws(() => firmware.updateSettings({ repos: ['not a repo'] }), /isn't a GitHub repository/);
+  assert.throws(() => firmware.updateSettings({ repos: ['../../etc/passwd'] }), /isn't a GitHub repository/);
+
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    return { ok: true, status: 200, json: async () => [{ tag_name: 'v9.0.0', published_at: '2026-09-01T00:00:00Z', assets: [{ name: 'switchboard-app-v9.0.0.bin' }] }] };
+  };
+  const list = await firmware.githubReleases({ repo: 'stumarti/Switchboard', fetchImpl });
+  assert.equal(list[0].repo, 'stumarti/Switchboard');
+  await firmware.githubReleases({ fetchImpl }); // no repo: the first in the list
+  assert.match(calls[1], /repos\/me\/Switchboard-fork\/releases/);
+  await assert.rejects(firmware.githubReleases({ repo: 'someone/else', fetchImpl }), /isn't in the repository list/);
+  assert.equal(calls.length, 2); // never asked GitHub about an unlisted repository
+
+  firmware.updateSettings({ repos: [] });
+  await assert.rejects(firmware.importLatest({ fetchImpl }), /Add a GitHub repository first/);
+  firmware.updateSettings({ repos: ['stumarti/Switchboard'] });
+});

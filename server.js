@@ -1011,16 +1011,16 @@ app.delete('/api/firmware/builds/:version', auth.requireAdminSession, (req, res)
 
 app.get('/api/firmware/releases', auth.requireAdminSession, async (req, res) => {
   try {
-    res.json({ releases: await firmware.githubReleases() });
+    res.json({ releases: await firmware.githubReleases({ repo: req.query.repo ? String(req.query.repo) : '' }) });
   } catch (e) {
-    res.status(502).json({ error: e.message });
+    res.status(e.status || 502).json({ error: e.message });
   }
 });
 
 // The Home page's "Get latest": the newest GitHub release, as a build.
 app.post('/api/firmware/latest', auth.requireAdminSession, async (req, res) => {
   try {
-    res.json(await firmware.importLatest());
+    res.json(await firmware.importLatest({ repo: req.body && req.body.repo ? String(req.body.repo) : '' }));
   } catch (e) {
     res.status(e.status || 502).json({ error: e.message });
   }
@@ -1030,7 +1030,7 @@ app.post('/api/firmware/import', auth.requireAdminSession, async (req, res) => {
   const tag = String((req.body && req.body.tag) || '');
   if (!tag) return res.status(400).json({ error: 'tag is required' });
   try {
-    res.json({ build: await firmware.importRelease(tag) });
+    res.json({ build: await firmware.importRelease(tag, { repo: req.body && req.body.repo ? String(req.body.repo) : '' }) });
   } catch (e) {
     res.status(e.status || 502).json({ error: e.message });
   }

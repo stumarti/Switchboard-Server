@@ -18,6 +18,33 @@ function Builds({ data, reload, flash }) {
   const [releases, setReleases] = useState(null);
   const [tag, setTag] = useState('');
   const s = data.settings;
+  const repos = s.repos || [];
+  const [repo, setRepo] = useState(repos[0] || '');
+  const [newRepo, setNewRepo] = useState('');
+  const pickRepo = (r) => {
+    setRepo(r);
+    setReleases(null);
+    setTag('');
+  };
+  const saveRepos = async (list, done) => {
+    try {
+      await api('/api/firmware/settings', { method: 'PUT', body: { repos: list } });
+      if (done) done();
+      reload();
+    } catch (e) {
+      flash(e.message, 8000);
+    }
+  };
+  const addRepo = () =>
+    saveRepos([...repos, newRepo], () => {
+      setNewRepo('');
+      flash(`Added ${newRepo.trim().replace(/^https?:\/\/(www\.)?github\.com\//i, '').replace(/\.git$/i, '')}`);
+    });
+  const removeRepo = (r) => {
+    if (!confirm(`Remove ${r} from the list? Builds already added from it stay.`)) return;
+    saveRepos(repos.filter((x) => x !== r), () => r === repo && pickRepo(repos.find((x) => x !== r) || ''));
+  };
+  const makeFirst = (r) => saveRepos([r, ...repos.filter((x) => x !== r)]);
 
   const upload = async (file) => {
     if (!file) return;
@@ -37,7 +64,7 @@ function Builds({ data, reload, flash }) {
   const listReleases = async () => {
     setBusy('list');
     try {
-      const r = await api('/api/firmware/releases');
+      const r = await api(`/api/firmware/releases?repo=${encodeURIComponent(repo)}`);
       setReleases(r.releases);
       setTag((r.releases[0] && r.releases[0].tag) || '');
     } catch (e) {
@@ -49,8 +76,8 @@ function Builds({ data, reload, flash }) {
   const importTag = async () => {
     setBusy('import');
     try {
-      const r = await api('/api/firmware/import', { method: 'POST', body: { tag } });
-      flash(`Added ${r.build.version} from GitHub`);
+      const r = await api('/api/firmware/import', { method: 'POST', body: { repo, tag } });
+      flash(`Added ${r.build.version} from ${repo}`);
       reload();
     } catch (e) {
       flash(`Import failed: ${e.message}`, 8000);
@@ -69,9 +96,31 @@ function Builds({ data, reload, flash }) {
   };
 
   return html`<${Card} icon="package-variant-closed" title="Builds" subtitle="Firmware this server can send. Only Switchboard remote images for the ESP32-S3 are accepted; the version comes from the image itself.">
+    <${Field} label="GitHub repositories" hint="Firmware repositories whose releases can be added below: the Switchboard firmware, or your own fork. A release needs its switchboard-app-<version>.bin and .sha256 (the firmware's release workflow publishes both). The first is the one “Get latest release” uses. GitHub is only contacted when you press a button here.">
+      <div class="repo-list">
+        ${repos.map(
+          (r, i) => html`<div class="repo-row">
+            <${Icon} name="github" size=${18} />
+            <a href=${`https://github.com/${r}/releases`} target="_blank" rel="noopener"><code>${r}</code></a>
+            ${i === 0 ? html`<${Badge} kind="accent">Get latest<//>` : html`<${Button} kind="ghost" small icon="arrow-up" title="Use for Get latest release" onClick=${() => makeFirst(r)} />`}
+            <span class="spacer"></span>
+            <${Button} kind="ghost" small icon="close" title="Remove" onClick=${() => removeRepo(r)} />
+          </div>`
+        )}
+        ${!repos.length && html`<p class="hint">None: builds can only be uploaded.</p>`}
+        <form class="row" style="align-items:center" onSubmit=${(e) => { e.preventDefault(); if (newRepo.trim()) addRepo(); }}>
+          <div style="flex:1"><input type="text" value=${newRepo} placeholder="owner/name or https://github.com/owner/name" onInput=${(e) => setNewRepo(e.target.value)} /></div>
+          <${Button} type="submit" icon="plus" disabled=${!newRepo.trim()}>Add repository<//>
+        </form>
+      </div>
+    <//>
     <div class="row" style="align-items:flex-end">
-      <${Field} label="From the firmware's GitHub releases" hint=${`Repository ${s.repo}. The release's app image is checked against its published checksum.`}>
-        ${releases
+      <${Field} label="Add a release" hint="The release's app image is checked against its published checksum and the version inside it.">
+        ${repos.length > 1 &&
+        html`<div style="margin-bottom:8px"><${Select} value=${repo} onChange=${pickRepo} options=${repos.map((r) => ({ value: r, label: r }))} /></div>`}
+        ${!repos.length
+          ? html`<span class="hint">Add a repository first.</span>`
+          : releases
           ? html`<div class="row" style="align-items:center">
               <div style="flex:1"><${Select} value=${tag} onChange=${setTag}
                 options=${releases.length ? releases.map((r) => ({ value: r.tag, label: `${r.tag}${r.prerelease ? ' (pre-release)' : ''} · ${new Date(r.date).toLocaleDateString()}` })) : [{ value: '', label: 'No releases with an app image yet' }]} /></div>

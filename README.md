@@ -203,7 +203,7 @@ The **Theme** page compiles the firmware's on-screen look — one font (upload a
 
 **Settings → Remote updates** sends new firmware to remotes over Wi-Fi. It's **off until you switch it on**.
 
-1. **Add a build**: pick one of the firmware repo's GitHub releases (its `switchboard-app-<version>.bin`, checked against the published `.sha256`), or upload that file. The server only accepts a Switchboard remote image for the ESP32-S3 that fits the update slot, and takes the version from the image itself. A build from uncommitted changes (`-dirty`) is refused.
+1. **Add a build**: upload a `switchboard-app-<version>.bin`, or pick a release from one of the **GitHub repositories** listed on the page. The list starts with the Switchboard firmware; add your own, such as a fork (`owner/name` or its GitHub URL). A release needs its `switchboard-app-<version>.bin` and `.sha256`, which the firmware's release workflow publishes, and the download is checked against the published checksum. Only listed repositories are ever read, and only when you press a button. The first in the list is the one "Get latest release" uses. The server only accepts a Switchboard remote image for the ESP32-S3 that fits the update slot, and takes the version from the image itself. A build from uncommitted changes (`-dirty`) is refused.
 2. **Choose the release**: the version remotes should run. An older build rolls remotes back to it.
 3. **Pilot first**: tick a remote or two as pilots. A new release goes only to them. When they've updated and still work, press **Release to everyone**.
 4. **How remotes install it**: from **Settings → Device info → Check for update** on the remote (can be switched off here), and/or **on a schedule**: during a window you set, on a remote's normal timer wake.
