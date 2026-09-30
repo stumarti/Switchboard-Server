@@ -284,6 +284,17 @@ const Motion = ({ d }) =>
 const Cameras = ({ d }) =>
   html`<div>${d.cameras.map((m) => html`<div class="vp-row vp-rowline"><span class="vp-small" style="flex:1">${m.name}</span><span class="vp-tiny">${m.when || '—'}</span></div>`)}</div>`;
 
+const Announcements = ({ d }) =>
+  d.items.length
+    ? html`<div class="vp-lines">${d.items.map(
+        (it) => html`<div class="vp-announce">
+          <div class="vp-med" style=${{ color: c(d.color) }}>${it.title}</div>
+          ${it.summary && html`<div class="vp-small">${it.summary}</div>`}
+          ${it.when && html`<div class="vp-tiny">${it.when}</div>`}
+        </div>`
+      )}</div>`
+    : html`<${Missing} what=${d.empty} />`;
+
 const SECTIONS = {
   weather: Weather,
   energy: Energy,
@@ -301,7 +312,8 @@ const SECTIONS = {
   alarm: Alarm,
   openings: Openings,
   motion: Motion,
-  cameras: Cameras
+  cameras: Cameras,
+  announcements: Announcements
 };
 
 const COLS = { sidebar: '250px 1fr', columns: '1fr 1fr', single: '1fr' };

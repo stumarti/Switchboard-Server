@@ -66,6 +66,7 @@ const art = require('./lib/art');
 const haMonitor = require('./lib/ha-monitor');
 const overview = require('./lib/overview');
 const enigma2 = require('./lib/enigma2');
+const feeds = require('./lib/feeds');
 const xboxLibrary = require('./lib/xbox-library');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
@@ -932,6 +933,20 @@ app.delete('/api/devices/:slug', auth.requireAdminSession, (req, res) => {
 
 // The Receiver card's "Check": what an (unsaved) receiver config gets from
 // its box — now / next, and how many channels and picons it lists.
+// The viewport editor's "Check feed": read an RSS/Atom address now (not from
+// the cache) and say what it found.
+app.post('/api/feeds/check', auth.requireAdminSession, async (req, res) => {
+  const url = String((req.body && req.body.url) || '').trim();
+  try {
+    new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'Enter the feed’s full address, e.g. https://example.com/news/rss' });
+  }
+  const f = await feeds.refresh(url);
+  if (f.error) return res.status(502).json({ error: f.error });
+  res.json({ count: f.items.length, latest: f.items.slice(0, 3).map((it) => ({ title: it.title, date: it.date })) });
+});
+
 app.post('/api/receiver/check', auth.requireAdminSession, async (req, res) => {
   const b = (req.body && req.body.receiver) || {};
   const box = enigma2.boxBase(b.boxUrl);

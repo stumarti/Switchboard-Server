@@ -838,3 +838,5 @@ a.rail-logo .rail-count { top: 2px; right: 2px; }
 .rp-tile { border: 2px solid #111; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; overflow: hidden; }
 .rp-tile-top { flex: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; max-width: 100%; padding: 0 8px; }
 .rp-tile-strip { flex: 1; align-self: stretch; border-top: 2px solid #111; display: flex; align-items: center; justify-content: center; }
+.vp-announce { border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+.vp-announce:last-child { border-bottom: 0; }
