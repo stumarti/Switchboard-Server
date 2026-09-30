@@ -158,3 +158,15 @@ test('firmware: "update now" — every remote due the release, at its next wake,
   firmware.updateSettings({ enabled: false });
   assert.throws(() => firmware.updateNow(), /off/);
 });
+
+test('firmware: "update now" can skip the pilot: the release goes to every remote', () => {
+  firmware.updateSettings({ enabled: true, release: 'v0.2.0' }); // with the pilots
+  firmware.updateSettings({ stage: 'pilot', pilot: [PILOT] });
+  const devices = { [PILOT]: { ...remote('v0.1.0'), mac: PILOT }, [OTHER]: { ...remote('v0.1.0'), mac: OTHER } };
+  const s = firmware.summary(devices);
+  assert.deepEqual([s.pending, s.pendingEveryone], [1, 2]);
+  firmware.updateNow({ everyone: true });
+  assert.equal(firmware.overview().settings.stage, 'everyone');
+  assert.equal(firmware.configFor(OTHER, remote('v0.1.0')).now, true);
+  assert.equal(firmware.summary(devices).now.waiting, 2);
+});

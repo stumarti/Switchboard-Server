@@ -56,17 +56,18 @@ function useOverview() {
 }
 
 // "Update now": remotes due the release install it at their next wake,
-// whatever the update schedule (lib/firmware.js updateNow). Shown only while
-// some remote is still to get the release.
+// whatever the update schedule (lib/firmware.js updateNow). While it's with
+// the pilots, "Update all" skips them: the release goes to everyone too.
+// Shown only while some remote is still to get the release.
 function UpdateNow({ u, reload }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  if (!u || !u.enabled || !u.release || (!u.pending && !u.now)) return null;
-  const act = async (method) => {
+  if (!u || !u.enabled || !u.release || (!u.pending && !u.pendingEveryone && !u.now)) return null;
+  const act = async (method, body) => {
     setBusy(true);
     setMsg('');
     try {
-      await api('/api/firmware/update-now', { method });
+      await api('/api/firmware/update-now', { method, body });
       reload();
     } catch (e) {
       setMsg(e.message);
@@ -80,11 +81,21 @@ function UpdateNow({ u, reload }) {
       <${Button} small kind="ghost" disabled=${busy} onClick=${() => act('DELETE')}>Cancel<//>
     </div>`;
   }
+  // With the pilots, and there are remotes beyond them: skip the pilot.
+  const skip = u.stage === 'pilot' && u.pendingEveryone > u.pending;
+  const skipPilot = () =>
+    confirm(`Release ${u.release} to every remote, without waiting for the pilots, and install it on all ${n(u.pendingEveryone)} at their next wake?`) &&
+    act('POST', { everyone: true });
   return html`<div class="row update-now">
     ${msg && html`<span class="flash flash-bad">${msg}</span>`}
-    <${Button} small icon="update" disabled=${busy || !u.pending}
+    ${u.pending > 0 &&
+    html`<${Button} small icon="update" disabled=${busy}
       title=${`Each remote due ${u.release}${u.stage === 'pilot' ? ' (the pilot remotes, until it’s released to everyone)' : ''} installs it the next time it wakes, whatever the update schedule.`}
-      onClick=${() => act('POST')}>Update ${n(u.pending)} to ${u.release} now<//>
+      onClick=${() => act('POST')}>Update ${u.stage === 'pilot' ? `${u.pending === 1 ? 'the pilot' : `${u.pending} pilots`}` : n(u.pending)} to ${u.release} now<//>`}
+    ${skip &&
+    html`<${Button} small icon="fast-forward-outline" kind=${u.pending > 0 ? 'ghost' : 'secondary'} disabled=${busy}
+      title=${`Skip the pilot: release ${u.release} to everyone, and every remote not on it installs it the next time it wakes.`}
+      onClick=${skipPilot}>Update all ${u.pendingEveryone} now${u.pending > 0 ? ' (skip pilot)' : ''}<//>`}
   </div>`;
 }
 

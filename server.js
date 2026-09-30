@@ -1009,7 +1009,7 @@ app.put('/api/firmware/settings', auth.requireAdminSession, (req, res) => {
 // at its next wake, whatever the schedule. DELETE takes it back.
 app.post('/api/firmware/update-now', auth.requireAdminSession, (req, res) => {
   try {
-    firmware.updateNow();
+    firmware.updateNow({ everyone: Boolean(req.body && req.body.everyone) });
     res.json(firmware.summary(store.getDevices()));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
