@@ -208,6 +208,22 @@ export function moveItem(list, from, to) {
   return out;
 }
 
+// Learned battery life (lib/battery-history.js) as short text and a tooltip:
+// "~12 days" / "learning…", and how it was worked out.
+export function batteryLifeText(life) {
+  if (!life) return { short: '', tip: '' };
+  if (life.daysLeft == null) {
+    return { short: 'learning…', tip: 'Learning how fast this battery drains: an estimate appears after about half a day and a couple of percent of use.' };
+  }
+  const d = life.daysLeft;
+  const short = d < 1 ? '< 1 day' : `~${Math.round(d)} day${Math.round(d) === 1 ? '' : 's'}`;
+  const how = life.basis === 'measured'
+    ? `from its last ${life.sinceChargeDays} day${life.sinceChargeDays === 1 ? '' : 's'} since charging`
+    : `from ${life.discharges} earlier charge${life.discharges === 1 ? '' : 's'} (not enough since the last charge yet)`;
+  const full = life.fullChargeDays ? ` A full charge lasts about ${life.fullChargeDays} days.` : '';
+  return { short, tip: `About ${short.replace('~', '')} left, falling ${life.ratePerDay}% a day, ${how}.${full}` };
+}
+
 export function timeAgo(iso) {
   if (!iso) return 'never';
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
