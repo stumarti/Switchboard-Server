@@ -224,6 +224,12 @@ export function batteryLifeText(life) {
   return { short, tip: `About ${short.replace('~', '')} left, falling ${life.ratePerDay}% a day, ${how}.${full}` };
 }
 
+// A board (the kind of device a firmware build is for) as people call it.
+const BOARD_NAMES = { x4pro: 'X4 Pro' };
+export function boardLabel(board) {
+  return BOARD_NAMES[board] || board || '';
+}
+
 export function timeAgo(iso) {
   if (!iso) return 'never';
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);

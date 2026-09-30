@@ -366,7 +366,10 @@ app.get('/api/viewports/:mac/bundle', auth.requireAdminOrDevice, (req, res) => {
     icons: dashboardState.iconsUsed(layout),
     wifiNetworks: globals.wifiNetworks || [],
     ntpServer: globals.ntpServer || 'pool.ntp.org',
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    // Over-the-air updates, as a remote gets them: an offer only for a
+    // display whose firmware says its board (X-Board) and has a release.
+    firmware: firmware.configFor(device.mac, req.device ? deviceNow(req) : device)
   });
 });
 
@@ -957,16 +960,20 @@ app.delete('/api/devices/:slug', auth.requireAdminSession, (req, res) => {
 // build (/image/<version>, only the one it's offered), checks its SHA-256,
 // and reports how it went (/report). Everything else is the admin UI's.
 
-// The requesting remote as it is now: the firmware it says it runs on this
-// request (X-Firmware), not the last one recorded.
+// The requesting device as it is now: the firmware and board it says it
+// runs on this request (X-Firmware, X-Board), not the last ones recorded.
 function deviceNow(req) {
   const running = req.get('X-Firmware');
-  if (!req.device || !running) return req.device;
-  return { ...req.device, health: { ...(req.device.health || {}), firmware: String(running).slice(0, 64) } };
+  const board = req.get('X-Board');
+  if (!req.device || (!running && !board)) return req.device;
+  const health = { ...(req.device.health || {}) };
+  if (running) health.firmware = String(running).slice(0, 64);
+  if (board && /^[a-z0-9][a-z0-9-]{0,23}$/.test(board)) health.board = board;
+  return { ...req.device, health };
 }
 
 app.get('/api/firmware/offer', auth.requireAdminOrDevice, (req, res) => {
-  if (!req.device) return res.status(400).json({ error: 'for remotes' });
+  if (!req.device) return res.status(400).json({ error: 'for devices' });
   const offer = firmware.offerFor(req.deviceMac, deviceNow(req));
   if (!offer) return res.status(204).end();
   res.json(offer);
@@ -974,11 +981,14 @@ app.get('/api/firmware/offer', auth.requireAdminOrDevice, (req, res) => {
 
 app.get('/api/firmware/image/:version', auth.requireAdminOrDevice, (req, res) => {
   const version = String(req.params.version);
+  // A device gets its own board's build; the admin UI names the board.
+  let board = String(req.query.board || firmware.LEGACY_BOARD);
   if (req.device) {
     const offer = firmware.offerFor(req.deviceMac, deviceNow(req));
-    if (!offer || offer.version !== version) return res.status(403).json({ error: 'not offered to this remote' });
+    if (!offer || offer.version !== version) return res.status(403).json({ error: 'not offered to this device' });
+    board = offer.board;
   }
-  const img = firmware.readImage(version);
+  const img = firmware.readImage(board, version);
   if (!img) return res.status(404).json({ error: 'no such build' });
   res.set('Content-Type', 'application/octet-stream');
   res.set('X-Sha256', img.build.sha256);
@@ -989,13 +999,14 @@ app.get('/api/firmware/image/:version', auth.requireAdminOrDevice, (req, res) =>
 });
 
 app.post('/api/firmware/report', auth.requireAdminOrDevice, (req, res) => {
-  if (!req.device) return res.status(400).json({ error: 'for remotes' });
-  firmware.report(req.deviceMac, req.body);
+  if (!req.device) return res.status(400).json({ error: 'for devices' });
+  firmware.report(req.deviceMac, req.body, deviceNow(req));
   res.json({ ok: true });
 });
 
 app.get('/api/firmware', auth.requireAdminSession, (req, res) => {
-  res.json({ ...firmware.overview(), remotes: firmware.status(store.getDevices()), maxImage: firmware.MAX_IMAGE });
+  const devices = store.getDevices();
+  res.json({ ...firmware.overview(devices), remotes: firmware.status(devices), maxImage: firmware.MAX_IMAGE });
 });
 
 app.put('/api/firmware/settings', auth.requireAdminSession, (req, res) => {
@@ -1010,7 +1021,7 @@ app.put('/api/firmware/settings', auth.requireAdminSession, (req, res) => {
 // at its next wake, whatever the schedule. DELETE takes it back.
 app.post('/api/firmware/update-now', auth.requireAdminSession, (req, res) => {
   try {
-    firmware.updateNow({ everyone: Boolean(req.body && req.body.everyone) });
+    firmware.updateNow({ board: String((req.body && req.body.board) || firmware.LEGACY_BOARD), everyone: Boolean(req.body && req.body.everyone) });
     res.json(firmware.summary(store.getDevices()));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
@@ -1018,7 +1029,7 @@ app.post('/api/firmware/update-now', auth.requireAdminSession, (req, res) => {
 });
 
 app.delete('/api/firmware/update-now', auth.requireAdminSession, (req, res) => {
-  firmware.cancelUpdateNow();
+  firmware.cancelUpdateNow(String(req.query.board || firmware.LEGACY_BOARD));
   res.json(firmware.summary(store.getDevices()));
 });
 
@@ -1032,7 +1043,7 @@ app.post('/api/firmware/upload', auth.requireAdminSession, express.raw({ type: '
 
 app.delete('/api/firmware/builds/:version', auth.requireAdminSession, (req, res) => {
   try {
-    firmware.removeBuild(String(req.params.version));
+    firmware.removeBuild(String(req.query.board || firmware.LEGACY_BOARD), String(req.params.version));
     res.json({ ok: true });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
@@ -1050,7 +1061,7 @@ app.get('/api/firmware/releases', auth.requireAdminSession, async (req, res) => 
 // The Home page's "Get latest": the newest GitHub release, as a build.
 app.post('/api/firmware/latest', auth.requireAdminSession, async (req, res) => {
   try {
-    res.json(await firmware.importLatest({ repo: req.body && req.body.repo ? String(req.body.repo) : '' }));
+    res.json({ results: await firmware.importLatest({ repo: req.body && req.body.repo ? String(req.body.repo) : '' }) });
   } catch (e) {
     res.status(e.status || 502).json({ error: e.message });
   }
@@ -1060,7 +1071,7 @@ app.post('/api/firmware/import', auth.requireAdminSession, async (req, res) => {
   const tag = String((req.body && req.body.tag) || '');
   if (!tag) return res.status(400).json({ error: 'tag is required' });
   try {
-    res.json({ build: await firmware.importRelease(tag, { repo: req.body && req.body.repo ? String(req.body.repo) : '' }) });
+    res.json({ builds: await firmware.importRelease(tag, { repo: req.body && req.body.repo ? String(req.body.repo) : '' }) });
   } catch (e) {
     res.status(e.status || 502).json({ error: e.message });
   }
@@ -1132,7 +1143,7 @@ app.get('/api/overview', auth.requireAdminSession, (req, res) => {
       layouts,
       ha: haMonitor.snapshot(),
       haConfigured: Boolean(haCfg.host && haCfg.token),
-      updates: firmware.overview().settings.enabled ? firmware.status(store.getDevices()) : [],
+      updates: firmware.overview(store.getDevices()).settings.enabled ? firmware.status(store.getDevices()) : [],
       updateSummary: firmware.summary(store.getDevices()),
       server: {
         version: APP_VERSION,

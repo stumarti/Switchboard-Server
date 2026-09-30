@@ -11,7 +11,7 @@
 //
 // Polled every 10 s while the tab is visible.
 
-import { html, useState, useEffect, api, Icon, Card, Badge, Button, Empty, timeAgo, batteryLifeText } from './lib.js';
+import { html, useState, useEffect, api, Icon, Card, Badge, Button, Empty, timeAgo, batteryLifeText, boardLabel } from './lib.js';
 
 const LEVEL = {
   critical: { icon: 'alert-octagon', cls: 'bad', label: 'Critical' },
@@ -55,47 +55,58 @@ function useOverview() {
   return { data, error, reload };
 }
 
-// "Update now": remotes due the release install it at their next wake,
-// whatever the update schedule (lib/firmware.js updateNow). While it's with
-// the pilots, "Update all" skips them: the release goes to everyone too.
-// Shown only while some remote is still to get the release.
+// "Update now": devices due their board's release install it at their next
+// wake, whatever the update schedule (lib/firmware.js updateNow). While it's
+// with the pilots, "Update all" skips them: the release goes to everyone of
+// that board too. One row per board with devices still to get its release;
+// the board is named only when there's more than one.
 function UpdateNow({ u, reload }) {
+  const rows = ((u && u.enabled && u.boards) || []).filter((b) => b.pending || b.pendingEveryone || (b.now && b.now.waiting));
+  if (!rows.length) return null;
+  return html`<div class="update-now-list">
+    ${rows.map((b) => html`<${UpdateNowRow} key=${b.board} b=${b} named=${u.boards.length > 1} reload=${reload} />`)}
+  </div>`;
+}
+
+function UpdateNowRow({ b, named, reload }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  if (!u || !u.enabled || !u.release || (!u.pending && !u.pendingEveryone && !u.now)) return null;
   const act = async (method, body) => {
     setBusy(true);
     setMsg('');
     try {
-      await api('/api/firmware/update-now', { method, body });
+      await api(method === 'DELETE' ? `/api/firmware/update-now?board=${encodeURIComponent(b.board)}` : '/api/firmware/update-now', { method, body: method === 'DELETE' ? undefined : { board: b.board, ...body } });
       reload();
     } catch (e) {
       setMsg(e.message);
     }
     setBusy(false);
   };
-  const n = (k) => `${k} remote${k === 1 ? '' : 's'}`;
-  if (u.now && u.now.waiting > 0) {
+  const n = (k) => `${k} ${named ? boardLabel(b.board) : 'remote'}${k === 1 ? '' : 's'}`;
+  const tag = named ? html`<span class="hint update-now-board">${boardLabel(b.board)}</span>` : null;
+  if (b.now && b.now.waiting > 0) {
     return html`<div class="row update-now">
-      <span title=${`Each installs ${u.release} the next time it wakes, whatever the update schedule.`}><${Badge} kind="accent" icon="timer-sand">${n(u.now.waiting)} updating at next wake<//></span>
+      ${tag}
+      <span title=${`Each installs ${b.release} the next time it wakes, whatever the update schedule.`}><${Badge} kind="accent" icon="timer-sand">${n(b.now.waiting)} updating at next wake<//></span>
       <${Button} small kind="ghost" disabled=${busy} onClick=${() => act('DELETE')}>Cancel<//>
     </div>`;
   }
-  // With the pilots, and there are remotes beyond them: skip the pilot.
-  const skip = u.stage === 'pilot' && u.pendingEveryone > u.pending;
+  // With the pilots, and there are devices beyond them: skip the pilot.
+  const skip = b.stage === 'pilot' && b.pendingEveryone > b.pending;
   const skipPilot = () =>
-    confirm(`Release ${u.release} to every remote, without waiting for the pilots, and install it on all ${n(u.pendingEveryone)} at their next wake?`) &&
+    confirm(`Release ${b.release} to every ${named ? boardLabel(b.board) : 'remote'}, without waiting for the pilots, and install it on all ${n(b.pendingEveryone)} at their next wake?`) &&
     act('POST', { everyone: true });
   return html`<div class="row update-now">
     ${msg && html`<span class="flash flash-bad">${msg}</span>`}
-    ${u.pending > 0 &&
+    ${tag}
+    ${b.pending > 0 &&
     html`<${Button} small icon="update" disabled=${busy}
-      title=${`Each remote due ${u.release}${u.stage === 'pilot' ? ' (the pilot remotes, until it’s released to everyone)' : ''} installs it the next time it wakes, whatever the update schedule.`}
-      onClick=${() => act('POST')}>Update ${u.stage === 'pilot' ? `${u.pending === 1 ? 'the pilot' : `${u.pending} pilots`}` : n(u.pending)} to ${u.release} now<//>`}
+      title=${`Each device due ${b.release}${b.stage === 'pilot' ? ' (the pilots, until it’s released to everyone)' : ''} installs it the next time it wakes, whatever the update schedule.`}
+      onClick=${() => act('POST')}>Update ${b.stage === 'pilot' ? `${b.pending === 1 ? 'the pilot' : `${b.pending} pilots`}` : n(b.pending)} to ${b.release} now<//>`}
     ${skip &&
-    html`<${Button} small icon="fast-forward-outline" kind=${u.pending > 0 ? 'ghost' : 'secondary'} disabled=${busy}
-      title=${`Skip the pilot: release ${u.release} to everyone, and every remote not on it installs it the next time it wakes.`}
-      onClick=${skipPilot}>Update all ${u.pendingEveryone} now${u.pending > 0 ? ' (skip pilot)' : ''}<//>`}
+    html`<${Button} small icon="fast-forward-outline" kind=${b.pending > 0 ? 'ghost' : 'secondary'} disabled=${busy}
+      title=${`Skip the pilot: release ${b.release} to everyone, and every device not on it installs it the next time it wakes.`}
+      onClick=${skipPilot}>Update all ${b.pendingEveryone} now${b.pending > 0 ? ' (skip pilot)' : ''}<//>`}
   </div>`;
 }
 
