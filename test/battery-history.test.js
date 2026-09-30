@@ -78,6 +78,8 @@ test('battery: note() keeps readings per device and forget() drops them', () => 
   bh.flush(true);
   bh.reset();
   assert.equal(bh.estimate(mac, T0 + 60 * HOUR).pct, 86); // read back from disk
+  // Kept beside the rooms, but never listed as one.
+  assert.ok(!require('../lib/store').listProfiles().some((r) => /battery/.test(r.slug)));
   bh.forget(mac);
   assert.equal(bh.estimate(mac), null);
 });

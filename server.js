@@ -69,6 +69,7 @@ const enigma2 = require('./lib/enigma2');
 const feeds = require('./lib/feeds');
 const firmware = require('./lib/firmware');
 const batteryHistory = require('./lib/battery-history');
+const haPublish = require('./lib/ha-publish');
 const xboxLibrary = require('./lib/xbox-library');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
@@ -207,6 +208,7 @@ app.post('/api/pairing/:mac/assign', auth.requireAdminSession, (req, res) => {
 app.post('/api/pairing/:mac/rename', auth.requireAdminSession, (req, res) => {
   const result = pairing.rename(req.params.mac, req.body && req.body.name);
   if (result.error) return res.status(404).json(result);
+  haPublish.kick(); // its Home Assistant sensors follow the new name
   res.json(result);
 });
 
@@ -220,6 +222,7 @@ app.delete('/api/pairing/:mac', auth.requireAdminSession, (req, res) => {
   const result = pairing.remove(req.params.mac);
   if (result.error) return res.status(404).json(result);
   batteryHistory.forget(req.params.mac);
+  haPublish.kick(); // and its Home Assistant sensors go
   res.status(204).end();
 });
 
@@ -227,6 +230,12 @@ app.delete('/api/pairing/:mac', auth.requireAdminSession, (req, res) => {
 //
 // The server holds the HA token, so the browser never needs it: these proxy
 // HA's own entity list, trimmed to what the pickers show.
+
+// Battery sensors published to Home Assistant (lib/ha-publish.js): whether
+// it's on, when it last synced, which entities, and any error.
+app.get('/api/ha/publish', auth.requireAdminSession, (req, res) => {
+  res.json(haPublish.getStatus());
+});
 
 app.get('/api/ha/status', auth.requireAdminSession, async (req, res) => {
   res.json(await haState.checkConnection(store.getGlobals()));
@@ -927,6 +936,7 @@ app.post('/api/globals', auth.requireAdminSession, (req, res) => {
   };
 
   store.saveGlobals(globals);
+  haPublish.kick(); // publishing to Home Assistant may have been switched
   res.json(globals);
 });
 
@@ -1168,6 +1178,8 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     }
   });
 }
+
+haPublish.start();
 
 app.listen(PORT, HOST, () => {
   console.log(`homeremote-server listening on http://${HOST}:${PORT}`);
