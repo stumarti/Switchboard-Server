@@ -165,6 +165,7 @@ A viewport is a colour wall-mounted e-ink display, for example the reTerminal E1
     | Doors & windows | open (red) or closed |
     | Motion | last motion per sensor, blue when recent |
     | Cameras | last motion per camera |
+    | Announcements | the newest items of a company RSS or Atom feed (intranet news, SharePoint, a blog): headline, short summary, when posted. The server reads the feed, at most every 10 minutes, and keeps the last good copy if it's down |
 
   - **Meeting room.** A whole screen for one room's calendar. The bar shows *Available*, *Starting soon* or *In use* (plus *booked but empty* and *in use but not booked* if you add an occupancy sensor) with a status icon (free and in-use icons are yours to pick), and "Busy until 14:30" or "Free until 16:00". Below it, an optional timeline of the next 1, 2 or 3 hours shows bookings as blocks; it starts at the current quarter hour, so it only changes (and costs a panel refresh) when the quarter turns or a booking changes. Then the current meeting and the rest of today's. Titles can be hidden. The bottom-right corner can show the room's climate: temperature from a thermostat or sensor, humidity, and CO2 (yellow from 1000 ppm, red from 1500).
   - **Room finder.** The other rooms, each by its calendar (and occupancy sensor), free ones first and the longest free at the top, with "Free until 15:00" or "Busy until 14:30". Busy rooms can be listed after the free ones or left out; titles are never shown. **Add the other meeting-room signs** fills it from every other layout's meeting room. The meeting-room sign template has both screens: the display's button toggles to the room finder, and it returns to the room after 5 minutes.
@@ -198,6 +199,24 @@ If a paired device ever loses its stored token (e.g. a factory reset), it re-reg
 
 The **Theme** page compiles the firmware's on-screen look — one font (upload a TTF/OTF, or name a Google Font) and any of its ~107 named icons (search Material Design Icons and assign a replacement per slot) — into two binary files every paired remote downloads automatically and loads from its SD card at runtime. Publishing recompiles and takes effect on every device's next check-in; nothing needs reflashing. An unmodified icon slot keeps its original look.
 
+## Remote updates (over the air)
+
+**Settings → Remote updates** sends new firmware to remotes over Wi-Fi. It's **off until you switch it on**.
+
+1. **Add a build**: pick one of the firmware repo's GitHub releases (its `switchboard-app-<version>.bin`, checked against the published `.sha256`), or upload that file. The server only accepts a Switchboard remote image for the ESP32-S3 that fits the update slot, and takes the version from the image itself. A build from uncommitted changes (`-dirty`) is refused.
+2. **Choose the release**: the version remotes should run. An older build rolls remotes back to it.
+3. **Pilot first**: tick a remote or two as pilots. A new release goes only to them. When they've updated and still work, press **Release to everyone**.
+4. **How remotes install it**: from **Settings → Device info → Check for update** on the remote (can be switched off here), and/or **on a schedule**: during a window you set, on a remote's normal timer wake.
+
+On the remote:
+- **Battery:** it needs the minimum battery set here (30% by default).
+- **Integrity:** it downloads into the spare app slot and checks the SHA-256 before switching.
+- **Rollback:** new firmware counts as good only once it reaches this server on its first run. If it can't, the bootloader goes back to the previous firmware by itself.
+- **Reporting:** every attempt is reported. Failures show on this page and on the Home page.
+- **Retries:** a scheduled update that fails twice at the same version isn't retried until you release another version.
+
+Remotes on firmware from before updates existed need one USB (or web-flasher) install first.
+
 ## Cutting a release
 
 ```sh
@@ -222,6 +241,8 @@ That's it — `.github/workflows/release.yml` builds the image and pushes `ghcr.
 ## Security
 
 Plain HTTP, LAN-only by design — same trust model as the on-device config form it replaces, now with a login gate on the admin UI and per-device pairing tokens instead of the previous no-auth-at-all posture (see "Auth" and "Pairing" above). This server still holds *every* room's Home Assistant token plus your WiFi password in one place, so: keep it off the internet, don't port-forward it, and treat it like any other credential store on your network.
+
+With **Remote updates** on, this server can also install firmware on every remote. Keep the admin password strong. Treat the server as able to change what every remote runs, and anyone on your LAN as able to see its plain-HTTP traffic. Firmware is checked against a SHA-256 the same server provides, so this guards against corruption, not against a compromised server or network.
 
 ## Migrating from an unauthenticated version
 

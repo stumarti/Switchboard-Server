@@ -98,6 +98,20 @@ function Attention({ items }) {
   </div>`;
 }
 
+// A remote's over-the-air update, as one icon beside its version (hover
+// for words); nothing while updates are off. Details: Remotes page.
+const UPDATE_ICON = {
+  current: { icon: 'check-circle-outline', cls: 'ok', text: () => 'Up to date' },
+  pending: { icon: 'arrow-down-circle-outline', cls: 'accent', text: (u) => `Will update to ${u.offer}` },
+  failed: { icon: 'alert-circle-outline', cls: 'bad', text: (u) => `Couldn't update to ${u.offer}${u.error ? `: ${u.error}` : ''}` },
+  waiting: { icon: 'timer-sand', cls: 'muted', text: () => 'Not in this release stage yet' }
+};
+function UpdateIcon({ u }) {
+  const look = u && UPDATE_ICON[u.state];
+  if (!look) return null;
+  return html`<span class=${`fw-state fw-${look.cls}`}><${Icon} name=${look.icon} size=${18} title=${look.text(u)} /></span>`;
+}
+
 function Devices({ devices }) {
   const shown = devices.filter((d) => d.status !== 'revoked');
   if (!shown.length) {
@@ -118,7 +132,7 @@ function Devices({ devices }) {
           <td>${d.status === 'pending' ? html`<${Badge} kind="warn" icon="account-clock-outline">Waiting for approval<//>` : d.assignedTo || html`<span class="hint">None</span>`}</td>
           <td><${BatteryBar} pct=${d.battery} level=${d.batteryLevel} /></td>
           <td><${Signal} rssi=${d.rssi} /></td>
-          <td>${d.firmware ? html`<code>${d.firmware}</code>` : html`<span class="hint">—</span>`}</td>
+          <td>${d.firmware ? html`<span class="fw-cell"><code>${d.firmware}</code><${UpdateIcon} u=${d.update} /></span>` : html`<span class="hint">—</span>`}</td>
           <td>${timeAgo(d.lastSeenAt)}</td>
         </tr>`
       )}

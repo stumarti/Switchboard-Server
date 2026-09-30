@@ -10,6 +10,7 @@ import {
 } from './lib.js';
 import { EntityPicker, IconPicker } from './pickers.js';
 import { ItemList } from './rooms.js';
+import { UpdatesCard, DeviceUpdateBadge } from './firmware.js';
 
 const TYPE_META = {
   remote: { section: 'remotes', icon: 'remote', title: 'Remotes', one: 'remote' },
@@ -447,7 +448,9 @@ function ClientEditor({ client, rooms, dashboards, reloadClients, reloadDashboar
           ${client.health && client.health.battery != null && html`<${Badge} kind=${client.health.battery <= 15 ? 'bad' : ''} icon="battery-outline">${client.health.battery}%<//>`}
           ${client.health && client.health.temperature != null && html`<${Badge} icon="thermometer">${client.health.temperature}°<//>`}
           ${client.health && client.health.rssi != null && html`<${Badge} icon="wifi">${client.health.rssi} dBm<//>`}
-          ${client.health && client.health.firmware && html`<${Badge} icon="chip">fw ${client.health.firmware}<//>`}
+          ${isRemote
+            ? html`<${DeviceUpdateBadge} mac=${client.mac} firmware=${client.health && client.health.firmware} />`
+            : client.health && client.health.firmware && html`<${Badge} icon="chip">fw ${client.health.firmware}<//>`}
           <${Badge} icon="chip">${client.mac}<//>
         </div>
       </div>
@@ -515,6 +518,7 @@ export function ClientPage({ type, mac, clients, rooms, dashboards, reloadClient
   const client = mac && clients.find((c) => c.mac === mac);
   if (!client) {
     return html`<div class="page">
+      ${type === 'remote' && !mac && html`<div style="max-width:720px;margin:0 auto 18px"><${UpdatesCard} /></div>`}
       <${Empty} icon=${meta.icon} title=${mac ? 'Device not found' : `Choose a ${meta.one}`}>
         ${type === 'remote'
           ? "Pick a remote on the left to choose its room. A remote shows its room's layout, built on the Layouts page. A new remote shows up here as soon as it asks to pair."

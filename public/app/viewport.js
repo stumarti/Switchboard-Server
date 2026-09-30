@@ -67,7 +67,8 @@ export const SECTION_META = {
   alarm: { label: 'Alarm', icon: 'shield-home-outline', about: 'State, since, last armed/triggered' },
   openings: { label: 'Doors & windows', icon: 'door', about: 'Open (red) or closed' },
   motion: { label: 'Motion', icon: 'motion-sensor', about: 'Last motion, blue when recent' },
-  cameras: { label: 'Cameras', icon: 'cctv', about: 'Last motion per camera' }
+  cameras: { label: 'Cameras', icon: 'cctv', about: 'Last motion per camera' },
+  announcements: { label: 'Announcements', icon: 'bullhorn-outline', about: 'The latest from a company RSS or Atom feed' }
 };
 
 const TEMPLATES = [
@@ -115,6 +116,8 @@ function newSection(type) {
       return { ...base, sensors: [] };
     case 'cameras':
       return { ...base, cameras: [] };
+    case 'announcements':
+      return { ...base, title: 'Announcements', url: '', count: 3, summary: true, maxAgeDays: 0, showDate: true, color: 1 };
     default:
       return base;
   }
@@ -366,6 +369,39 @@ function AlertSlot({ it, upd }) {
       onChange=${(l) => upd({ ...it, entities: l.map(({ entity, name }) => ({ entity, name })) })} />`;
 }
 
+// A feed address, and a check that reads it now.
+function AnnouncementsEditor({ s, set }) {
+  const [check, setCheck] = useState(null);
+  const run = async () => {
+    setCheck({ busy: true });
+    try {
+      setCheck(await api('/api/feeds/check', { method: 'POST', body: { url: s.url } }));
+    } catch (e) {
+      setCheck({ error: e.message });
+    }
+  };
+  return html`<${Field} label="Feed address" hint="An RSS or Atom feed: an intranet news page, a SharePoint or WordPress site, a blog…">
+      <div class="row" style="align-items:center">
+        <div style="flex:1"><${TextInput} value=${s.url} placeholder="https://intranet.example.com/news/feed" onInput=${(v) => { set({ ...s, url: v }); setCheck(null); }} /></div>
+        <${Button} icon="rss" disabled=${!s.url || (check && check.busy)} onClick=${run}>${check && check.busy ? 'Checking…' : 'Check feed'}<//>
+      </div>
+    <//>
+    ${check && check.error && html`<p class="hint text-bad"><${Icon} name="alert-circle-outline" size=${16} /> ${check.error}</p>`}
+    ${check && check.count != null &&
+    html`<p class="hint"><${Icon} name="check-circle-outline" size=${16} /> ${check.count} item${check.count === 1 ? '' : 's'}${check.latest.length ? ', newest:' : ''}</p>
+      <ul class="hint">${check.latest.map((it) => html`<li>${it.title}${it.date ? ` (${new Date(it.date).toLocaleDateString()})` : ''}</li>`)}</ul>`}
+    <div class="row">
+      <${Field} label="Items shown"><${NumberInput} min="1" max="6" value=${s.count} onChange=${(v) => set({ ...s, count: v })} /><//>
+      <${Field} label="Hide items older than" hint="Days; 0 = never"><${NumberInput} min="0" max="365" value=${s.maxAgeDays} onChange=${(v) => set({ ...s, maxAgeDays: v })} /><//>
+    </div>
+    <div class="row" style="align-items:center">
+      <${Toggle} checked=${s.summary} onChange=${(v) => set({ ...s, summary: v })} label="Summary under each headline" />
+      <${Toggle} checked=${s.showDate} onChange=${(v) => set({ ...s, showDate: v })} label="When it was posted" />
+      <span class="hint">Headlines in</span><${ColorPicker} value=${s.color} onChange=${(v) => set({ ...s, color: v })} />
+    </div>
+    <p class="hint">The server reads the feed (every 10 minutes at most) and the panel shows the newest items at its next wake.</p>`;
+}
+
 function CalendarEditor({ s, set }) {
   return html`<${ItemList}
       items=${s.entities.map((x, i) => ({ id: String(i), entity: x }))}
@@ -487,6 +523,7 @@ const EDITORS = {
   statusIcons: StatusIconsEditor,
   alerts: AlertsEditor,
   calendar: CalendarEditor,
+  announcements: AnnouncementsEditor,
   heatPump: HeatPumpEditor,
   roomClimate: (p) => html`<${RoomsEditor} ...${p} withTarget />`,
   roomList: (p) => html`<${RoomsEditor} ...${p} />`,

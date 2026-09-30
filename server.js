@@ -66,6 +66,8 @@ const art = require('./lib/art');
 const haMonitor = require('./lib/ha-monitor');
 const overview = require('./lib/overview');
 const enigma2 = require('./lib/enigma2');
+const feeds = require('./lib/feeds');
+const firmware = require('./lib/firmware');
 const xboxLibrary = require('./lib/xbox-library');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
@@ -736,18 +738,21 @@ app.post('/api/devices', auth.requireAdminSession, (req, res) => {
 // A remote also learns when to wake if its room refreshes on the clock: its
 // place in the house's stagger (lib/clients.js staggerFor) and the local UTC
 // offset.
+// ...and whether there's firmware for it to install (lib/firmware.js).
 function deviceConfig(profile, device, mac) {
   const base = haState.haBase(store.getGlobals());
-  return clients.composeDeviceConfig(xboxLibrary.withLibrary(profile, base), device, {
+  const cfg = clients.composeDeviceConfig(xboxLibrary.withLibrary(profile, base), device, {
     staggerSec: clients.staggerFor(mac, store.getDevices())
   });
+  if (cfg && clients.normalizeType(device.type) === 'remote') cfg.firmware = firmware.configFor(mac, device);
+  return cfg;
 }
 app.get('/api/devices/:slug/config', auth.requireAdminOrDevice, (req, res) => {
   const profile = store.getProfile(req.params.slug);
   if (!profile) {
     return res.status(404).json({ error: 'no such profile' });
   }
-  res.json(req.device ? deviceConfig(profile, req.device, req.deviceMac) : profile);
+  res.json(req.device ? deviceConfig(profile, deviceNow(req), req.deviceMac) : profile);
 });
 
 // Everything a remote needs to know about its room, in one response: the
@@ -763,7 +768,7 @@ app.get('/api/devices/:slug/bundle', auth.requireAdminOrDevice, (req, res) => {
   }
   const theme = store.getTheme();
   res.json({
-    config: req.device ? deviceConfig(profile, req.device, req.deviceMac) : profile,
+    config: req.device ? deviceConfig(profile, deviceNow(req), req.deviceMac) : profile,
     globals: store.getGlobals(),
     theme: {
       iconsVersion: theme.iconsVersion || '',
@@ -932,6 +937,119 @@ app.delete('/api/devices/:slug', auth.requireAdminSession, (req, res) => {
 
 // The Receiver card's "Check": what an (unsaved) receiver config gets from
 // its box — now / next, and how many channels and picons it lists.
+// --- Remote firmware updates (lib/firmware.js) -----------------------------
+//
+// A remote asks what to install (/offer: 204 = nothing), downloads that one
+// build (/image/<version>, only the one it's offered), checks its SHA-256,
+// and reports how it went (/report). Everything else is the admin UI's.
+
+// The requesting remote as it is now: the firmware it says it runs on this
+// request (X-Firmware), not the last one recorded.
+function deviceNow(req) {
+  const running = req.get('X-Firmware');
+  if (!req.device || !running) return req.device;
+  return { ...req.device, health: { ...(req.device.health || {}), firmware: String(running).slice(0, 64) } };
+}
+
+app.get('/api/firmware/offer', auth.requireAdminOrDevice, (req, res) => {
+  if (!req.device) return res.status(400).json({ error: 'for remotes' });
+  const offer = firmware.offerFor(req.deviceMac, deviceNow(req));
+  if (!offer) return res.status(204).end();
+  res.json(offer);
+});
+
+app.get('/api/firmware/image/:version', auth.requireAdminOrDevice, (req, res) => {
+  const version = String(req.params.version);
+  if (req.device) {
+    const offer = firmware.offerFor(req.deviceMac, deviceNow(req));
+    if (!offer || offer.version !== version) return res.status(403).json({ error: 'not offered to this remote' });
+  }
+  const img = firmware.readImage(version);
+  if (!img) return res.status(404).json({ error: 'no such build' });
+  res.set('Content-Type', 'application/octet-stream');
+  res.set('X-Sha256', img.build.sha256);
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(img.file, { headers: { 'Content-Length': String(img.build.size) } }, (err) => {
+    if (err && !res.headersSent) res.status(500).end();
+  });
+});
+
+app.post('/api/firmware/report', auth.requireAdminOrDevice, (req, res) => {
+  if (!req.device) return res.status(400).json({ error: 'for remotes' });
+  firmware.report(req.deviceMac, req.body);
+  res.json({ ok: true });
+});
+
+app.get('/api/firmware', auth.requireAdminSession, (req, res) => {
+  res.json({ ...firmware.overview(), remotes: firmware.status(store.getDevices()), maxImage: firmware.MAX_IMAGE });
+});
+
+app.put('/api/firmware/settings', auth.requireAdminSession, (req, res) => {
+  try {
+    res.json({ settings: firmware.updateSettings(req.body) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+app.post('/api/firmware/upload', auth.requireAdminSession, express.raw({ type: 'application/octet-stream', limit: '8mb' }), (req, res) => {
+  try {
+    res.json({ build: firmware.addBuild(req.body, `upload ${new Date().toISOString().slice(0, 10)}`) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/firmware/builds/:version', auth.requireAdminSession, (req, res) => {
+  try {
+    firmware.removeBuild(String(req.params.version));
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+app.get('/api/firmware/releases', auth.requireAdminSession, async (req, res) => {
+  try {
+    res.json({ releases: await firmware.githubReleases() });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// The Home page's "Get latest": the newest GitHub release, as a build.
+app.post('/api/firmware/latest', auth.requireAdminSession, async (req, res) => {
+  try {
+    res.json(await firmware.importLatest());
+  } catch (e) {
+    res.status(e.status || 502).json({ error: e.message });
+  }
+});
+
+app.post('/api/firmware/import', auth.requireAdminSession, async (req, res) => {
+  const tag = String((req.body && req.body.tag) || '');
+  if (!tag) return res.status(400).json({ error: 'tag is required' });
+  try {
+    res.json({ build: await firmware.importRelease(tag) });
+  } catch (e) {
+    res.status(e.status || 502).json({ error: e.message });
+  }
+});
+
+// The viewport editor's "Check feed": read an RSS/Atom address now (not from
+// the cache) and say what it found.
+app.post('/api/feeds/check', auth.requireAdminSession, async (req, res) => {
+  const url = String((req.body && req.body.url) || '').trim();
+  try {
+    new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'Enter the feed’s full address, e.g. https://example.com/news/rss' });
+  }
+  const f = await feeds.refresh(url);
+  if (f.error) return res.status(502).json({ error: f.error });
+  res.json({ count: f.items.length, latest: f.items.slice(0, 3).map((it) => ({ title: it.title, date: it.date })) });
+});
+
 app.post('/api/receiver/check', auth.requireAdminSession, async (req, res) => {
   const b = (req.body && req.body.receiver) || {};
   const box = enigma2.boxBase(b.boxUrl);
@@ -983,6 +1101,7 @@ app.get('/api/overview', auth.requireAdminSession, (req, res) => {
       layouts,
       ha: haMonitor.snapshot(),
       haConfigured: Boolean(haCfg.host && haCfg.token),
+      updates: firmware.overview().settings.enabled ? firmware.status(store.getDevices()) : [],
       server: {
         version: APP_VERSION,
         startedAt: STARTED_AT.toISOString(),
