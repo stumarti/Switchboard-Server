@@ -5,12 +5,13 @@
 //                   approval, low batteries, Home Assistant
 //   Needs attention everything worth acting on, worst first, each linking to
 //                   where it's fixed
-//   Devices         every paired device: battery, signal, firmware, last seen
+//   Devices         every paired device: battery, signal, firmware, last seen;
+//                   "Update now" when remotes are due a new release
 //   Home Assistant  how the server's requests to HA are going, recent errors
 //
 // Polled every 10 s while the tab is visible.
 
-import { html, useState, useEffect, api, Icon, Card, Badge, Empty, timeAgo, batteryLifeText } from './lib.js';
+import { html, useState, useEffect, api, Icon, Card, Badge, Button, Empty, timeAgo, batteryLifeText } from './lib.js';
 
 const LEVEL = {
   critical: { icon: 'alert-octagon', cls: 'bad', label: 'Critical' },
@@ -32,6 +33,7 @@ const KIND_ICON = {
 function useOverview() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [reload, setReload] = useState(() => () => {});
   useEffect(() => {
     let alive = true;
     const load = () =>
@@ -43,13 +45,47 @@ function useOverview() {
         })
         .catch((e) => alive && setError(e.message));
     load();
+    setReload(() => load);
     const t = setInterval(() => !document.hidden && load(), 10000);
     return () => {
       alive = false;
       clearInterval(t);
     };
   }, []);
-  return { data, error };
+  return { data, error, reload };
+}
+
+// "Update now": remotes due the release install it at their next wake,
+// whatever the update schedule (lib/firmware.js updateNow). Shown only while
+// some remote is still to get the release.
+function UpdateNow({ u, reload }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  if (!u || !u.enabled || !u.release || (!u.pending && !u.now)) return null;
+  const act = async (method) => {
+    setBusy(true);
+    setMsg('');
+    try {
+      await api('/api/firmware/update-now', { method });
+      reload();
+    } catch (e) {
+      setMsg(e.message);
+    }
+    setBusy(false);
+  };
+  const n = (k) => `${k} remote${k === 1 ? '' : 's'}`;
+  if (u.now && u.now.waiting > 0) {
+    return html`<div class="row update-now">
+      <span title=${`Each installs ${u.release} the next time it wakes, whatever the update schedule.`}><${Badge} kind="accent" icon="timer-sand">${n(u.now.waiting)} updating at next wake<//></span>
+      <${Button} small kind="ghost" disabled=${busy} onClick=${() => act('DELETE')}>Cancel<//>
+    </div>`;
+  }
+  return html`<div class="row update-now">
+    ${msg && html`<span class="flash flash-bad">${msg}</span>`}
+    <${Button} small icon="update" disabled=${busy || !u.pending}
+      title=${`Each remote due ${u.release}${u.stage === 'pilot' ? ' (the pilot remotes, until it’s released to everyone)' : ''} installs it the next time it wakes, whatever the update schedule.`}
+      onClick=${() => act('POST')}>Update ${n(u.pending)} to ${u.release} now<//>
+  </div>`;
 }
 
 function Tile({ icon, label, value, sub, kind = '', href }) {
@@ -104,7 +140,7 @@ function Attention({ items }) {
 // for words); nothing while updates are off. Details: Remotes page.
 const UPDATE_ICON = {
   current: { icon: 'check-circle-outline', cls: 'ok', text: () => 'Up to date' },
-  pending: { icon: 'arrow-down-circle-outline', cls: 'accent', text: (u) => `Will update to ${u.offer}` },
+  pending: { icon: 'arrow-down-circle-outline', cls: 'accent', text: (u) => (u.now ? `Updating to ${u.offer} at its next wake` : `Will update to ${u.offer}`) },
   failed: { icon: 'alert-circle-outline', cls: 'bad', text: (u) => `Couldn't update to ${u.offer}${u.error ? `: ${u.error}` : ''}` },
   waiting: { icon: 'timer-sand', cls: 'muted', text: () => 'Not in this release stage yet' }
 };
@@ -177,7 +213,7 @@ function ServerCard({ server }) {
 }
 
 export function HomePage() {
-  const { data, error } = useOverview();
+  const { data, error, reload } = useOverview();
   if (!data) {
     return html`<div class="page"><p class="hint">${error || 'Loading…'}</p></div>`;
   }
@@ -210,7 +246,8 @@ export function HomePage() {
       <${Attention} items=${data.attention} />
     <//>
 
-    <${Card} icon="devices" title="Devices" subtitle=${`${c.rooms} room${c.rooms === 1 ? '' : 's'} · ${c.layouts} viewport layout${c.layouts === 1 ? '' : 's'}`}>
+    <${Card} icon="devices" title="Devices" subtitle=${`${c.rooms} room${c.rooms === 1 ? '' : 's'} · ${c.layouts} viewport layout${c.layouts === 1 ? '' : 's'}`}
+      actions=${html`<${UpdateNow} u=${data.updates} reload=${reload} />`}>
       <${Devices} devices=${data.devices} />
     <//>
 
