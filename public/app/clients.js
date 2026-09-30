@@ -244,6 +244,18 @@ export function useDragOrder(list, onChange) {
 
 // The Refresh card's "on the clock" switch (room editor and a customised remote).
 const MARKS = { 5: ':00, :05, :10 …', 10: ':00, :10, :20 …', 15: ':00, :15, :30 and :45', 30: ':00 and :30', 60: 'on the hour' };
+// The remote's Settings → Developer menu: shown, or hidden (a remote that
+// isn't for tinkering). A hidden menu's stay-awake and pixel-grid toggles
+// are off too.
+export function DeveloperMenu({ checked, onChange }) {
+  return html`<div style="margin-top:12px">
+    <${Toggle} checked=${checked} onChange=${onChange} label="Developer menu" />
+    <p class="hint">${checked
+      ? 'Settings on the remote has a Developer menu: pixel grid, stay awake, Quick Access strips, the button checker, error screens and a hard reset.'
+      : 'Hidden from Settings on the remote, and its pixel grid and stay-awake switches are off. Switch it back on here when you need it.'}</p>
+  </div>`;
+}
+
 export function ClockAlign({ checked, minutes, onChange }) {
   return html`<div style="margin-top:12px">
     <${Toggle} checked=${checked} onChange=${onChange} label="On the clock" />
@@ -489,6 +501,9 @@ function ClientEditor({ client, rooms, dashboards, reloadClients, reloadDashboar
                   options=${REFRESH_CHOICES.map((n) => ({ value: String(n), label: REFRESH_LABELS[n] }))} />
                 <${ClockAlign} checked=${Boolean(draft.layout.refreshAligned)} minutes=${draft.layout.refreshIntervalMin}
                   onChange=${(v) => setLayout('refreshAligned', v)} />
+              <//>
+              <${Card} icon="cog-outline" title="Settings on the remote">
+                <${DeveloperMenu} checked=${draft.layout.developerMenu !== false} onChange=${(v) => setLayout('developerMenu', v)} />
               <//>
               <${CarouselBuilder} carousel=${draft.layout.carousel} onChange=${(c) => setLayout('carousel', c)} room=${room} roomSlug=${draft.room} />
               <${HubBuilder} hub=${draft.layout.hub} onChange=${(h) => setLayout('hub', h)} />`}`

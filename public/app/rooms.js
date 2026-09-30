@@ -12,7 +12,7 @@ import {
   Empty, useFlash, setIn, getIn, moveItem, timeAgo
 } from './lib.js';
 import { EntityPicker, IconPicker, useHaStatus, useEntity } from './pickers.js';
-import { CarouselBuilder, HubBuilder, ClockAlign } from './clients.js';
+import { CarouselBuilder, HubBuilder, ClockAlign, DeveloperMenu } from './clients.js';
 import { RemotePreviews } from './remote-preview.js';
 
 // --- A reorderable list of items (lights, scenes, blinds, sensors, games) ---
@@ -362,6 +362,9 @@ function pageEditor(page, cardProps, room, set) {
           <${ClockAlign} checked=${getIn(room, ['standby', 'refreshAligned'], false)} minutes=${getIn(room, ['standby', 'refreshIntervalMin'], 30)}
             onChange=${(v) => set(['standby', 'refreshAligned'], v)} />
         <//>
+        <${Card} icon="cog-outline" title="Settings on the remote" subtitle="What this room's remotes offer in their own Settings.">
+          <${DeveloperMenu} checked=${room.developerMenu !== false} onChange=${(v) => set(['developerMenu'], v)} />
+        <//>
         <${ConnectionCard} ...${cardProps} />
       </div>`;
     default:
@@ -462,7 +465,7 @@ function RoomEditor({ slug, clients, reloadRooms }) {
   const hubCount = ((room.hub && room.hub.items) || []).length;
   const extras = [
     { id: 'quick', label: 'Quick Access', icon: 'view-grid-plus-outline', sub: `${hubCount} button${hubCount === 1 ? '' : 's'}` },
-    { id: 'room', label: 'Refresh & connection', icon: 'tune-variant', sub: `Every ${getIn(room, ['standby', 'refreshIntervalMin'], 30)} min` }
+    { id: 'room', label: 'Refresh & settings', icon: 'tune-variant', sub: `Every ${getIn(room, ['standby', 'refreshIntervalMin'], 30)} min${room.developerMenu === false ? ' · no Developer menu' : ''}` }
   ];
 
   return html`<div class="page">
