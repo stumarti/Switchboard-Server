@@ -199,6 +199,24 @@ If a paired device ever loses its stored token (e.g. a factory reset), it re-reg
 
 The **Theme** page compiles the firmware's on-screen look — one font (upload a TTF/OTF, or name a Google Font) and any of its ~107 named icons (search Material Design Icons and assign a replacement per slot) — into two binary files every paired remote downloads automatically and loads from its SD card at runtime. Publishing recompiles and takes effect on every device's next check-in; nothing needs reflashing. An unmodified icon slot keeps its original look.
 
+## Remote updates (over the air)
+
+**Settings → Remote updates** sends new firmware to remotes over Wi-Fi. It's **off until you switch it on**.
+
+1. **Add a build**: pick one of the firmware repo's GitHub releases (its `switchboard-app-<version>.bin`, checked against the published `.sha256`), or upload that file. The server only accepts a Switchboard remote image for the ESP32-S3 that fits the update slot, and takes the version from the image itself. A build from uncommitted changes (`-dirty`) is refused.
+2. **Choose the release**: the version remotes should run. An older build rolls remotes back to it.
+3. **Pilot first**: tick a remote or two as pilots. A new release goes only to them. When they've updated and still work, press **Release to everyone**.
+4. **How remotes install it**: from **Settings → Device info → Check for update** on the remote (can be switched off here), and/or **on a schedule**: during a window you set, on a remote's normal timer wake.
+
+On the remote:
+- **Battery:** it needs the minimum battery set here (30% by default).
+- **Integrity:** it downloads into the spare app slot and checks the SHA-256 before switching.
+- **Rollback:** new firmware counts as good only once it reaches this server on its first run. If it can't, the bootloader goes back to the previous firmware by itself.
+- **Reporting:** every attempt is reported. Failures show on this page and on the Home page.
+- **Retries:** a scheduled update that fails twice at the same version isn't retried until you release another version.
+
+Remotes on firmware from before updates existed need one USB (or web-flasher) install first.
+
 ## Cutting a release
 
 ```sh
@@ -223,6 +241,8 @@ That's it — `.github/workflows/release.yml` builds the image and pushes `ghcr.
 ## Security
 
 Plain HTTP, LAN-only by design — same trust model as the on-device config form it replaces, now with a login gate on the admin UI and per-device pairing tokens instead of the previous no-auth-at-all posture (see "Auth" and "Pairing" above). This server still holds *every* room's Home Assistant token plus your WiFi password in one place, so: keep it off the internet, don't port-forward it, and treat it like any other credential store on your network.
+
+With **Remote updates** on, this server can also install firmware on every remote. Keep the admin password strong. Treat the server as able to change what every remote runs, and anyone on your LAN as able to see its plain-HTTP traffic. Firmware is checked against a SHA-256 the same server provides, so this guards against corruption, not against a compromised server or network.
 
 ## Migrating from an unauthenticated version
 

@@ -6,12 +6,14 @@ import {
 } from './lib.js';
 import { haStatus, useHaStatus, IconPickerModal, IconPreview } from './pickers.js';
 import { ItemList } from './rooms.js';
+import { RemoteUpdatesTab } from './firmware.js';
 
 const TABS = [
   { id: 'home-assistant', label: 'Home Assistant', icon: 'home-assistant' },
   { id: 'wifi', label: 'Wi-Fi', icon: 'wifi' },
   { id: 'clock', label: 'Clock', icon: 'clock-outline' },
   { id: 'theme', label: 'Theme', icon: 'palette-outline' },
+  { id: 'updates', label: 'Remote updates', icon: 'update' },
   { id: 'account', label: 'Account', icon: 'account-circle-outline' }
 ];
 
@@ -419,6 +421,7 @@ export function SettingsPage({ tab, onSignOut }) {
   else if (active.id === 'wifi') body = html`<${WifiTab} />`;
   else if (active.id === 'clock') body = html`<${ClockTab} />`;
   else if (active.id === 'theme') body = html`<${ThemeTab} />`;
+  else if (active.id === 'updates') body = html`<${RemoteUpdatesTab} />`;
   else body = html`<${AccountTab} onSignOut=${onSignOut} />`;
   return html`<div class="page">
     <div class="page-head">
