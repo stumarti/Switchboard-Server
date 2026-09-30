@@ -1017,6 +1017,15 @@ app.get('/api/firmware/releases', auth.requireAdminSession, async (req, res) => 
   }
 });
 
+// The Home page's "Get latest": the newest GitHub release, as a build.
+app.post('/api/firmware/latest', auth.requireAdminSession, async (req, res) => {
+  try {
+    res.json(await firmware.importLatest());
+  } catch (e) {
+    res.status(e.status || 502).json({ error: e.message });
+  }
+});
+
 app.post('/api/firmware/import', auth.requireAdminSession, async (req, res) => {
   const tag = String((req.body && req.body.tag) || '');
   if (!tag) return res.status(400).json({ error: 'tag is required' });

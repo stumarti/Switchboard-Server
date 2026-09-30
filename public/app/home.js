@@ -10,7 +10,7 @@
 //
 // Polled every 10 s while the tab is visible.
 
-import { html, useState, useEffect, api, Icon, Card, Badge, Empty, timeAgo } from './lib.js';
+import { html, useState, useEffect, api, Icon, Card, Badge, Button, Empty, timeAgo, useFlash } from './lib.js';
 
 const LEVEL = {
   critical: { icon: 'alert-octagon', cls: 'bad', label: 'Critical' },
@@ -150,6 +150,69 @@ function HomeAssistantCard({ ha, server }) {
   <//>`;
 }
 
+// Remote updates (lib/firmware.js) at a glance, with the next step as a
+// button: get the newest release, send it to the pilots, then to everyone.
+function UpdatesCard() {
+  const [fw, setFw] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [msg, flash] = useFlash();
+  const load = () => api('/api/firmware').then(setFw).catch(() => setFw(null));
+  useEffect(() => {
+    load();
+  }, []);
+  if (!fw) return null;
+  const s = fw.settings;
+  const count = (st) => fw.remotes.filter((r) => r.state === st).length;
+  const newest = fw.builds[0] && fw.builds[0].version;
+  const run = async (key, fn, done) => {
+    setBusy(key);
+    try {
+      const r = await fn();
+      if (done) flash(done(r));
+      await load();
+    } catch (e) {
+      flash(e.message, 8000);
+    } finally {
+      setBusy('');
+    }
+  };
+  const put = (body) => api('/api/firmware/settings', { method: 'PUT', body });
+  const getLatest = () =>
+    run('latest', () => api('/api/firmware/latest', { method: 'POST' }), (r) => (r.added ? `Added ${r.version}` : `${r.version} is the newest; already here`));
+
+  let status;
+  let actions;
+  if (!s.enabled) {
+    status = html`<span class="hint">Off. Remotes only change firmware by USB or the web flasher.</span>`;
+    actions = html`<a class="btn" href="#/settings/updates"><${Icon} name="cog-outline" size=${18} /><span>Set up</span></a>`;
+  } else {
+    const pending = count('pending');
+    const failed = count('failed');
+    const current = count('current');
+    status = html`<div class="kv kv-home">
+      <span>Release</span><b>${s.release ? html`<code>${s.release}</code> · ${s.stage === 'everyone' ? 'everyone' : `pilot remotes (${s.pilot.length})`}` : 'none chosen'}</b>
+      <span>Remotes</span><b>${current} up to date${pending ? ` · ${pending} to update` : ''}${failed ? html` · <span class="text-bad">${failed} failed</span>` : ''}</b>
+      <span>How</span><b>${[s.button ? 'from the remote' : '', s.schedule.enabled ? `nightly ${String(s.schedule.fromHour).padStart(2, '0')}:00–${String(s.schedule.toHour).padStart(2, '0')}:00` : ''].filter(Boolean).join(' · ') || 'nothing set'}</b>
+    </div>`;
+    actions = html`
+      <${Button} icon="github" disabled=${Boolean(busy)} onClick=${getLatest}>${busy === 'latest' ? 'Checking…' : 'Get latest release'}<//>
+      ${newest && newest !== s.release &&
+      html`<${Button} kind="primary" icon="account-hard-hat-outline" disabled=${Boolean(busy) || !s.pilot.length}
+          title=${s.pilot.length ? '' : 'Tick pilot remotes on the Remote updates page first'}
+          onClick=${() => run('release', () => put({ release: newest }), () => `${newest} goes to the pilot remotes`)}>Send ${newest} to pilots<//>`}
+      ${s.release && s.stage !== 'everyone' &&
+      html`<${Button} icon="account-group-outline" disabled=${Boolean(busy)}
+          onClick=${() => confirm(`Send ${s.release} to every remote?`) && run('everyone', () => put({ stage: 'everyone' }), () => `${s.release} goes to every remote`)}>Release to everyone<//>`}
+      <a class="btn btn-ghost" href="#/settings/updates"><${Icon} name="chevron-right" size=${18} /><span>Details</span></a>`;
+  }
+  return html`<${Card} icon="update" title="Remote updates"
+    actions=${s.enabled ? html`<${Badge} kind="ok" icon="check">On<//>` : html`<${Badge}>Off<//>`}>
+    ${status}
+    ${msg && html`<p class=${`hint ${/fail|error|GitHub|no releases|isn't/i.test(msg) ? 'text-bad' : ''}`}>${msg}</p>`}
+    <div class="row" style="margin-top:12px;flex-wrap:wrap">${actions}</div>
+  <//>`;
+}
+
 function ServerCard({ server }) {
   return html`<${Card} icon="server" title="This server">
     <div class="kv kv-home">
@@ -201,6 +264,7 @@ export function HomePage() {
     <div class="grid">
       <${HomeAssistantCard} ha=${ha} server=${data.server} />
       <${ServerCard} server=${data.server} />
+      <${UpdatesCard} />
     </div>
     </div>
   </div>`;
