@@ -10,7 +10,7 @@
 //
 // Polled every 10 s while the tab is visible.
 
-import { html, useState, useEffect, api, Icon, Card, Badge, Empty, timeAgo } from './lib.js';
+import { html, useState, useEffect, api, Icon, Card, Badge, Empty, timeAgo, batteryLifeText } from './lib.js';
 
 const LEVEL = {
   critical: { icon: 'alert-octagon', cls: 'bad', label: 'Critical' },
@@ -64,14 +64,16 @@ function Tile({ icon, label, value, sub, kind = '', href }) {
   return href ? html`<a class="ht-link" href=${href}>${body}</a>` : body;
 }
 
-function BatteryBar({ pct, level }) {
+function BatteryBar({ pct, level, life }) {
   if (pct == null) return html`<span class="hint">—</span>`;
+  const est = batteryLifeText(life);
   const cls = level === 'critical' ? 'bad' : level === 'low' ? 'warn' : 'ok';
   const icon = pct >= 95 ? 'battery' : `battery-${Math.max(10, Math.round(pct / 10) * 10)}`;
   return html`<span class=${`battery battery-${cls}`} title=${`${pct}%`}>
     <${Icon} name=${pct <= 10 ? 'battery-alert-variant-outline' : icon} size=${18} />
     <span class="battery-bar"><span style=${{ width: `${pct}%` }}></span></span>
     <span>${pct}%</span>
+    ${est.short && html`<span class="battery-days hint" title=${est.tip}>${est.short}</span>`}
   </span>`;
 }
 
@@ -130,7 +132,7 @@ function Devices({ devices }) {
             <span>${d.name}</span>
           </a></td>
           <td>${d.status === 'pending' ? html`<${Badge} kind="warn" icon="account-clock-outline">Waiting for approval<//>` : d.assignedTo || html`<span class="hint">None</span>`}</td>
-          <td><${BatteryBar} pct=${d.battery} level=${d.batteryLevel} /></td>
+          <td><${BatteryBar} pct=${d.battery} level=${d.batteryLevel} life=${d.batteryLife} /></td>
           <td><${Signal} rssi=${d.rssi} /></td>
           <td>${d.firmware ? html`<span class="fw-cell"><code>${d.firmware}</code><${UpdateIcon} u=${d.update} /></span>` : html`<span class="hint">—</span>`}</td>
           <td>${timeAgo(d.lastSeenAt)}</td>

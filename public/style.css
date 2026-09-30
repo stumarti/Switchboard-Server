@@ -843,3 +843,7 @@ a.rail-logo .rail-count { top: 2px; right: 2px; }
 .fw-cell { display: inline-flex; align-items: center; gap: 6px; }
 .fw-state { display: inline-flex; }
 .fw-ok { color: var(--ok); } .fw-accent { color: var(--accent); } .fw-bad { color: var(--bad); } .fw-muted { color: var(--muted); }
+.repo-list { display: flex; flex-direction: column; gap: 6px; }
+.repo-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line, #e5e7eb); }
+.repo-row .spacer { flex: 1; }
+.battery-days { margin-left: 4px; white-space: nowrap; }

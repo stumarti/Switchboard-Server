@@ -68,6 +68,7 @@ const overview = require('./lib/overview');
 const enigma2 = require('./lib/enigma2');
 const feeds = require('./lib/feeds');
 const firmware = require('./lib/firmware');
+const batteryHistory = require('./lib/battery-history');
 const xboxLibrary = require('./lib/xbox-library');
 const iconSlots = require('./lib/assets/icon-slots');
 const iconsCompiler = require('./lib/assets/icons');
@@ -218,6 +219,7 @@ app.post('/api/pairing/:mac/revoke', auth.requireAdminSession, (req, res) => {
 app.delete('/api/pairing/:mac', auth.requireAdminSession, (req, res) => {
   const result = pairing.remove(req.params.mac);
   if (result.error) return res.status(404).json(result);
+  batteryHistory.forget(req.params.mac);
   res.status(204).end();
 });
 
@@ -270,7 +272,8 @@ app.get('/api/clients', auth.requireAdminSession, (req, res) => {
       layout: clients.normalizeType(d.type) === 'viewport'
         ? viewportLayout(d)
         : clients.layoutFor(d, d.assignedSlug ? store.getProfile(d.assignedSlug) : null),
-      layoutCustomized: Boolean(d.layout)
+      layoutCustomized: Boolean(d.layout),
+      batteryLife: batteryHistory.estimate(d.mac)
     }))
   );
 });
@@ -1011,16 +1014,16 @@ app.delete('/api/firmware/builds/:version', auth.requireAdminSession, (req, res)
 
 app.get('/api/firmware/releases', auth.requireAdminSession, async (req, res) => {
   try {
-    res.json({ releases: await firmware.githubReleases() });
+    res.json({ releases: await firmware.githubReleases({ repo: req.query.repo ? String(req.query.repo) : '' }) });
   } catch (e) {
-    res.status(502).json({ error: e.message });
+    res.status(e.status || 502).json({ error: e.message });
   }
 });
 
 // The Home page's "Get latest": the newest GitHub release, as a build.
 app.post('/api/firmware/latest', auth.requireAdminSession, async (req, res) => {
   try {
-    res.json(await firmware.importLatest());
+    res.json(await firmware.importLatest({ repo: req.body && req.body.repo ? String(req.body.repo) : '' }));
   } catch (e) {
     res.status(e.status || 502).json({ error: e.message });
   }
@@ -1030,7 +1033,7 @@ app.post('/api/firmware/import', auth.requireAdminSession, async (req, res) => {
   const tag = String((req.body && req.body.tag) || '');
   if (!tag) return res.status(400).json({ error: 'tag is required' });
   try {
-    res.json({ build: await firmware.importRelease(tag) });
+    res.json({ build: await firmware.importRelease(tag, { repo: req.body && req.body.repo ? String(req.body.repo) : '' }) });
   } catch (e) {
     res.status(e.status || 502).json({ error: e.message });
   }
@@ -1090,7 +1093,8 @@ app.get('/api/overview', auth.requireAdminSession, (req, res) => {
   const devices = pairing.list().map((d) => ({
     ...d,
     type: clients.normalizeType(d.type),
-    refreshMin: d.dashboard ? refreshOf[d.dashboard] : null
+    refreshMin: d.dashboard ? refreshOf[d.dashboard] : null,
+    batteryLife: batteryHistory.estimate(d.mac)
   }));
   const globals = store.getGlobals();
   const haCfg = globals.homeAssistant || {};
@@ -1152,6 +1156,18 @@ function migrateViewportLayouts() {
   if (changed) store.saveDevices(devices);
 }
 migrateViewportLayouts();
+
+// The battery history is written at most every few minutes: keep the last
+// readings when the container stops.
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.once(sig, () => {
+    try {
+      batteryHistory.flush(true);
+    } finally {
+      process.exit(0);
+    }
+  });
+}
 
 app.listen(PORT, HOST, () => {
   console.log(`homeremote-server listening on http://${HOST}:${PORT}`);
