@@ -58,17 +58,24 @@ Then:
 
 This exact file is `docker-compose.yml` in this repo — grab it directly instead of retyping it.
 
-Every Switchboard remote on your network finds the server automatically via `switchboard.local`. **Host networking is required** for that: mDNS needs multicast, which doesn't cross Docker's default bridge network. On **Unraid**, use this repo's `unraid-template.xml`. See [Configuration](wiki/Configuration.md) for both, and for every environment variable.
+Every Switchboard remote on your network finds the server automatically via `switchboard.local`. **Host networking is required** for that: mDNS needs multicast, which doesn't cross Docker's default bridge network. On **Unraid**, use this repo's `unraid-template.xml`. See [Configuration](https://stumarti.github.io/Switchboard/manual/server/configuration.html) for both, and for every environment variable.
 
-> Keep this server on your LAN: it holds your Home Assistant token and Wi-Fi password, and can update every remote's firmware. See [Security](wiki/Security.md).
+> Keep this server on your LAN: it holds your Home Assistant token and Wi-Fi password, and can update every remote's firmware. See [Security](https://stumarti.github.io/Switchboard/manual/server/security.html).
 
-## Documentation
+## Try it without hardware
 
-The in-depth guide lives in the [wiki](wiki/Home.md):
+```sh
+npm install
+node tools/demo/demo.js
+```
 
-- [The admin UI](wiki/Admin-UI.md) — a tour of every page
-- [Viewports](wiki/Viewports.md) — wall displays, section types, meeting rooms
-- [Pairing & auth](wiki/Pairing-and-Auth.md), including migrating from an unauthenticated version
-- [Theme](wiki/Theme.md) · [Remote updates](wiki/Remote-Updates.md) · [Battery life](wiki/Battery-Life.md)
-- [Configuration](wiki/Configuration.md) · [Security](wiki/Security.md)
-- [API](wiki/API.md) · [Profile format](wiki/Profile-Format.md) · [Development](wiki/Development.md)
+Then open `http://localhost:45680` (password `demo`): a pretend Home Assistant with a whole house in it, and this server seeded with rooms, remotes, wall displays and a firmware release. See [Try the demo](https://stumarti.github.io/Switchboard/manual/demo.html).
+
+## Manual
+
+**[The Switchboard manual](https://stumarti.github.io/Switchboard/manual/)** covers the server and the remote, with screenshots of every page. It lives beside the web flasher, in the firmware repository's GitHub Pages.
+
+- The admin UI: [Home](https://stumarti.github.io/Switchboard/manual/server/home.html), [remote layouts](https://stumarti.github.io/Switchboard/manual/server/remote-layouts.html), [remotes](https://stumarti.github.io/Switchboard/manual/server/remotes.html), [viewports](https://stumarti.github.io/Switchboard/manual/server/viewports.html), [settings](https://stumarti.github.io/Switchboard/manual/server/settings.html)
+- [Theme](https://stumarti.github.io/Switchboard/manual/server/theme.html) · [Remote updates](https://stumarti.github.io/Switchboard/manual/server/remote-updates.html) · [Battery life](https://stumarti.github.io/Switchboard/manual/server/battery-life.html) · [Pairing & auth](https://stumarti.github.io/Switchboard/manual/server/pairing-and-auth.html)
+- [Configuration](https://stumarti.github.io/Switchboard/manual/server/configuration.html) · [Security](https://stumarti.github.io/Switchboard/manual/server/security.html)
+- [API](https://stumarti.github.io/Switchboard/manual/server/api.html) · [Profile format](https://stumarti.github.io/Switchboard/manual/server/profile-format.html) · [Development](https://stumarti.github.io/Switchboard/manual/server/development.html)
