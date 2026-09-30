@@ -2,7 +2,7 @@
 // (lib/firmware.js). Off until switched on. A release goes to the pilot
 // remotes first, and to everyone only when promoted here.
 
-import { html, useState, api, Icon, Card, Field, Select, Toggle, Button, Badge, useFlash, useApi, timeAgo } from './lib.js';
+import { html, useState, useEffect, api, Icon, Card, Field, Select, Toggle, Button, Badge, useFlash, useApi, timeAgo } from './lib.js';
 
 const STATE = {
   current: { kind: 'ok', icon: 'check-circle-outline', label: 'Up to date' },
@@ -182,4 +182,81 @@ export function RemoteUpdatesTab() {
 
     <${Builds} data=${data} reload=${reload} flash=${flash} />
   </div>`;
+}
+
+// The Remotes page's summary of over-the-air updates, with the next step as
+// a button: get the newest release, send it to the pilots, then to everyone.
+// The whole picture is Settings -> Remote updates ("Details").
+export function UpdatesCard() {
+  const [fw, setFw] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [msg, flash] = useFlash();
+  const load = () => api('/api/firmware').then(setFw).catch(() => setFw(null));
+  useEffect(() => {
+    load();
+  }, []);
+  if (!fw) return null;
+  const s = fw.settings;
+  const count = (st) => fw.remotes.filter((r) => r.state === st).length;
+  const newest = fw.builds[0] && fw.builds[0].version;
+  const run = async (key, fn, done) => {
+    setBusy(key);
+    try {
+      const r = await fn();
+      if (done) flash(done(r));
+      await load();
+    } catch (e) {
+      flash(e.message, 8000);
+    } finally {
+      setBusy('');
+    }
+  };
+  const put = (body) => api('/api/firmware/settings', { method: 'PUT', body });
+  const getLatest = () =>
+    run('latest', () => api('/api/firmware/latest', { method: 'POST' }), (r) => (r.added ? `Added ${r.version}` : `${r.version} is the newest; already here`));
+
+  let status;
+  let actions;
+  if (!s.enabled) {
+    status = html`<span class="hint">Off. Remotes only change firmware by USB or the web flasher.</span>`;
+    actions = html`<a class="btn" href="#/settings/updates"><${Icon} name="cog-outline" size=${18} /><span>Set up</span></a>`;
+  } else {
+    const pending = count('pending');
+    const failed = count('failed');
+    const current = count('current');
+    status = html`<div class="kv kv-home">
+      <span>Release</span><b>${s.release ? html`<code>${s.release}</code> · ${s.stage === 'everyone' ? 'everyone' : `pilot remotes (${s.pilot.length})`}` : 'none chosen'}</b>
+      <span>Remotes</span><b>${current} up to date${pending ? ` · ${pending} to update` : ''}${failed ? html` · <span class="text-bad">${failed} failed</span>` : ''}</b>
+      <span>How</span><b>${[s.button ? 'from the remote' : '', s.schedule.enabled ? `nightly ${String(s.schedule.fromHour).padStart(2, '0')}:00–${String(s.schedule.toHour).padStart(2, '0')}:00` : ''].filter(Boolean).join(' · ') || 'nothing set'}</b>
+    </div>`;
+    actions = html`
+      <${Button} icon="github" disabled=${Boolean(busy)} onClick=${getLatest}>${busy === 'latest' ? 'Checking…' : 'Get latest release'}<//>
+      ${newest && newest !== s.release &&
+      html`<${Button} kind="primary" icon="account-hard-hat-outline" disabled=${Boolean(busy) || !s.pilot.length}
+          title=${s.pilot.length ? '' : 'Tick pilot remotes on the Remote updates page first'}
+          onClick=${() => run('release', () => put({ release: newest }), () => `${newest} goes to the pilot remotes`)}>Send ${newest} to pilots<//>`}
+      ${s.release && s.stage !== 'everyone' &&
+      html`<${Button} icon="account-group-outline" disabled=${Boolean(busy)}
+          onClick=${() => confirm(`Send ${s.release} to every remote?`) && run('everyone', () => put({ stage: 'everyone' }), () => `${s.release} goes to every remote`)}>Release to everyone<//>`}
+      <a class="btn btn-ghost" href="#/settings/updates"><${Icon} name="chevron-right" size=${18} /><span>Details</span></a>`;
+  }
+  return html`<${Card} icon="update" title="Remote updates"
+    actions=${s.enabled ? html`<${Badge} kind="ok" icon="check">On<//>` : html`<${Badge}>Off<//>`}>
+    ${status}
+    ${msg && html`<p class=${`hint ${/fail|error|GitHub|no releases|isn't/i.test(msg) ? 'text-bad' : ''}`}>${msg}</p>`}
+    <div class="row" style="margin-top:12px;flex-wrap:wrap">${actions}</div>
+  <//>`;
+}
+
+// A remote's page: its firmware, with its update state as the icon (and in
+// the tooltip) when updates are on.
+export function DeviceUpdateBadge({ mac, firmware }) {
+  const [fw] = useApi('/api/firmware');
+  const r = fw && fw.settings.enabled ? fw.remotes.find((x) => x.mac === mac) : null;
+  const st = r && STATE[r.state];
+  if (!firmware && !r) return null;
+  const tip = !st ? '' : r.state === 'failed' ? `Couldn't update to ${r.offer}${r.last && r.last.error ? `: ${r.last.error}` : ''}` : r.offer ? `Will update to ${r.offer}` : st.label;
+  return html`<a href="#/settings/updates" title=${tip} style="text-decoration:none">
+    <${Badge} kind=${st ? st.kind : ''} icon=${st ? st.icon : 'chip'}>fw ${firmware || '?'}${r && r.offer ? ` → ${r.offer}` : ''}<//>
+  </a>`;
 }

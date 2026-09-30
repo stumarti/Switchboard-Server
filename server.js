@@ -1101,7 +1101,7 @@ app.get('/api/overview', auth.requireAdminSession, (req, res) => {
       layouts,
       ha: haMonitor.snapshot(),
       haConfigured: Boolean(haCfg.host && haCfg.token),
-      updates: firmware.status(store.getDevices()),
+      updates: firmware.overview().settings.enabled ? firmware.status(store.getDevices()) : [],
       server: {
         version: APP_VERSION,
         startedAt: STARTED_AT.toISOString(),

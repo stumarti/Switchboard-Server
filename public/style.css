@@ -840,3 +840,6 @@ a.rail-logo .rail-count { top: 2px; right: 2px; }
 .rp-tile-strip { flex: 1; align-self: stretch; border-top: 2px solid #111; display: flex; align-items: center; justify-content: center; }
 .vp-announce { border-bottom: 1px solid #ddd; padding-bottom: 5px; }
 .vp-announce:last-child { border-bottom: 0; }
+.fw-cell { display: inline-flex; align-items: center; gap: 6px; }
+.fw-state { display: inline-flex; }
+.fw-ok { color: var(--ok); } .fw-accent { color: var(--accent); } .fw-bad { color: var(--bad); } .fw-muted { color: var(--muted); }
