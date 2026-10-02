@@ -32,14 +32,18 @@ const REMOTES = [
   { mac: 'a0:b1:c2:00:00:01', name: 'Living room remote', room: 'living-room', battery: 82, rssi: -54, drainPerDay: 1.6 },
   { mac: 'a0:b1:c2:00:00:02', name: 'Sofa remote', room: 'living-room', battery: 64, rssi: -61, drainPerDay: 2.1 },
   { mac: 'a0:b1:c2:00:00:03', name: 'Kitchen remote', room: 'kitchen', battery: 18, rssi: -67, drainPerDay: 3.2 },
-  { mac: 'a0:b1:c2:00:00:04', name: 'Bedroom remote', room: 'bedroom', battery: 91, rssi: -72, drainPerDay: 1.1 }
+  { mac: 'a0:b1:c2:00:00:04', name: 'Bedroom remote', room: 'bedroom', battery: 91, rssi: -72, drainPerDay: 1.1 },
+  // Another kind of remote, from its own firmware repository: its own board.
+  { mac: 'a0:b1:c2:00:00:05', name: 'Hall Sticky', room: 'living-room', board: 'sticky', battery: 70, rssi: -60, drainPerDay: 1.4 }
 ];
 const VIEWPORTS = [
   { mac: 'a0:b1:c2:00:01:01', name: 'Kitchen panel', layout: 'kitchen-panel', battery: 76, rssi: -58, drainPerDay: 2.4 },
   { mac: 'a0:b1:c2:00:01:02', name: 'Boardroom sign', layout: 'boardroom', battery: 57, rssi: -63, drainPerDay: 1.8 }
 ];
 const PENDING = { mac: 'a0:b1:c2:00:00:09' };
-const FIRMWARE = { current: 'v1.3.0', release: 'v1.4.0' };
+// X4 Pro remotes on v1.3.0 with v1.4.0 out to one pilot; the Sticky on its
+// own board's v0.1.0, with v0.2.0 released to every Sticky.
+const FIRMWARE = { current: 'v1.3.0', release: 'v1.4.0', sticky: { current: 'v0.1.0', release: 'v0.2.0' } };
 
 function start(label, args, env) {
   const child = spawn(process.execPath, args, { cwd: ROOT, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -95,12 +99,12 @@ function batteryHistory() {
 
 // A minimal image the server accepts as a Switchboard remote build (the
 // firmware repo's release workflow makes real ones).
-function firmwareImage(version) {
+function firmwareImage(version, board = 'x4pro') {
   const b = Buffer.alloc(200 * 1024, 0xff);
   b[0] = 0xe9;
   b.writeUInt16LE(9, 12);
   b.writeUInt32LE(0xabcd5432, 32);
-  b.write(`SWITCHBOARD_FW:${version}\0`, 4096, 'latin1');
+  b.write(`SWITCHBOARD_FW:${board}:${version}\0`, 4096, 'latin1');
   return b;
 }
 
@@ -292,11 +296,15 @@ async function seed() {
   // Remote updates: two builds, the new one out to the pilot remote so far.
   await api('POST', '/api/firmware/upload', firmwareImage(FIRMWARE.current), { 'content-type': 'application/octet-stream' });
   await api('POST', '/api/firmware/upload', firmwareImage(FIRMWARE.release), { 'content-type': 'application/octet-stream' });
-  await api('PUT', '/api/firmware/settings', { enabled: true, release: FIRMWARE.release, pilot: [REMOTES[0].mac], schedule: { enabled: true, fromHour: 2, toHour: 5 } });
+  for (const v of [FIRMWARE.sticky.current, FIRMWARE.sticky.release]) {
+    await api('POST', '/api/firmware/upload', firmwareImage(v, 'sticky'), { 'content-type': 'application/octet-stream' });
+  }
+  await api('PUT', '/api/firmware/settings', { enabled: true, board: 'x4pro', release: FIRMWARE.release, pilot: [REMOTES[0].mac], schedule: { enabled: true, fromHour: 2, toHour: 5 } });
+  await api('PUT', '/api/firmware/settings', { board: 'sticky', release: FIRMWARE.sticky.release, stage: 'everyone' });
 
   for (const d of [...REMOTES, ...VIEWPORTS]) {
-    const fw = d.layout ? 'v0.9.2' : d === REMOTES[0] ? FIRMWARE.release : FIRMWARE.current;
-    const headers = { authorization: `Bearer ${tokens[d.mac]}`, 'x-battery': String(d.battery), 'x-rssi': String(d.rssi), 'x-firmware': fw };
+    const fw = d.layout ? 'v0.9.2' : d.board === 'sticky' ? FIRMWARE.sticky.current : d === REMOTES[0] ? FIRMWARE.release : FIRMWARE.current;
+    const headers = { authorization: `Bearer ${tokens[d.mac]}`, 'x-battery': String(d.battery), 'x-rssi': String(d.rssi), 'x-firmware': fw, ...(d.board ? { 'x-board': d.board } : {}) };
     if (d.layout) await api('GET', '/api/viewports/me/bundle', undefined, headers);
     else await api('GET', `/api/devices/${d.room}/bundle`, undefined, headers);
   }

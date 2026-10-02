@@ -848,3 +848,5 @@ a.rail-logo .rail-count { top: 2px; right: 2px; }
 .repo-row .spacer { flex: 1; }
 .battery-days { margin-left: 4px; white-space: nowrap; }
 .update-now { gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.update-now-list { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.update-now-board { font-weight: 600; }
