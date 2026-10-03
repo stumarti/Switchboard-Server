@@ -602,6 +602,7 @@ textarea { min-height: 70px; font-family: ui-monospace, monospace; font-size: 12
 .vp-art { image-rendering: pixelated; flex: none; }
 .wake-note { display: flex; gap: 6px; align-items: flex-start; }
 .vp-erow { display: flex; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid #ddd; }
+.vp-erow .vp-tiny { text-transform: none; font-size: 13px; letter-spacing: 0; }
 .vp-erow:last-child { border-bottom: 0; }
 .vp-meeting { position: relative; display: flex; flex-direction: column; height: 480px; }
 .vp-meeting-band { color: #fff; padding: 20px 28px; display: flex; align-items: center; gap: 24px; }
@@ -667,7 +668,7 @@ textarea { min-height: 70px; font-family: ui-monospace, monospace; font-size: 12
 .kd-sec-row { height: 28px; }
 .kd-mark { display: inline-flex; padding-bottom: 2px; border-bottom: 2px solid transparent; margin-right: 2px; }
 .kd-mark.on { border-bottom-color: #111; }
-.kd-bar { width: 1px; height: 18px; background: #111; margin: 0 6px; }
+.kd-bar { width: 0; height: 18px; border-left: 1px dotted #111; margin: 0 6px; }
 .kd-footer {
   position: absolute; right: 12px; bottom: 6px; display: flex; align-items: center; gap: 4px;
   font: 400 18px/1 'Atkinson Hyperlegible', system-ui, sans-serif; color: #111;

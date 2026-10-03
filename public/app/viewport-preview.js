@@ -71,9 +71,9 @@ function Energy({ d }) {
     return html`<div>
       ${row('weather-sunny-alert', 'Predicted', d.solarExpected, null)}
       ${row('solar-power-variant', 'Generated', d.solarToday, 3, d.solarPct != null ? `${d.solarPct}% of predicted` : '')}
-      ${row('home-lightning-bolt-outline', 'House used', d.loadToday, null)}
-      ${row('transmission-tower-import', 'From grid', d.gridImport, 2)}
-      ${row('transmission-tower-export', 'To grid', d.gridExport, 4)}
+      ${row('home-lightning-bolt-outline', 'House Used', d.loadToday, null)}
+      ${row('transmission-tower-import', 'From Grid', d.gridImport, 2)}
+      ${row('transmission-tower-export', 'To Grid', d.gridExport, 4)}
     </div>`;
   }
   const cell = (icon, m, label, col) => html`<div><${Icon} name=${icon} size=${20} /><div class="vp-med" style=${col ? { color: c(col) } : null}>${val(m)}</div><div class="vp-tiny">${label}</div></div>`;
@@ -95,6 +95,9 @@ const kwh = (v) => (v == null ? '' : ` ${v} kWh`);
 const Key = ({ color, dashed, children }) =>
   html`<span class="vp-small"><span class=${`vp-key ${dashed ? 'vp-key-dash' : ''}`} style=${dashed ? { borderColor: c(color) } : { background: c(color) }}></span>${children}</span>`;
 
+// Yellow bars get a black edge, as the panel draws them.
+const edge = (n) => (n === 3 ? { stroke: '#111', 'stroke-width': 1 } : {});
+
 // Top: actual solar (bars) against the forecast (dashed). Bottom:
 // consumption stacked by source — solar, battery, grid — with charging the
 // battery and export to the grid below the line.
@@ -106,7 +109,7 @@ function EnergyGraph({ d }) {
   const nowX = d.nowIndex != null ? (d.nowIndex + 0.5) * bw : null;
 
   // Top panel.
-  const TH = 120;
+  const TH = 152;
   const tMax = Math.max(0.5, d.solar.max || 0);
   const ty = (v) => TH - (v / tMax) * (TH - 6);
   let fpath = '';
@@ -119,7 +122,7 @@ function EnergyGraph({ d }) {
   const u = d.usage;
   const upMax = Math.max(0.5, u.max || 0);
   const downMax = u.exportMax || 0;
-  const BH = 150;
+  const BH = 186;
   const up = (BH - 4) * (upMax / (upMax + downMax));
   const axisY = 2 + up;
   const scale = up / upMax;
@@ -131,14 +134,14 @@ function EnergyGraph({ d }) {
       if (!v) continue;
       const h = v * scale;
       yTop -= h;
-      bars.push(html`<rect x=${i * bw + 1.5} y=${yTop} width=${bw - 3} height=${h} fill=${c(col[ck])} />`);
+      bars.push(html`<rect x=${i * bw + 1.5} y=${yTop} width=${bw - 3} height=${h} fill=${c(col[ck])} ...${edge(col[ck])} />`);
     }
     // Below the line: into the battery next to it, then out to the grid.
     let yBelow = axisY;
     for (const [list, ck] of [[u.toBattery || [], 'toBattery'], [u.export, 'gridExport']]) {
       const v = list[i];
       if (!v) continue;
-      bars.push(html`<rect x=${i * bw + 1.5} y=${yBelow} width=${bw - 3} height=${v * scale} fill=${c(col[ck] ?? col.fromBattery)} />`);
+      bars.push(html`<rect x=${i * bw + 1.5} y=${yBelow} width=${bw - 3} height=${v * scale} fill=${c(col[ck] ?? col.fromBattery)} ...${edge(col[ck] ?? col.fromBattery)} />`);
       yBelow += v * scale;
     }
   }
@@ -150,9 +153,9 @@ function EnergyGraph({ d }) {
       <${Key} color=${col.forecast} dashed>Predicted${kwh(t.forecast)}<//>
     </div>
     <svg viewBox=${`0 0 ${W} ${TH + 18}`} width="100%" style="display:block">
-      ${(d.solar.actual || []).map((v, i) => v != null && html`<rect x=${i * bw + 1.5} y=${ty(v)} width=${bw - 3} height=${TH - ty(v)} fill=${c(col.solar)} />`)}
+      ${(d.solar.actual || []).map((v, i) => v != null && html`<rect x=${i * bw + 1.5} y=${ty(v)} width=${bw - 3} height=${TH - ty(v)} fill=${c(col.solar)} ...${edge(col.solar)} />`)}
       ${fpath && html`<path d=${fpath} fill="none" stroke=${c(col.forecast)} stroke-width="3" stroke-dasharray="7 5" />`}
-      <line x1="0" x2=${W} y1=${TH} y2=${TH} stroke="#111" stroke-width="2" />
+      <line x1="0" x2=${W} y1=${TH} y2=${TH} stroke="#111" stroke-width="3" />
       ${nowX != null && html`<line x1=${nowX} x2=${nowX} y1="0" y2=${TH} stroke="#111" stroke-dasharray="2 3" />`}
       <text x=${W - 2} y="12" font-size="12" fill="#555" text-anchor="end">${tMax.toFixed(1)} kW</text>
       <${Axis} d=${d} W=${W} y=${TH + 15} bw=${bw} />
@@ -160,14 +163,15 @@ function EnergyGraph({ d }) {
     <div class="vp-row" style="gap:12px;flex-wrap:wrap;margin-top:4px">
       <b class="vp-small">Use</b>
       <${Key} color=${col.fromSolar}>Solar${kwh(t.fromSolar)}<//>
-      <${Key} color=${col.fromBattery}>Battery${kwh(t.fromBattery)}<//>
+      <${Key} color=${col.fromBattery}>Battery${kwh(t.fromBattery)}${(col.toBattery ?? col.fromBattery) === col.fromBattery && t.toBattery != null ? ` / ${t.toBattery} in` : ''}<//>
       <${Key} color=${col.fromGrid}>Grid${kwh(t.fromGrid)}<//>
-      ${t.toBattery != null && html`<${Key} color=${col.toBattery ?? col.fromBattery}>Charged${kwh(t.toBattery)}<//>`}
-      <${Key} color=${col.gridExport}>Exported${kwh(t.gridExport)}<//>
+      ${t.toBattery != null && (col.toBattery ?? col.fromBattery) !== col.fromBattery && html`<${Key} color=${col.toBattery ?? col.fromBattery}>Charged${kwh(t.toBattery)}<//>`}
+      <${Key} color=${col.gridExport}>Export${kwh(t.gridExport)}<//>
     </div>
     <svg viewBox=${`0 0 ${W} ${BH + 18}`} width="100%" style="display:block">
       ${bars}
-      <line x1="0" x2=${W} y1=${axisY} y2=${axisY} stroke="#111" stroke-width="2" />
+      <line x1="0" x2=${W} y1=${axisY} y2=${axisY} stroke="#111" stroke-width="3" />
+      <line x1="0" x2=${W} y1=${BH} y2=${BH} stroke="#111" stroke-width="3" />
       ${nowX != null && html`<line x1=${nowX} x2=${nowX} y1="0" y2=${BH} stroke="#111" stroke-dasharray="2 3" />`}
       <text x=${W - 2} y="12" font-size="12" fill="#555" text-anchor="end">${upMax.toFixed(1)} kW</text>
       <${Axis} d=${d} W=${W} y=${BH + 15} bw=${bw} />
@@ -342,6 +346,7 @@ function SectionsScreen({ d, highlight }) {
     ${d.columns.map(
       (col) => html`<div class="vp-col kd-col">
         ${col.map((s) => {
+          if (s.type === 'spacer') return html`<div class=${highlight === s.id ? 'vp-hl' : ''} style=${{ height: `${s.data?.height ?? 0}px` }}></div>`;
           const Dash = DASH_SECTIONS[s.type];
           const drawn = Dash && s.data != null ? Dash({ d: s.data, title: s.title, siblings: all }) : null;
           if (drawn) return html`<div class=${`kd-section ${highlight === s.id ? 'vp-hl' : ''}`}>${drawn}</div>`;

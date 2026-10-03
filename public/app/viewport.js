@@ -74,7 +74,8 @@ export const SECTION_META = {
   cameras: { label: 'Cameras', icon: 'cctv', about: 'Last motion per camera' },
   now: { label: 'Now', icon: 'lightning-bolt-outline', about: 'What’s happening: alarm, heating, doors, robots…' },
   heating: { label: 'Heating', icon: 'radiator', about: 'Zones against their setpoints, hot water' },
-  announcements: { label: 'Announcements', icon: 'bullhorn-outline', about: 'The latest from a company RSS or Atom feed' }
+  announcements: { label: 'Announcements', icon: 'bullhorn-outline', about: 'The latest from a company RSS or Atom feed' },
+  spacer: { label: 'Spacer', icon: 'arrow-expand-vertical', about: 'A gap, to move the next section down' }
 };
 
 const TEMPLATES = [
@@ -128,6 +129,8 @@ function newSection(type) {
       return { ...base, title: 'Announcements', url: '', count: 3, summary: true, maxAgeDays: 0, showDate: true, color: 1 };
     case 'now':
       return { ...base, title: 'Now', items: [] };
+    case 'spacer':
+      return { ...base, height: 20 };
     case 'heating':
       return { ...base, entity: '', zones: [], hotWater: '', callingDelta: 0.5 };
     default:
@@ -687,6 +690,8 @@ function HeatingEditor({ s, set }) {
 }
 
 const EDITORS = {
+  spacer: ({ s, set }) =>
+    html`<div style="width:200px"><${Field} label="Height (px)" hint="The panel is 480 px tall."><${NumberInput} min="0" max="400" value=${s.height} onChange=${(v) => set({ ...s, height: v })} /><//></div>`,
   now: NowEditor,
   heating: HeatingEditor,
   weather: WeatherEditor,
@@ -774,7 +779,7 @@ function SectionCard({ s, set, remove, duplicate, move, moveColumn, columnLabels
     html`<div class="card-body">
       ${WAKE_ONLY[s.type] && !(s.showWhen && s.showWhen.mode !== 'always' && s.showWhen.liveMin) &&
       html`<p class="hint wake-note"><${Icon} name="battery-clock-outline" size=${16} /> ${WAKE_ONLY[s.type]} It updates when the display wakes (every ${ctx.refreshMin} min${s.type === 'transport' ? ', or sooner when a departure turns imminent' : ''}), never in between — battery comes first.</p>`}
-      <${Field} label="Heading (optional)"><${TextInput} value=${s.title} placeholder=${meta.label} onInput=${(v) => set({ ...s, title: v })} /><//>
+      ${s.type !== 'spacer' && html`<${Field} label="Heading (optional)"><${TextInput} value=${s.title} placeholder=${meta.label} onInput=${(v) => set({ ...s, title: v })} /><//>`}
       <${Editor} s=${s} set=${set} ctx=${ctx} presets=${ctx.presets} />
       <${ShowWhenEditor} s=${s} set=${set} />
     </div>`}

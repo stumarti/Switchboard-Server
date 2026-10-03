@@ -692,3 +692,12 @@ test('bus stops: the route number for a badge and the destination, split from th
   assert.deepEqual(routeOf('Overground · Waterloo'), ['', 'Overground · Waterloo']); // too long for a badge
   assert.deepEqual(routeOf('Luas Green Line'), ['', 'Luas Green Line']);
 });
+
+test('a spacer keeps its height (0-400 px, 20 by default) and sends it to the display', () => {
+  const l = dashboard.normalizeLayout({
+    screens: [{ id: 's1', template: 'single', columns: [[{ type: 'spacer', height: 36 }, { type: 'spacer', height: 9000 }, { type: 'spacer' }]] }]
+  });
+  assert.deepEqual(l.screens[0].columns[0].map((s) => s.height), [36, 400, 20]);
+  const screens = buildScreens(l, { states: [], now: new Date('2026-10-03T12:00:00Z') });
+  assert.deepEqual(screens.s1.columns[0].map((s) => s.data), [{ height: 36 }, { height: 400 }, { height: 20 }]);
+});
