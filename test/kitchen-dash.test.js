@@ -98,7 +98,7 @@ const data = (screen, id) => screen.columns.flat().find((s) => s.id === id).data
 test('the kitchen dashboard: Status, Heating and Security, returning to Status, quieter overnight', () => {
   const l = dashboard.defaultLayout();
   assert.deepEqual(l.screens.map((s) => s.id), ['status', 'heating', 'security']);
-  assert.deepEqual(l.carousel, { mode: 'returnFirst', everyMin: 30 });
+  assert.deepEqual(l.carousel, { mode: 'returnFirst', everyMin: 30, buttons: 'direct' });
   assert.equal(l.refreshIntervalMin, 30);
   assert.deepEqual(l.quietHours, { enabled: true, start: 23, end: 6, intervalMin: 60 });
   assert.equal(l.screens[2].template, 'triple');
@@ -246,8 +246,9 @@ test('heating: zones on a shared scale, calling when more than half a degree bel
   assert.equal(h.on, true);
   assert.equal(h.calling, 2);
   assert.equal(h.total, 5); // zones HA has
-  assert.equal(h.current, 19.2);
-  assert.equal(h.target, 20.5);
+  // The panel's Heating page never showed the whole house's now / set.
+  assert.equal(h.current, null);
+  assert.equal(h.target, null);
   assert.equal(h.scaleMin, 15);
   assert.equal(h.scaleMax, 25);
   assert.deepEqual(h.zones.map((z) => [z.name, z.active]), [['Kitchen', true], ['Living Room', false], ['Hall', true], ['Bathroom', false], ['Office', false]]);
@@ -272,4 +273,38 @@ test('the bundle lists every icon the kitchen dashboard can show', () => {
   for (const n of ['shield-check', 'shield-alert', 'door-open', 'door-closed', 'window-open', 'radiator-off', 'water-boiler', 'flower', 'watering-can', 'robot-mower']) {
     assert.ok(names.includes(n), n);
   }
+});
+
+test("numbers come out as the panel's firmware wrote them (String(float, n), roundf)", () => {
+  const { arduinoFixed, roundf } = require('../lib/dashboard-state');
+  // dtostrf(v, n + 2, n): half away from zero, padded on the left to n + 2.
+  assert.equal(arduinoFixed(68, 0), '68');
+  assert.equal(arduinoFixed(5, 0), ' 5');
+  assert.equal(arduinoFixed(3.4, 0), ' 3');
+  assert.equal(arduinoFixed(20.5, 0), '21');
+  assert.equal(arduinoFixed(18.5, 0), '19');
+  assert.equal(arduinoFixed(-3, 0), '-3');
+  assert.equal(arduinoFixed(3, 1), '3.0');
+  assert.equal(arduinoFixed(14.25, 1), '14.3');
+  assert.equal(arduinoFixed(123.45, 1), '123.4'); // a float: 123.4499...
+  assert.equal(roundf(-0.5), -1);
+  assert.equal(roundf(-2.5), -3);
+  assert.equal(roundf(2.5), 3);
+  assert.equal(roundf(-0.4), 0);
+});
+
+test("today's calendar in the panel's order: timed by HH:MM (last night's 20:00 sorts as 20:00), ties and all-day by calendar", () => {
+  const day = '2026-09-28';
+  const cals = {
+    'calendar.home_schedule': [
+      { start: { date: day }, end: { date: '2026-09-29' }, summary: 'Zeta all day' },
+      { start: { dateTime: '2026-09-27T20:00:00+01:00' }, end: { dateTime: '2026-09-28T18:00:00+01:00' }, summary: 'Overnight' },
+      { start: { dateTime: `${day}T09:00:00+01:00` }, end: { dateTime: `${day}T10:00:00+01:00` }, summary: 'Same time B' }
+    ],
+    'calendar.work': [{ start: { dateTime: `${day}T09:00:00+01:00` }, end: { dateTime: `${day}T10:00:00+01:00` }, summary: 'Same time A' }],
+    'calendar.birthdays': [{ start: { date: day }, end: { date: '2026-09-29' }, summary: 'Alpha all day' }]
+  };
+  const sc = buildScreens(dashboard.defaultLayout(), { states: house(), forecasts, calendars: cals, now: NOW, timeZone: TZ });
+  const lines = data(sc.status, 'status-today').lines.map((l) => `${l.time}|${l.title}`);
+  assert.deepEqual(lines, ['09:00|Same time B', '09:00|Same time A', '20:00|Overnight', '|Zeta all day', '|Alpha all day']);
 });

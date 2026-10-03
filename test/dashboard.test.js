@@ -72,7 +72,7 @@ test('normalizeLayout: carousel defaults to staying put, sections are validated,
       { id: 's3', template: 'columns', columns: [[{ type: 'statusIcons', icons: new Array(20).fill({ entity: 'a.b', rules: [{ cond: 'x', color: 9 }] }) }]] }
     ]
   });
-  assert.deepEqual(l.carousel, { mode: 'stay', everyMin: 5 });
+  assert.deepEqual(l.carousel, { mode: 'stay', everyMin: 5, buttons: 'step' });
   const [s1, s2, s3] = l.screens;
   assert.equal(s1.columns.length, 1);
   assert.deepEqual(s1.columns[0].map((s) => s.type), ['weather', 'people']); // the extra column folds in

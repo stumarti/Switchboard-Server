@@ -47,6 +47,21 @@ test('ha-publish: two sensors a device, named after it', () => {
   assert.equal(want['sensor.switchboard_cafe_panel_battery'].attributes.layout, 'Café');
 });
 
+test("ha-publish: a viewport's temperature, humidity and battery voltage too, as the kitchen panel sent them", () => {
+  const v = device('aa:00:00:00:00:09', 'Kitchen panel', 76);
+  v.type = 'viewport';
+  v.health = { ...v.health, temperature: 21.46, humidity: 48.6, voltage: 3.9 };
+  const want = publish.desiredStates({ [v.mac]: v }, { estimate });
+  assert.equal(want['sensor.switchboard_kitchen_panel_temperature'].state, '21.5');
+  assert.equal(want['sensor.switchboard_kitchen_panel_temperature'].attributes.unit_of_measurement, '°C');
+  assert.equal(want['sensor.switchboard_kitchen_panel_humidity'].state, '49');
+  assert.equal(want['sensor.switchboard_kitchen_panel_voltage'].state, '3.90');
+  assert.equal(want['sensor.switchboard_kitchen_panel_voltage'].attributes.device_class, 'voltage');
+  // A remote measures none of them.
+  const r = publish.desiredStates({ 'aa:00:00:00:00:01': device('aa:00:00:00:00:01', 'Sofa', 50) }, { estimate });
+  assert.deepEqual(Object.keys(r).sort(), ['sensor.switchboard_sofa_battery', 'sensor.switchboard_sofa_battery_days_left']);
+});
+
 test('ha-publish: devices with the same name are told apart', () => {
   const want = publish.desiredStates({
     'aa:00:00:00:12:34': device('aa:00:00:00:12:34', 'Remote', 50),

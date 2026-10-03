@@ -644,7 +644,10 @@ function NowEditor({ s, set }) {
 function HeatingEditor({ s, set }) {
   return html`<div class="row">${sensorField(s, set, 'entity', 'Whole house (optional)', ['climate'])}${sensorField(s, set, 'hotWater', 'Hot water (optional)', ['water_heater'])}</div>
     <${NamedList} items=${s.zones} onChange=${(l) => set({ ...s, zones: l })} domains=${['climate']} max=${16} addLabel="Add zone" />
-    <div style="width:260px"><${Field} label="Calling when below setpoint by more than °" hint="In heat or auto."><${NumberInput} step="0.1" min="0" value=${s.callingDelta} onChange=${(v) => set({ ...s, callingDelta: v })} /><//></div>`;
+    <div class="row" style="align-items:flex-end">
+      <div style="width:260px"><${Field} label="Calling when below setpoint by more than °" hint="In heat or auto."><${NumberInput} step="0.1" min="0" value=${s.callingDelta} onChange=${(v) => set({ ...s, callingDelta: v })} /><//></div>
+      <${Toggle} checked=${s.houseTemps !== false} onChange=${(v) => set({ ...s, houseTemps: v })} label="The whole house’s “now” and “set” temperatures" />
+    </div>`;
 }
 
 const EDITORS = {
@@ -1027,6 +1030,12 @@ function CarouselCard({ layout, onChange }) {
           { value: 'stay', label: 'Stay on the current screen (refresh it)' },
           { value: 'advance', label: 'Move to the next screen' },
           { value: 'returnFirst', label: 'Go back to the first screen' }
+        ]} />
+      <//>
+      <${Field} label="Buttons">
+        <${Select} value=${c.buttons || 'step'} onChange=${(v) => set('buttons', v)} options=${[
+          { value: 'step', label: 'Right / left step through the screens, middle refreshes' },
+          { value: 'direct', label: 'Straight to a screen: middle the first, right the second, left the last' }
         ]} />
       <//>
       ${c.mode !== 'stay' && html`<div style="width:150px"><${Field} label="Every (minutes)"><${NumberInput} min="5" max="240" value=${c.everyMin} onChange=${(v) => set('everyMin', v)} /><//></div>`}

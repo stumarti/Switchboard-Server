@@ -1254,6 +1254,8 @@ haPublish.start();
 
 app.listen(PORT, HOST, () => {
   console.log(`homeremote-server listening on http://${HOST}:${PORT}`);
+  // The house's time zone from Home Assistant, unless TZ is set.
+  require('./lib/house-tz').start(() => store.getGlobals());
   console.log(`profiles stored under ${store.DATA_DIR}`);
 
   if (DISABLE_MDNS) {

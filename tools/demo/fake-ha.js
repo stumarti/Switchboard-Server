@@ -184,7 +184,15 @@ const states = [
   S('calendar.quiet', 'off', { friendly_name: 'Quiet room' }),
   S('calendar.huddle', 'off', { friendly_name: 'Huddle' }),
   S('binary_sensor.huddle_occupied', 'on', { friendly_name: 'Huddle occupancy', device_class: 'occupancy' }, 5)
-];
+].reduce((list, st) => {
+  // One state per entity, as in a real Home Assistant: an entity listed
+  // again (the kitchen dashboard's zones and sensors reuse a few of the
+  // rooms') merges into the first.
+  const first = list.find((x) => x.entity_id === st.entity_id);
+  if (!first) list.push(st);
+  else Object.assign(first, { ...st, attributes: { ...first.attributes, ...st.attributes } });
+  return list;
+}, []);
 const byId = Object.fromEntries(states.map((s) => [s.entity_id, s]));
 
 // Pictures: album art, box art. Drawn as SVG, so there's nothing to ship.

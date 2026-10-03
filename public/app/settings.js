@@ -95,7 +95,7 @@ function PublishCard({ g }) {
   }, []);
   const entities = (st && st.entities) || [];
   return html`<${Card} icon="battery-sync-outline" title="Battery in Home Assistant"
-    subtitle="Each remote's and viewport's battery, and the days it has left, as Home Assistant sensors."
+    subtitle="Each remote's and viewport's battery and the days it has left, and each viewport's temperature, humidity and battery voltage, as Home Assistant sensors."
     actions=${st && st.enabled && (st.error ? html`<${Badge} kind="bad" icon="alert-circle-outline">Not publishing<//>` : st.lastSyncAt ? html`<${Badge} kind="ok" icon="check-circle-outline">Publishing<//>` : null)}>
     <${Toggle} checked=${on} onChange=${(v) => g.set(['homeAssistant', 'publishBattery'], v)} label="Publish battery to Home Assistant" />
     <p class="hint">Two sensors a device, such as <code>sensor.switchboard_kitchen_remote_battery</code> and <code>…_battery_days_left</code>, with its room, firmware and drain rate as attributes. Nothing to install in Home Assistant. It keeps them up to date and puts them back after Home Assistant restarts; switching this off removes them.</p>
