@@ -673,6 +673,11 @@ test("bus stops: a stop sensor's arrivals list (live time, else timetabled), soo
   r = rows({ stopEntity: 'sensor.stop_123', name: 'To town' });
   assert.equal(r.length, 1);
   assert.deepEqual([r[0].name, r[0].departures.map((d) => d.time)], ['To town', ['13:33', '13:41']]);
+  // A stop serves many routes: a line named for one shows only its buses.
+  r = rows({ stopEntity: 'sensor.stop_123', name: 'C3 Maynooth' });
+  assert.deepEqual([r[0].route, r[0].destination, r[0].departures.map((d) => d.time)], ['C3', 'Maynooth', ['13:41', '14:05']]);
+  r = rows({ stopEntity: 'sensor.stop_123', name: 'C4' });
+  assert.deepEqual([r[0].route, r[0].destination, r[0].departures.map((d) => d.time)], ['C4', 'Lucan', ['13:33']]);
   // No list there: a line saying so.
   r = rows({ stopEntity: 'sensor.other' });
   assert.deepEqual([r.length, r[0].departures], [1, []]);

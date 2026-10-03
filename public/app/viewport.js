@@ -576,7 +576,7 @@ function DepartureFields({ it, upd }) {
         <div style="width:150px"><${Field} label="Only routes" hint="Blank: all."><${TextInput} value=${it.routes} placeholder="C3, 66" onInput=${(v) => upd({ ...it, routes: v })} /><//></div>
         <div style="width:90px"><${Field} label="Lines"><${NumberInput} min="1" max="6" value=${it.lines ?? 3} onChange=${(v) => upd({ ...it, lines: v })} /><//></div>
       </div>
-      <p class="hint">Like a stop board: a line per route and headsign (what the front of the bus says), the soonest first, each with its next two — by the live time in the route's colour, or the timetable in black when there's no live time (red either way when due). Give it a Route name to show every arrival on one line instead.</p>
+      <p class="hint">Like a stop board: a line per route and headsign (what the front of the bus says), the soonest first, each with its next two — by the live time in the route's colour, or the timetable in black when there's no live time (red either way when due). Give it a Route name to put one route on one line (“C3” or “C3 Maynooth” shows only the C3), or Only routes to pick several.</p>
       <${Button} kind="ghost" small onClick=${() => upd({ ...it, stopEntity: '' })}>Use one sensor per departure instead<//>`;
   }
   const attr = (k, e) => html`<div style="width:160px"><${Field} label="Attribute (optional)"><${SuggestInput} value=${it[k]} placeholder="state" suggestions=${(e && e.attributes) || []} onInput=${(v) => upd({ ...it, [k]: v })} /><//></div>`;

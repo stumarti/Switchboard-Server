@@ -138,8 +138,8 @@ test('rain: raining now shows when it stops, or that it carries on', () => {
 test('energy and home battery: HA text, charging with the time it will be full', () => {
   const s = screens().status;
   const e = data(s, 'status-energy');
-  assert.equal(e.solarToday.text, '6.42 kWh');
-  assert.equal(e.gridExport.text, '2.25 kWh');
+  assert.equal(e.solarToday.text, '6.4 kWh'); // to one decimal place
+  assert.equal(e.gridExport.text, '2.3 kWh');
   const b = data(s, 'status-battery');
   assert.equal(b.socText, '83 %');
   assert.equal(b.status, 'charging');
