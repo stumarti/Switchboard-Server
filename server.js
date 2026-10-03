@@ -371,6 +371,9 @@ app.get('/api/viewports/:mac/bundle', auth.requireAdminOrDevice, (req, res) => {
     wifiNetworks: globals.wifiNetworks || [],
     ntpServer: globals.ntpServer || 'pool.ntp.org',
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    // The server's offset from UTC now (minutes), for the device's clock:
+    // it re-reads it every wake, so a DST change follows within one.
+    utcOffsetMin: clients.utcOffsetMin(),
     // Over-the-air updates, as a remote gets them: an offer only for a
     // display whose firmware says its board (X-Board) and has a release.
     firmware: firmware.configFor(device.mac, req.device ? deviceNow(req) : device)

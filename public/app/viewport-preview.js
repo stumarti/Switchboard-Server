@@ -411,7 +411,7 @@ function RoomFinder({ d, title }) {
 }
 
 // Scales the 800×480 panel to the width available.
-export function ViewportPreview({ screen, state, error, loading, highlight }) {
+export function ViewportPreview({ screen, state, error, loading, highlight, carousel }) {
   const wrap = useRef(null);
   const [scale, setScale] = useState(1);
   useEffect(() => {
@@ -430,7 +430,7 @@ export function ViewportPreview({ screen, state, error, loading, highlight }) {
           ? html`<${RoomFinder} d=${d.data} title=${d.title} />`
           : html`<${SectionsScreen} d=${d} highlight=${highlight} />`
         : html`<div class="vp-empty">${error ? error : loading ? 'Loading…' : 'No preview'}</div>`}
-      ${d && d.kind === 'sections' && html`<${DashFooter} generatedAt=${state.generatedAt} quiet=${state.quiet} />`}
+      ${d && d.kind === 'sections' && html`<${DashFooter} generatedAt=${state.generatedAt} quiet=${state.quiet} carousel=${carousel} current=${screen} />`}
       ${loading && d && html`<div class="vp-loading"><${Icon} name="refresh" size=${16} /></div>`}
     </div>
   </div>`;

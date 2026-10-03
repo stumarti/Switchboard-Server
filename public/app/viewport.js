@@ -324,12 +324,13 @@ function EnergyGraphEditor({ s, set }) {
 function BatteryEditor({ s, set }) {
   return html`<div class="row">${sensorField(s, set, 'soc', 'Charge %')}${sensorField(s, set, 'status', 'Status')}</div>
     ${sensorField(s, set, 'eta', 'Time to full/empty')}
-    <p class="hint">Or work the status out from a power sensor (negative while charging) — then the two times come from timestamp sensors.</p>
+    <p class="hint">Or, as the kitchen panel does: the status from a power sensor (W, negative while charging) — “Charging” below −idle, “Discharging” above +idle, else “Idle” — with when charging finishes (“full at 14:10”) or discharging does (“empty at 06:30”) from timestamp sensors.</p>
     <div class="row">
       ${sensorField(s, set, 'power', 'Battery power (W)')}
       <div style="width:150px"><${Field} label="Idle within ± W"><${NumberInput} min="0" value=${s.idleWatts} onChange=${(v) => set({ ...s, idleWatts: v })} /><//></div>
     </div>
-    ${s.power && html`<div class="row">${sensorField(s, set, 'chargeEta', 'Full at')}${sensorField(s, set, 'dischargeEta', 'Empty at')}</div>`}
+    ${s.power &&
+    html`<div class="row">${sensorField(s, set, 'chargeEta', 'Charging finishes at (timestamp)')}${sensorField(s, set, 'dischargeEta', 'Discharging finishes at (timestamp)')}</div>`}
     <${Field} label="Colours" hint="Critical is at or below the critical threshold (Carousel & settings).">
       ${[['charging', 'Charging'], ['full', 'Full'], ['discharging', 'Discharging'], ['critical', 'Critical'], ['idle', 'Idle']].map(
         ([k, label]) => html`<div class="row" style="align-items:center"><span style="width:100px">${label}</span><${ColorPicker} value=${s.colors[k]} onChange=${(v) => set({ ...s, colors: { ...s.colors, [k]: v } })} /></div>`
@@ -1157,7 +1158,12 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder }) {
         title=${html`<input type="text" class="inline-title" value=${screen.title} onInput=${(e) => setScreen({ ...screen, title: e.target.value })} />`}
         subtitle="Live preview from Home Assistant, including unsaved changes."
         actions=${html`${preview.loading && html`<${Badge} icon="refresh">Updating<//>`}${errors.length > 0 && html`<${Badge} kind="warn" icon="alert-outline">${errors.length} couldn't load<//>`}`}>
-        <${ViewportPreview} screen=${screen.id} state=${preview.state} error=${preview.error} loading=${preview.loading} highlight=${openId} />
+        <div class="row" style="align-items:center;margin-bottom:8px">
+          <${IconPicker} value=${screen.icon} title="This screen's icon in the footer" onChange=${(icon) => setScreen({ ...screen, icon })} />
+          <span class="hint">Its mark in the display's footer, beside the other screens' (the one showing is underlined).</span>
+        </div>
+        <${ViewportPreview} screen=${screen.id} state=${preview.state} error=${preview.error} loading=${preview.loading} highlight=${openId}
+          carousel=${layout.screens.filter((s) => s.enabled).map((s) => ({ id: s.id, icon: s.icon }))} />
         ${errors.length > 0 && html`<p class="hint">${errors.map(([k, v]) => `${k}: ${v}`).join(' · ')}</p>`}
         ${!screen.enabled && html`<p class="hint"><${Icon} name="eye-off-outline" size=${14} /> This screen is switched off, so the display skips it.</p>`}
       <//>

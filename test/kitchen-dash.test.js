@@ -151,6 +151,30 @@ test('energy and home battery: HA text, charging with the time it will be full',
   assert.deepEqual([idle.statusText, idle.eta, idle.color], ['Idle', '', 1]);
   const out = data(screens(house({ 'sensor.battery_power': st('900'), 'sensor.battery_discharge_eta': st('2026-09-28T21:00:00Z') })).status, 'status-battery');
   assert.deepEqual([out.statusText, out.eta, out.color], ['Discharging', 'empty at 22:00', 2]);
+  // Low, idle: black, as the panel drew it (no "critical" red from a power sensor).
+  const low = data(screens(house({ 'sensor.battery_soc': st('6', { unit_of_measurement: '%' }), 'sensor.battery_power': st('0') })).status, 'status-battery');
+  assert.deepEqual([low.statusText, low.color], ['Idle', 1]);
+  // The power sensor unreadable: no word at all.
+  const gone = data(screens(house({ 'sensor.battery_power': st('unavailable') })).status, 'status-battery');
+  assert.deepEqual([gone.statusText, gone.eta, gone.color], ['', '', 1]);
+});
+
+test('battery times: full at / empty at only while charging / discharging, only from a timestamp, in local time', () => {
+  const bat = (over) => data(screens(house(over)).status, 'status-battery');
+  // Charging: the charge ETA (UTC in HA) as local time; the discharge one ignored.
+  let b = bat({ 'sensor.battery_power': st('-500'), 'sensor.battery_charge_eta': st('2026-09-28T16:45:00+00:00'), 'sensor.battery_discharge_eta': st('2026-09-28T23:00:00+00:00') });
+  assert.deepEqual([b.statusText, b.eta, b.color], ['Charging', 'full at 17:45', 4]);
+  // Exactly at the idle threshold is idle (the panel: below -100 / above +100).
+  assert.deepEqual([bat({ 'sensor.battery_power': st('-100') }).statusText, bat({ 'sensor.battery_power': st('100') }).statusText], ['Idle', 'Idle']);
+  // Discharging: the discharge ETA; a fractional-second timestamp too.
+  b = bat({ 'sensor.battery_power': st('101'), 'sensor.battery_discharge_eta': st('2026-09-29T05:30:00.250+00:00') });
+  assert.deepEqual([b.statusText, b.eta, b.color], ['Discharging', 'empty at 06:30', 2]);
+  // No usable ETA (unknown, a duration, missing): the status alone.
+  assert.equal(bat({ 'sensor.battery_power': st('-900'), 'sensor.battery_charge_eta': st('unknown') }).eta, '');
+  assert.equal(bat({ 'sensor.battery_power': st('-900'), 'sensor.battery_charge_eta': st('1h 10m') }).eta, '');
+  assert.equal(bat({ 'sensor.battery_power': st('900'), 'sensor.battery_discharge_eta': undefined }).eta, '');
+  // Idle never shows a time, even with ETAs about.
+  assert.equal(bat({ 'sensor.battery_power': st('20') }).eta, '');
 });
 
 test('status icons: any door or window, heating calling, robots working, charging or in error', () => {

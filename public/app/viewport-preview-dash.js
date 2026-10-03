@@ -41,11 +41,13 @@ const windIcon = (b) => (b == null ? 'arrow-up' : WIND[Math.round((((b % 360) + 
 
 // Text at a baseline, as the firmware places it (GFX fonts: y is the
 // baseline). `size` is the face: 18 regular, 18/24/82 bold.
+// (The panel's built-in 9pt "bold" is the regular face — it always was — so
+// 18 px bold text draws regular here too, as on the device.)
 function T({ x, y, size = 18, bold, color = 1, right, center, w, children, style }) {
   const s = {
     position: 'absolute',
     top: `${y}px`,
-    font: `${bold ? 700 : 400} ${size}px/1 'Atkinson Hyperlegible', system-ui, sans-serif`,
+    font: `${bold && size > 18 ? 700 : 400} ${size}px/1 'Atkinson Hyperlegible', system-ui, sans-serif`,
     color: k(color),
     whiteSpace: 'nowrap',
     transform: 'translateY(-80%)',
@@ -256,11 +258,14 @@ export const DASH_SECTIONS = {
   cameras: DashCameras
 };
 
-// Refresh icon, time, then the device's battery, right-aligned along the
-// bottom; the bed-and-clock while quiet hours are on.
-export function DashFooter({ generatedAt, quiet }) {
+// The footer, as the panel draws it: the carousel's screens (the one
+// showing underlined), the refresh icon and time, the device's battery; the
+// bed-and-clock while quiet hours are on.
+export function DashFooter({ generatedAt, quiet, carousel, current }) {
   const t = generatedAt ? new Date(generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--';
+  const marks = carousel && carousel.length > 1 ? carousel : [];
   return html`<div class="kd-footer">
+    ${marks.map((m) => html`<span class=${`kd-mark ${m.id === current ? 'on' : ''}`}><${Icon} name=${m.icon || 'view-dashboard-outline'} size=${16} /></span>`)}
     ${quiet && html`<span style=${{ color: k(5) }}><${Icon} name="bed-clock" size=${16} /></span>`}
     <${Icon} name="refresh" size=${16} />
     <span>${t}</span>
