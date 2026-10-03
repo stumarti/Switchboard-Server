@@ -1,4 +1,4 @@
-// Settings -> Remote updates: over-the-air firmware (lib/firmware.js). Off
+// Settings -> Updates: over-the-air firmware (lib/firmware.js). Off
 // until switched on. Every build is for one board (a kind of device), and
 // each board has its own release: it goes to that board's pilots first, and
 // to everyone only when promoted here.
@@ -198,7 +198,7 @@ export function RemoteUpdatesTab() {
 
   return html`<div class="stack">
     ${msg && html`<div class=${`flash ${/fail|error|GitHub|No such/i.test(msg) ? 'flash-bad' : ''}`}>${msg}</div>`}
-    <${Card} icon="update" title="Remote updates" subtitle="Send new firmware to remotes (and any other device that asks) over Wi-Fi. Off until you switch it on."
+    <${Card} icon="update" title="Updates" subtitle="Send new firmware to remotes and displays over Wi-Fi. Off until you switch it on."
       actions=${html`<${Toggle} checked=${s.enabled} onChange=${(v) => put({ enabled: v })} />`}>
       <${Field} label="Releases" hint="Each board (a kind of device) runs its own release. Choosing an older build rolls its devices back to it. A new release goes to that board's pilots first; once they've updated and still work, release it to everyone.">
         <div class="table-wrap"><table class="table">
@@ -253,7 +253,7 @@ export function RemoteUpdatesTab() {
 
 // The Remotes page's summary of over-the-air updates, with the next step as
 // a button: get the newest release, send it to the pilots, then to everyone.
-// The whole picture is Settings -> Remote updates ("Details").
+// The whole picture is Settings -> Updates ("Details").
 export function UpdatesCard() {
   const [fw, setFw] = useState(null);
   const [busy, setBusy] = useState('');
@@ -309,14 +309,14 @@ export function UpdatesCard() {
       ${perBoard.map((p) => html`
         ${p.newest && p.newest !== p.bs.release &&
         html`<${Button} kind="primary" icon="account-hard-hat-outline" disabled=${Boolean(busy) || !p.pilots}
-            title=${p.pilots ? '' : 'Tick pilots on the Remote updates page first'}
+            title=${p.pilots ? '' : 'Tick pilots on the Updates page first'}
             onClick=${() => run(`release-${p.board}`, () => put({ board: p.board, release: p.newest }), () => `${p.newest} goes to the ${many ? `${boardLabel(p.board)} ` : ''}pilots`)}>Send ${many ? `${boardLabel(p.board)} ` : ''}${p.newest} to pilots<//>`}
         ${p.bs.release && p.bs.stage !== 'everyone' &&
         html`<${Button} icon="account-group-outline" disabled=${Boolean(busy)}
             onClick=${() => confirm(`Send ${p.bs.release} to every ${boardLabel(p.board)}?`) && run(`everyone-${p.board}`, () => put({ board: p.board, stage: 'everyone' }), () => `${p.bs.release} goes to every ${boardLabel(p.board)}`)}>Release ${many ? `${boardLabel(p.board)} ` : ''}to everyone<//>`}`)}
       <a class="btn btn-ghost" href="#/settings/updates"><${Icon} name="chevron-right" size=${18} /><span>Details</span></a>`;
   }
-  return html`<${Card} icon="update" title="Remote updates"
+  return html`<${Card} icon="update" title="Updates"
     actions=${s.enabled ? html`<${Badge} kind="ok" icon="check">On<//>` : html`<${Badge}>Off<//>`}>
     ${status}
     ${msg && html`<p class=${`hint ${/fail|error|GitHub|no releases|isn't/i.test(msg) ? 'text-bad' : ''}`}>${msg}</p>`}
@@ -324,15 +324,19 @@ export function UpdatesCard() {
   <//>`;
 }
 
-// A remote's page: its firmware, with its update state as the icon (and in
-// the tooltip) when updates are on.
-export function DeviceUpdateBadge({ mac, firmware }) {
+// A device's page (a remote, or a display whose firmware says its board):
+// its firmware, with its update state as the icon (and in the tooltip) when
+// updates are on, and its board when it isn't the X4 Pro.
+export function DeviceUpdateBadge({ mac, firmware, board }) {
   const [fw] = useApi('/api/firmware');
   const r = fw && fw.settings.enabled ? fw.remotes.find((x) => x.mac === mac) : null;
   const st = r && STATE[r.state];
   if (!firmware && !r) return null;
-  const tip = !st ? '' : r.state === 'failed' ? `Couldn't update to ${r.offer}${r.last && r.last.error ? `: ${r.last.error}` : ''}` : r.offer ? `Will update to ${r.offer}` : st.label;
+  const b = (r && r.board) || board;
+  const tip = [b ? `Board: ${boardLabel(b)}` : '', !st ? '' : r.state === 'failed' ? `Couldn't update to ${r.offer}${r.last && r.last.error ? `: ${r.last.error}` : ''}` : r.offer ? `Will update to ${r.offer}` : st.label]
+    .filter(Boolean)
+    .join(' · ');
   return html`<a href="#/settings/updates" title=${tip} style="text-decoration:none">
-    <${Badge} kind=${st ? st.kind : ''} icon=${st ? st.icon : 'chip'}>fw ${firmware || '?'}${r && r.offer ? ` → ${r.offer}` : ''}<//>
+    <${Badge} kind=${st ? st.kind : ''} icon=${st ? st.icon : 'chip'}>${b && b !== (fw && fw.legacyBoard) ? `${boardLabel(b)} ` : ''}fw ${firmware || '?'}${r && r.offer ? ` → ${r.offer}` : ''}<//>
   </a>`;
 }

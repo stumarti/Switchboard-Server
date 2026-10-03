@@ -850,3 +850,4 @@ a.rail-logo .rail-count { top: 2px; right: 2px; }
 .update-now { gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .update-now-list { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
 .update-now-board { font-weight: 600; }
+pre.mono { font-family: ui-monospace, monospace; font-size: 12.5px; background: var(--bg-soft, rgba(127,127,127,.08)); padding: 8px 10px; border-radius: 6px; margin: 6px 0; }

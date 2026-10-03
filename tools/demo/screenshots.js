@@ -104,7 +104,7 @@ async function main() {
   await shot('admin/viewport-layout', null, { x: 0, y: 0, width: 1360, height: 900 });
 
   // Settings, tab by tab.
-  for (const tab of ['home-assistant', 'wifi', 'clock', 'theme', 'updates', 'account']) {
+  for (const tab of ['home-assistant', 'wifi', 'clock', 'theme', 'updates', 'security', 'account']) {
     await go(`#/settings/${tab}`, 2000);
     await shot(`admin/settings-${tab}`);
   }
