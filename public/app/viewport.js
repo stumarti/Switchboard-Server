@@ -74,7 +74,8 @@ export const SECTION_META = {
   cameras: { label: 'Cameras', icon: 'cctv', about: 'Last motion per camera' },
   now: { label: 'Now', icon: 'lightning-bolt-outline', about: 'What’s happening: alarm, heating, doors, robots…' },
   heating: { label: 'Heating', icon: 'radiator', about: 'Zones against their setpoints, hot water' },
-  announcements: { label: 'Announcements', icon: 'bullhorn-outline', about: 'The latest from a company RSS or Atom feed' }
+  announcements: { label: 'Announcements', icon: 'bullhorn-outline', about: 'The latest from a company RSS or Atom feed' },
+  spacer: { label: 'Spacer', icon: 'arrow-expand-vertical', about: 'A gap, to move the next section down' }
 };
 
 const TEMPLATES = [
@@ -128,6 +129,8 @@ function newSection(type) {
       return { ...base, title: 'Announcements', url: '', count: 3, summary: true, maxAgeDays: 0, showDate: true, color: 1 };
     case 'now':
       return { ...base, title: 'Now', items: [] };
+    case 'spacer':
+      return { ...base, height: 20 };
     case 'heating':
       return { ...base, entity: '', zones: [], hotWater: '', callingDelta: 0.5 };
     default:
@@ -571,8 +574,9 @@ function DepartureFields({ it, upd }) {
         <${Field} label="Stop sensor" hint="Every arrival in a list attribute: route, headsign, real-time and scheduled times."><${EntityPicker} domains=${['sensor']} value=${it.stopEntity} onChange=${(id) => upd({ ...it, stopEntity: id })} /><//>
         <div style="width:150px"><${Field} label="List attribute"><${SuggestInput} value=${it.listAttribute} placeholder="arrivals" suggestions=${(stop && stop.attributes) || []} onInput=${(v) => upd({ ...it, listAttribute: v })} /><//></div>
         <div style="width:150px"><${Field} label="Only routes" hint="Blank: all."><${TextInput} value=${it.routes} placeholder="C3, 66" onInput=${(v) => upd({ ...it, routes: v })} /><//></div>
+        <div style="width:90px"><${Field} label="Lines"><${NumberInput} min="1" max="6" value=${it.lines ?? 3} onChange=${(v) => upd({ ...it, lines: v })} /><//></div>
       </div>
-      <p class="hint">The next two: by their live time in the route's colour, or by the timetable in black when there isn't one (red either way when due soon). Leave Route blank to show the next bus's route and destination.</p>
+      <p class="hint">Like a stop board: a line per route and headsign (what the front of the bus says), the soonest first, each with its next two — by the live time in the route's colour, or the timetable in black when there's no live time (red either way when due). Give it a Route name to show every arrival on one line instead.</p>
       <${Button} kind="ghost" small onClick=${() => upd({ ...it, stopEntity: '' })}>Use one sensor per departure instead<//>`;
   }
   const attr = (k, e) => html`<div style="width:160px"><${Field} label="Attribute (optional)"><${SuggestInput} value=${it[k]} placeholder="state" suggestions=${(e && e.attributes) || []} onInput=${(v) => upd({ ...it, [k]: v })} /><//></div>`;
@@ -686,6 +690,8 @@ function HeatingEditor({ s, set }) {
 }
 
 const EDITORS = {
+  spacer: ({ s, set }) =>
+    html`<div style="width:200px"><${Field} label="Height (px)" hint="The panel is 480 px tall."><${NumberInput} min="0" max="400" value=${s.height} onChange=${(v) => set({ ...s, height: v })} /><//></div>`,
   now: NowEditor,
   heating: HeatingEditor,
   weather: WeatherEditor,
@@ -773,7 +779,7 @@ function SectionCard({ s, set, remove, duplicate, move, moveColumn, columnLabels
     html`<div class="card-body">
       ${WAKE_ONLY[s.type] && !(s.showWhen && s.showWhen.mode !== 'always' && s.showWhen.liveMin) &&
       html`<p class="hint wake-note"><${Icon} name="battery-clock-outline" size=${16} /> ${WAKE_ONLY[s.type]} It updates when the display wakes (every ${ctx.refreshMin} min${s.type === 'transport' ? ', or sooner when a departure turns imminent' : ''}), never in between — battery comes first.</p>`}
-      <${Field} label="Heading (optional)"><${TextInput} value=${s.title} placeholder=${meta.label} onInput=${(v) => set({ ...s, title: v })} /><//>
+      ${s.type !== 'spacer' && html`<${Field} label="Heading (optional)"><${TextInput} value=${s.title} placeholder=${meta.label} onInput=${(v) => set({ ...s, title: v })} /><//>`}
       <${Editor} s=${s} set=${set} ctx=${ctx} presets=${ctx.presets} />
       <${ShowWhenEditor} s=${s} set=${set} />
     </div>`}
