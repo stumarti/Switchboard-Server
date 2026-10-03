@@ -1,31 +1,42 @@
 # Switchboard Server
 
-The home server companion for [Switchboard](https://github.com/stumarti/Switchboard), the X4 Pro smart-home remote. Run one instance for your whole household — it stores each room's setup (lighting, blinds, climate, media, TV) and every remote pulls its config from it, instead of you typing it in by hand on each device.
+**One small server for every e-ink screen in your home.** Switchboard Server runs your [Switchboard](https://github.com/stumarti/Switchboard) devices: the X4 Pro remotes you pick up off the wall, and the colour [viewport](https://github.com/stumarti/Switchboard-Viewport) wall displays. You build each one's screens in your browser, with a live preview from Home Assistant, and every device picks them up on its own. It's one Docker container, with nothing to install in Home Assistant.
 
-**[⚡ Flash an X4 Pro remote](https://stumarti.github.io/Switchboard/)**
+<p>
+  <img src="screenshots/viewport-preview.png" width="420" alt="A viewport's Status screen, previewed live from Home Assistant">
+  <img src="screenshots/remote-layout.png" width="300" alt="A room's remote layout">
+</p>
+
+**[⚡ Flash a remote or a viewport](https://stumarti.github.io/Switchboard/)** · **[Read the manual](https://stumarti.github.io/Switchboard/manual/)** · **[Try the demo](#try-it-without-hardware)**
+
+## Batteries that last
+
+The server does the work so the devices barely have to. It talks to Home Assistant, works out every value, colour, icon and sentence, and dithers the album art. The devices just wake, draw and sleep:
+
+- **A remote** (Xteink X4 Pro) runs for **about 30 days** on a charge with light use.
+- **A viewport** (reTerminal E1002) runs for **around 3 months**. If a screen hasn't changed, the server says so, and the panel isn't redrawn at all.
+
+The server learns how fast each battery drains, so you know **how many days each device has left**. It warns you before one runs low, and can publish the batteries to Home Assistant for your own alerts. See [Battery life](https://stumarti.github.io/Switchboard/manual/server/battery-life.html).
+
+<p><img src="screenshots/home.png" width="760" alt="The Home page: every device's battery and days left, Wi-Fi, firmware, and what needs attention"></p>
 
 ## What it does
 
-- **Every UI lives here.** Each room's remote layout (which pages, which Home Assistant entities) and each wall display's viewport layout are built in the admin UI. A device is only ever assigned one — dumb hardware, server control.
-- **Devices pair once**, and you approve each from the admin UI.
-- **It talks to Home Assistant** for the devices, and prepares everything they draw, down to dithered album art.
-- **It keeps an eye on them:** battery (with the days left), Wi-Fi signal, firmware, and anything that needs attention, on the Home page.
-- **Optional extras:** a theme for the remotes' icons and font, and over-the-air firmware updates.
-
-Get this running and set up at least one room *before* you flash a remote: the device pulls its whole setup from here. The firmware is in [Switchboard](https://github.com/stumarti/Switchboard).
-
-## Screenshots
+- **Every screen is built here.** A room's remote has its lights, blinds, music, TV, climate and Quick Access. A wall display gets screens made from twenty section types: weather, energy, the home battery, heating, security, calendar, departures and more. The devices are dumb hardware: change a layout and they follow.
+- **Live previews** of each remote page and each viewport screen, drawn from your Home Assistant as you edit.
+- **Pair once.** Devices find the server by mDNS (`switchboard.local`), and you approve each from the admin UI.
+- **Keep an eye on them:** the Home page shows every device's battery and days left, Wi-Fi signal, firmware and last check-in, and anything that needs attention.
+- **Over-the-air updates** from GitHub releases, one device at a time or all at once, checked and rolled back if they fail.
+- **Make it yours** with a theme for the icons and font.
 
 <table>
 <tr>
-  <td><img src="screenshots/room.png" width="360" alt="Editing a room"><br><sub>Layouts — a room's remote layout, entities searched from Home Assistant</sub></td>
-  <td><img src="screenshots/remote.png" width="360" alt="A remote's carousel"><br><sub>Remotes — drag-to-order carousel and Quick Access hub</sub></td>
-</tr>
-<tr>
-  <td><img src="screenshots/viewport.png" width="360" alt="A viewport's tiles"><br><sub>Layouts — a viewport layout, with a live preview</sub></td>
-  <td><img src="screenshots/settings.png" width="360" alt="Settings"><br><sub>Settings — Home Assistant, Wi-Fi, clock, theme</sub></td>
+  <td><img src="screenshots/viewport-layout.png" width="380" alt="A viewport layout"><br><sub>A viewport layout: the carousel, quiet hours and its screens</sub></td>
+  <td><img src="screenshots/settings.png" width="380" alt="Settings"><br><sub>Settings: Home Assistant, Wi-Fi, clock, theme, updates</sub></td>
 </tr>
 </table>
+
+Get this running and set up at least one room or viewport layout *before* you flash a device: each one pulls its whole setup from here.
 
 ## Quick start
 
@@ -53,8 +64,8 @@ Then:
 1. Open `http://<your-server-ip>:45678` and set an admin password.
 2. **Settings → Home Assistant:** enter its address and a long-lived access token, save, then press **Test**.
 3. **Settings → Wi-Fi:** the network remotes should join.
-4. **Layouts:** create a room and fill in its Home Assistant entities.
-5. [Flash a remote](https://stumarti.github.io/Switchboard/) and approve it on the **Remotes** page, choosing its room.
+4. **Layouts:** create a room (for a remote) or a viewport layout, and fill in its Home Assistant entities. **Start from… → Kitchen dashboard** gives you a whole kitchen dashboard to adapt.
+5. [Flash a remote or a viewport](https://stumarti.github.io/Switchboard/) and approve it on the **Remotes** page, choosing its room or layout.
 
 This exact file is `docker-compose.yml` in this repo — grab it directly instead of retyping it.
 
@@ -73,7 +84,7 @@ Then open `http://localhost:45680` (password `demo`): a pretend Home Assistant w
 
 ## Manual
 
-**[The Switchboard manual](https://stumarti.github.io/Switchboard/manual/)** covers the server and the remote, with screenshots of every page. It lives beside the web flasher, in the firmware repository's GitHub Pages.
+**[The Switchboard manual](https://stumarti.github.io/Switchboard/manual/)** covers the server, the remote and the viewport, with screenshots of every page. It lives beside the web flasher, in the firmware repository's GitHub Pages.
 
 - The admin UI: [Home](https://stumarti.github.io/Switchboard/manual/server/home.html), [remote layouts](https://stumarti.github.io/Switchboard/manual/server/remote-layouts.html), [remotes](https://stumarti.github.io/Switchboard/manual/server/remotes.html), [viewports](https://stumarti.github.io/Switchboard/manual/server/viewports.html), [settings](https://stumarti.github.io/Switchboard/manual/server/settings.html)
 - [Theme](https://stumarti.github.io/Switchboard/manual/server/theme.html) · [Remote updates](https://stumarti.github.io/Switchboard/manual/server/remote-updates.html) · [Battery life](https://stumarti.github.io/Switchboard/manual/server/battery-life.html) · [Pairing & auth](https://stumarti.github.io/Switchboard/manual/server/pairing-and-auth.html)
