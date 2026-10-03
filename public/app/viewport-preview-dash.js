@@ -5,6 +5,7 @@
 // pixels; text uses Atkinson Hyperlegible where the browser has it.
 
 import { html, Icon } from './lib.js';
+import { builtInArt } from './viewport-art.js';
 
 export const KD = {
   0: '#ffffff',
@@ -60,6 +61,19 @@ function T({ x, y, size = 18, bold, color = 1, right, center, w, children, style
 }
 const I = ({ x, y, name, size, color = 1 }) =>
   html`<span style=${{ position: 'absolute', left: `${x}px`, top: `${y}px`, color: k(color), lineHeight: 0 }}><${Icon} name=${name} size=${size} /></span>`;
+// The panel's own colour art for a slot (the weather icons, solar), else
+// the MDI icon in one colour.
+const Art = ({ x, y, slot, name, size, color = 1 }) => {
+  const src = builtInArt(slot);
+  return src
+    ? html`<img src=${src} width=${size} height=${size} style=${{ position: 'absolute', left: `${x}px`, top: `${y}px`, imageRendering: 'pixelated' }} alt="" />`
+    : html`<${I} x=${x} y=${y} name=${name} size=${size} color=${color} />`;
+};
+// As the panel picks it: the condition's art, else the cloud.
+const wxSlot = (c, small) => {
+  const slot = `${small ? 'vwxm' : 'vwx'}_${String(c || 'cloudy').replace(/-/g, '_')}`;
+  return builtInArt(slot) ? slot : `${small ? 'vwxm' : 'vwx'}_cloudy`;
+};
 const Box = ({ x, y, w, h, color = 1, border }) =>
   html`<div style=${{ position: 'absolute', left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px`, ...(border ? { border: `1px solid ${k(color)}` } : { background: k(color) }) }}></div>`;
 
@@ -73,7 +87,7 @@ export function DashWeather({ d }) {
   const rain = d.rain && d.rain.state !== 'dry' ? d.rain : null;
   return html`<div class="kd-block" style="height:262px">
     <${T} x=${5} y=${70} size=${82} bold color=${tCol}>${d.temperatureText}<span class="kd-deg" style=${{ borderColor: k(tCol) }}></span><//>
-    <${I} x=${152} y=${2} name=${wxIcon(d.icon)} size=${88} />
+    <${Art} x=${152} y=${2} slot=${wxSlot(d.icon)} name=${wxIcon(d.icon)} size=${88} />
     <${I} x=${10} y=${88} name="water-percent" size=${24} /><${T} x=${36} y=${106}>${d.humidityText}%<//>
     <${I} x=${10 + cell} y=${88} name="weather-windy" size=${24} /><${T} x=${36 + cell} y=${106}>${d.windText}<${Icon} name=${windIcon(d.bearing)} size=${18} /><//>
     <${I} x=${10 + cell * 2} y=${88} name="sun-wireless" size=${24} /><${T} x=${36 + cell * 2} y=${106}>${d.uvText}<//>
@@ -82,20 +96,24 @@ export function DashWeather({ d }) {
       : d.solar && html`<${I} x=${5} y=${116} name="solar-panel" size=${24} /><${T} x=${33} y=${132} bold>${d.solar.text}<//>`}
     ${(d.forecast || []).slice(0, 3).map(
       (f, i) => html`<${T} x=${5 + i * cell} w=${cell} center y=${163} bold>${f.label}<//>
-        <${I} x=${5 + i * cell + 24} y=${166} name=${wxIcon(f.condition)} size=${32} />
-        <${T} x=${5 + i * cell} w=${cell} center y=${210} bold>${f.high == null ? '--' : Math.round(f.high)}°<//>`
+        <${Art} x=${5 + i * cell + 24} y=${166} slot=${wxSlot(f.condition, true)} name=${wxIcon(f.condition)} size=${32} />
+        <${T} x=${5 + i * cell} w=${cell} center y=${210} bold>${f.high == null ? '--' : Math.round(f.high)}<//>`
     )}
   </div>`;
 }
 
 export function DashEnergy({ d }) {
-  const cell = (icon, m, accent, x, y) => {
+  const cell = (icon, m, accent, x, y, slot) => {
     const v = m ? m.value : null;
-    const col = v != null && v >= 1 ? accent : 1;
-    return html`<${I} x=${x + 36} y=${y} name=${icon} size=${44} color=${col} /><${T} x=${x} w=${117} center y=${y + 57}>${m ? m.text : 'n/a'}<//>`;
+    const on = v != null && v >= 1;
+    const col = on ? accent : 1;
+    // Solar is the panel's two-colour art: yellow and black once it's made
+    // 1 kWh, all black before.
+    const art = slot ? html`<${Art} x=${x + 36} y=${y} slot=${on ? slot : `${slot}_off`} name=${icon} size=${44} color=${col} />` : html`<${I} x=${x + 36} y=${y} name=${icon} size=${44} color=${col} />`;
+    return html`${art}<${T} x=${x} w=${117} center y=${y + 57}>${m ? m.text : 'n/a'}<//>`;
   };
   return html`<div class="kd-block" style="height:170px">
-    ${cell('solar-power-variant', d.solarToday, 3, 5, 6)}
+    ${cell('solar-power-variant', d.solarToday, 3, 5, 6, 've_solar')}
     ${cell('home-lightning-bolt-outline', d.loadToday, 5, 122, 6)}
     ${cell('transmission-tower-import', d.gridImport, 2, 5, 77)}
     ${cell('transmission-tower-export', d.gridExport, 4, 122, 77)}
@@ -133,14 +151,14 @@ const NowItem = ({ icon, color, line1, line2 }) => html`<div class="kd-item">
 
 export function DashNow({ d, title }) {
   return html`<div class="kd-list">
-    <div class="kd-heading">${(title || 'Now').toUpperCase()}</div>
+    <div class="kd-heading" style="height:24px"><${T} x=${8} y=${16}>${(title || 'Now').toUpperCase()}<//></div>
     ${d.items.map((it) => html`<${NowItem} ...${it} />`)}
   </div>`;
 }
 
 export function DashCalendar({ d, title }) {
-  return html`<div class="kd-list">
-    <div class="kd-heading">${(title || 'Today').toUpperCase()}</div>
+  return html`<div class="kd-list kd-cal">
+    <div class="kd-heading" style="height:21px"><${T} x=${8} y=${16}>${(title || 'Today').toUpperCase()}<//></div>
     ${d.lines.length === 0
       ? html`<div class="kd-item" style="height:20px"><${T} x=${10} y=${10}>No events today<//></div>`
       : d.lines.map(

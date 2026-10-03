@@ -74,3 +74,11 @@ test('each kind of device has its own packs and versions', () => {
   // A theme saved before viewports had packs.
   assert.deepEqual(store.themeFor({ iconsVersion: 'x', fontsVersion: 'y' }, 'viewport'), { iconsVersion: '', fontsVersion: '', iconOverrides: {} });
 });
+
+test("a viewport's pack carries only the slots you changed, so the built-in colour art stays", async () => {
+  assert.deepEqual(viewportSlots.packSlots({}), []);
+  const slots = viewportSlots.packSlots({ vwx_rainy: 'weather-pouring', vf_refresh: 'autorenew', nonsense: 'x' });
+  assert.deepEqual(slots.map((s) => s.key).sort(), ['vf_refresh', 'vwx_rainy']);
+  const buf = await compileIconsPack({ vwx_rainy: 'weather-pouring' }, viewportSlots.packSlots({ vwx_rainy: 'weather-pouring' }));
+  assert.equal(buf.readUInt16LE(4), 1);
+});

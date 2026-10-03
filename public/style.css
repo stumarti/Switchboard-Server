@@ -656,9 +656,9 @@ textarea { min-height: 70px; font-family: ui-monospace, monospace; font-size: 12
 .kd-screen { height: 480px; }
 .kd-single .kd-section .kd-screen { margin-left: -10px; }
 .kd-statusbar { margin-left: -10px; padding-left: 10px; border-bottom: 2px dotted #111; }
-.kd-list { padding-top: 4px; }
-.kd-heading { font: 400 18px/20px 'Atkinson Hyperlegible', system-ui, sans-serif; padding: 2px 0 2px 8px; }
-.kd-list + .kd-section, .kd-section + .kd-section .kd-list { margin-top: 10px; }
+.kd-heading { position: relative; }
+/* Ten pixels after the last "now" item, as the panel leaves (its now() returns itemTop + 10). */
+.kd-list:not(.kd-cal) { padding-bottom: 10px; }
 .kd-item { height: 40px; margin-bottom: 5px; }
 .kd-deg { display: inline-block; width: 13px; height: 13px; border: 4px solid; border-radius: 50%; margin-left: 9px; vertical-align: top; }
 .kd-sec { padding-top: 26px; }

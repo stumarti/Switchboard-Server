@@ -16,8 +16,7 @@ const st = (state, attributes = {}, changed = '2026-09-28T11:45:00Z') => ({ stat
 
 function house(over = {}) {
   return {
-    'weather.forecast_home': st('partlycloudy', { temperature: 17.6, temperature_unit: '°C', humidity: 71.4, wind_speed: 12.6, wind_speed_unit: 'km/h', wind_bearing: 225, uv_index: 3 }),
-    'weather.home': st('rainy'),
+    'weather.home': st('partlycloudy', { temperature: 17.6, temperature_unit: '°C', humidity: 71.4, wind_speed: 12.6, wind_speed_unit: 'km/h', wind_bearing: 225, uv_index: 3 }),
     'sensor.solar_forecast_today': st('14.26', { unit_of_measurement: 'kWh' }),
     'sensor.solar_generation': st('6.42', { unit_of_measurement: 'kWh' }),
     'sensor.load_today': st('9.1', { unit_of_measurement: 'kWh' }),
@@ -64,7 +63,7 @@ function house(over = {}) {
 
 const forecasts = {
   daily: {
-    'weather.forecast_home': [
+    'weather.home': [
       { datetime: '2026-09-28T00:00:00Z', condition: 'rainy', temperature: 15, templow: 9 },
       { datetime: '2026-09-29T00:00:00Z', condition: 'cloudy', temperature: 16.4, templow: 8 },
       { datetime: '2026-09-30T00:00:00Z', condition: 'sunny', temperature: 18, templow: 10 },

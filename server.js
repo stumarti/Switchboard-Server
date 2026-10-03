@@ -719,7 +719,10 @@ app.post('/api/assets/icons/compile', auth.requireAdminSession, async (req, res)
   try {
     const overrides = (req.body && req.body.overrides) || {};
     const kind = themeKindOf(req);
-    const buf = await iconsCompiler.compileIconsPack(overrides, slotsFor(kind).listSlots());
+    // A viewport's pack carries only the slots you changed (its built-in
+    // art is in colour); a remote's, every slot.
+    const slots = kind === 'viewport' ? viewportSlots.packSlots(overrides) : slotsFor(kind).listSlots();
+    const buf = await iconsCompiler.compileIconsPack(overrides, slots);
     const version = require('crypto').createHash('sha256').update(buf).digest('hex').slice(0, 16);
     store.saveIconsPack(buf, kind);
     const theme = store.getTheme();

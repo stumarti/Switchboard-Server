@@ -7,6 +7,7 @@ import {
 import { haStatus, useHaStatus, IconPickerModal, IconPreview } from './pickers.js';
 import { ItemList } from './rooms.js';
 import { RemoteUpdatesTab } from './firmware.js';
+import { builtInArt } from './viewport-art.js';
 
 const TABS = [
   { id: 'home-assistant', label: 'Home Assistant', icon: 'home-assistant' },
@@ -233,9 +234,11 @@ function IconSlots({ kind, overrides, setOverrides }) {
             .filter((s) => s.category === cat)
             .map((s) => {
               const cur = overrides[s.key] || s.defaultMdi;
-              return html`<button type="button" class="icon-cell" title=${`${s.label} (${cur})`} onClick=${() => setPicking(s)}
+              // A viewport keeps its built-in colour art until you change it.
+              const art = kind === 'viewport' && !overrides[s.key] ? builtInArt(s.key) : null;
+              return html`<button type="button" class="icon-cell" title=${`${s.label} (${art ? 'built-in colour art' : cur})`} onClick=${() => setPicking(s)}
                 style=${overrides[s.key] ? 'border-color:var(--accent)' : ''}>
-                <${IconPreview} name=${cur} size=${30} />
+                ${art ? html`<img src=${art} width=${30} height=${30} alt="" />` : html`<${IconPreview} name=${cur} size=${30} />`}
                 <span>${s.label}</span>
               </button>`;
             })}
@@ -365,7 +368,10 @@ function IconsCard({ kind, setKind }) {
     }
   };
   const count = overrides ? Object.keys(overrides).length : 0;
-  return html`<${Card} icon="shape-outline" title="Icons" subtitle="Replace any icon the firmware draws. Changes take effect once the pack is built."
+  const subtitle = kind === 'viewport'
+    ? 'Replace any icon the viewport draws. The weather and solar icons are the panel’s own colour art until you change them (a replacement is one colour). Changes take effect once the pack is built.'
+    : 'Replace any icon the firmware draws. Changes take effect once the pack is built.';
+  return html`<${Card} icon="shape-outline" title="Icons" subtitle=${subtitle}
       actions=${html`${theme && theme.iconsVersion ? html`<${Badge} icon="package-variant-closed">${theme.iconsVersion}<//>` : html`<${Badge}>Built-in<//>`}`}>
       <div class="row" style="align-items:center">
         ${THEME_KINDS.map((k) => html`<${Button} kind=${k.id === kind ? 'primary' : 'ghost'} icon=${k.icon} onClick=${() => setKind(k.id)}>${k.label}<//>`)}
