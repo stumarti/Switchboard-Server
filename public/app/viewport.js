@@ -549,18 +549,43 @@ function TransportEditor({ s, set }) {
     onChange=${(l) => set({ ...s, routes: l })}
     max=${4}
     addLabel="Add route"
-    newItem=${() => ({ id: newId(), name: '', stop: '', icon: 'bus', color: 4, departure1: '', departure2: '' })}
+    newItem=${() => ({ id: newId(), name: '', stop: '', icon: 'bus', color: 4, departure1: '', departure1Attribute: '', departure2: '', departure2Attribute: '', stopEntity: '', listAttribute: 'arrivals', routes: '' })}
     render=${(it, upd) => html`<div class="row">
         <${IconPicker} value=${it.icon} onChange=${(icon) => upd({ ...it, icon })} />
         <${Field} label="Route"><${TextInput} value=${it.name} placeholder="42 · City Centre" onInput=${(v) => upd({ ...it, name: v })} /><//>
         <${Field} label="Stop"><${TextInput} value=${it.stop} placeholder="High Street" onInput=${(v) => upd({ ...it, stop: v })} /><//>
         <${Field} label="Colour"><${ColorPicker} value=${it.color} onChange=${(v) => upd({ ...it, color: v })} /><//>
       </div>
-      <div class="row">
-        <${Field} label="Next departure" hint="A time, timestamp or minutes."><${EntityPicker} domains=${['sensor']} value=${it.departure1} onChange=${(id) => upd({ ...it, departure1: id })} /><//>
-        <${Field} label="The one after"><${EntityPicker} domains=${['sensor']} value=${it.departure2} onChange=${(id) => upd({ ...it, departure2: id })} /><//>
-      </div>`}
+      <${DepartureFields} it=${it} upd=${upd} />`}
   />`;
+}
+
+// A stop sensor with every arrival in a list attribute, or one entity (or
+// attribute) per departure.
+function DepartureFields({ it, upd }) {
+  const stop = useEntity(it.stopEntity);
+  const e1 = useEntity(it.departure1);
+  const e2 = useEntity(it.departure2);
+  if (it.stopEntity) {
+    return html`<div class="row">
+        <${Field} label="Stop sensor" hint="Every arrival in a list attribute: route, headsign, real-time and scheduled times."><${EntityPicker} domains=${['sensor']} value=${it.stopEntity} onChange=${(id) => upd({ ...it, stopEntity: id })} /><//>
+        <div style="width:150px"><${Field} label="List attribute"><${SuggestInput} value=${it.listAttribute} placeholder="arrivals" suggestions=${(stop && stop.attributes) || []} onInput=${(v) => upd({ ...it, listAttribute: v })} /><//></div>
+        <div style="width:150px"><${Field} label="Only routes" hint="Blank: all."><${TextInput} value=${it.routes} placeholder="C3, 66" onInput=${(v) => upd({ ...it, routes: v })} /><//></div>
+      </div>
+      <p class="hint">The next two: by their live time in the route's colour, or by the timetable in black when there isn't one (red either way when due soon). Leave Route blank to show the next bus's route and destination.</p>
+      <${Button} kind="ghost" small onClick=${() => upd({ ...it, stopEntity: '' })}>Use one sensor per departure instead<//>`;
+  }
+  const attr = (k, e) => html`<div style="width:160px"><${Field} label="Attribute (optional)"><${SuggestInput} value=${it[k]} placeholder="state" suggestions=${(e && e.attributes) || []} onInput=${(v) => upd({ ...it, [k]: v })} /><//></div>`;
+  return html`<div class="row">
+      <${Field} label="Next departure"><${EntityPicker} domains=${['sensor']} value=${it.departure1} onChange=${(id) => upd({ ...it, departure1: id })} /><//>
+      ${attr('departure1Attribute', e1)}
+    </div>
+    <div class="row">
+      <${Field} label="The one after" hint="Often the same sensor, with the next bus in an attribute."><${EntityPicker} domains=${['sensor']} value=${it.departure2} onChange=${(id) => upd({ ...it, departure2: id })} /><//>
+      ${attr('departure2Attribute', e2)}
+    </div>
+    <p class="hint">Understood: “Due”; minutes (12, “12 min”); a time (17:05); or a timestamp.</p>
+    <${Button} kind="ghost" small onClick=${() => upd({ ...it, stopEntity: it.departure1 || 'sensor.', listAttribute: it.listAttribute || 'arrivals' })}>Use a stop sensor’s arrivals list instead<//>`;
 }
 
 function AlarmEditor({ s, set }) {

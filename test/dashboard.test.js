@@ -618,3 +618,55 @@ test('energy graph: charging the battery goes below the line, from one signed se
   assert.deepEqual([...new Set(g.usage.toBattery)], [null]);
   assert.equal(g.totals.toBattery, null);
 });
+
+test('bus stops: departures however the stop sensor gives them', () => {
+  const run = (states, routes) => {
+    const l = dashboard.normalizeLayout({ screens: [{ id: 't', template: 'single', columns: [[{ id: 'tr', type: 'transport', routes }]] }] });
+    return buildScreens(l, { states, forecasts: {}, calendars: {}, now: NOW, timeZone: TZ }).t.columns[0][0].data.routes[0].departures;
+  };
+  const one = (state, attrs = {}) => run({ 'sensor.stop': { state, attributes: attrs } }, [{ name: '39A', departure1: 'sensor.stop' }])[0];
+  // Now is 13:30 BST.
+  assert.deepEqual([one('Due').text, one('Due').urgent, one('Due').time], ['Due', true, '13:30']);
+  assert.equal(one('12').text, '12 min');
+  assert.equal(one('12 min').time, '13:42');
+  assert.equal(one('12 mins').minutes, 12);
+  assert.equal(one('7m').minutes, 7);
+  assert.equal(one('600', { unit_of_measurement: 's' }).minutes, 10);
+  assert.equal(one('17:05').text, '215 min');
+  assert.equal(one('2026-09-28 13:50:00').time, '13:50'); // local, no offset
+  assert.equal(one('2026-09-28T12:50:00+00:00').time, '13:50');
+  assert.equal(one('0').text, 'Due');
+  assert.deepEqual(one('Cancelled'), { time: '', minutes: null, urgent: false, color: 4, text: 'Cancelled' });
+  assert.equal(one('unavailable'), undefined);
+  // The next bus in the state, the one after in an attribute (Dublin Bus's "Next bus").
+  const deps = run({ 'sensor.stop': { state: '4', attributes: { 'Next bus': 19, unit_of_measurement: 'min' } } }, [
+    { name: '39A', departure1: 'sensor.stop', departure2: 'sensor.stop', departure2Attribute: 'Next bus' }
+  ]);
+  assert.deepEqual(deps.map((d) => d.text), ['4 min', '19 min']);
+});
+
+test("bus stops: a stop sensor's arrivals list (live time, else timetabled), soonest first", () => {
+  // As a TFI stop sensor gives it (local times, no offset). Now is 13:30 BST.
+  const arrivals = [
+    { agency: 'Bus Átha Cliath – Dublin Bus', headsign: 'Maynooth', real_time_arrival: '2026-09-28T13:41:54', route: 'C3', scheduled_arrival: '2026-09-28T13:34:19' },
+    { agency: 'Bus Átha Cliath – Dublin Bus', headsign: 'Maynooth', real_time_arrival: null, route: 'C3', scheduled_arrival: '2026-09-28T14:05:49' },
+    { agency: 'Bus Átha Cliath – Dublin Bus', headsign: 'Lucan', real_time_arrival: '2026-09-28T13:33:00', route: 'C4', scheduled_arrival: '2026-09-28T13:33:00' },
+    { agency: 'Bus Átha Cliath – Dublin Bus', headsign: 'Maynooth', real_time_arrival: '2026-09-28T13:20:00', route: 'C3', scheduled_arrival: '2026-09-28T13:20:00' }
+  ];
+  const run = (route) => {
+    const l = dashboard.normalizeLayout({ screens: [{ id: 't', template: 'single', columns: [[{ id: 'tr', type: 'transport', routes: [route] }]] }] });
+    const st = { 'sensor.stop_123': { state: '2', attributes: { arrivals } } };
+    return buildScreens(l, { states: st, forecasts: {}, calendars: {}, now: NOW, timeZone: TZ }).t.columns[0][0].data.routes[0];
+  };
+  let r = run({ stopEntity: 'sensor.stop_123' });
+  assert.equal(r.name, 'C4 Lucan'); // the soonest's, when the route has no name
+  assert.deepEqual(r.departures.map((d) => [d.time, d.text, d.live]), [['13:33', '3 min', true], ['13:41', '12 min', true]]);
+  // Only the C3: the live time over the timetabled one; one without a live time
+  // by the timetable; the one that's gone (13:20) left out.
+  r = run({ stopEntity: 'sensor.stop_123', routes: 'c3', name: '' });
+  assert.equal(r.name, 'C3 Maynooth');
+  assert.deepEqual(r.departures.map((d) => [d.time, d.minutes, d.live, d.urgent, d.color]), [['13:41', 12, true, false, 4], ['14:05', 36, false, false, 1]]);
+  // A name given wins; no list there: no departures.
+  assert.equal(run({ stopEntity: 'sensor.stop_123', name: 'To Maynooth', routes: 'C3' }).name, 'To Maynooth');
+  assert.deepEqual(run({ stopEntity: 'sensor.other' }).departures, []);
+});
