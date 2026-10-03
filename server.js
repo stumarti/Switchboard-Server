@@ -466,7 +466,9 @@ app.get('/api/viewports/:mac/state', auth.requireAdminOrDevice, async (req, res)
   const device = viewportFor(req, res);
   if (!device) return;
   const layout = viewportLayout(device);
-  const { quiet, interval } = dashboardState.refreshPlan(layout, new Date());
+  const { quiet, interval } = dashboardState.refreshPlan(layout, new Date(), undefined, {
+    staggerSec: clients.viewportStaggerFor(store.normalizeMac(device.mac), store.getDevices())
+  });
   const soonest = (list) => Math.min(interval, ...list.filter((n) => n != null && n > 0));
   try {
     const { screens, errors, generatedAt } = await viewportScreens(layout, device.dashboard || '');

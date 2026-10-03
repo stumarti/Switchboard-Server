@@ -96,8 +96,8 @@ const Key = ({ color, dashed, children }) =>
   html`<span class="vp-small"><span class=${`vp-key ${dashed ? 'vp-key-dash' : ''}`} style=${dashed ? { borderColor: c(color) } : { background: c(color) }}></span>${children}</span>`;
 
 // Top: actual solar (bars) against the forecast (dashed). Bottom:
-// consumption stacked by source — solar, battery, grid — with export to the
-// grid below the line.
+// consumption stacked by source — solar, battery, grid — with charging the
+// battery and export to the grid below the line.
 function EnergyGraph({ d }) {
   const W = 520;
   const n = d.labels.length;
@@ -133,8 +133,14 @@ function EnergyGraph({ d }) {
       yTop -= h;
       bars.push(html`<rect x=${i * bw + 1.5} y=${yTop} width=${bw - 3} height=${h} fill=${c(col[ck])} />`);
     }
-    const e = u.export[i];
-    if (e) bars.push(html`<rect x=${i * bw + 1.5} y=${axisY} width=${bw - 3} height=${e * scale} fill=${c(col.gridExport)} />`);
+    // Below the line: into the battery next to it, then out to the grid.
+    let yBelow = axisY;
+    for (const [list, ck] of [[u.toBattery || [], 'toBattery'], [u.export, 'gridExport']]) {
+      const v = list[i];
+      if (!v) continue;
+      bars.push(html`<rect x=${i * bw + 1.5} y=${yBelow} width=${bw - 3} height=${v * scale} fill=${c(col[ck] ?? col.fromBattery)} />`);
+      yBelow += v * scale;
+    }
   }
   const t = d.totals;
   return html`<div>
@@ -156,6 +162,7 @@ function EnergyGraph({ d }) {
       <${Key} color=${col.fromSolar}>Solar${kwh(t.fromSolar)}<//>
       <${Key} color=${col.fromBattery}>Battery${kwh(t.fromBattery)}<//>
       <${Key} color=${col.fromGrid}>Grid${kwh(t.fromGrid)}<//>
+      ${t.toBattery != null && html`<${Key} color=${col.toBattery ?? col.fromBattery}>Charged${kwh(t.toBattery)}<//>`}
       <${Key} color=${col.gridExport}>Exported${kwh(t.gridExport)}<//>
     </div>
     <svg viewBox=${`0 0 ${W} ${BH + 18}`} width="100%" style="display:block">
@@ -171,7 +178,7 @@ function EnergyGraph({ d }) {
 function Battery({ d }) {
   if (!d) return html`<${Missing} what="No battery sensors" />`;
   return html`<div>
-    <div class="vp-row"><${Icon} name=${d.status === 'charging' ? 'battery-charging' : 'battery'} size=${28} /><div class="vp-big" style=${{ color: c(d.color) }}>${d.soc ?? '--'}%</div></div>
+    <div class="vp-row"><${Icon} name=${d.status === 'charging' ? 'battery-charging' : 'battery'} size=${28} /><div class="vp-big" style=${{ color: c(d.color) }}>${d.soc == null ? '--' : Math.round(d.soc)}%</div></div>
     <${Bar} pct=${d.soc} color=${d.color} />
     <div class="vp-small">${d.status || '—'}${d.eta ? ` · ${d.eta}` : ''}</div>
   </div>`;

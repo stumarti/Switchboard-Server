@@ -52,6 +52,8 @@ const DOMAIN_STATES = {
   update: ['on', 'off']
 };
 
+const CLOCK_MARKS = { 5: ':00, :05, :10 …', 10: ':00, :10, :20 …', 15: ':00, :15, :30 and :45', 30: ':00 and :30', 60: 'on the hour' };
+
 export const SECTION_META = {
   weather: { label: 'Weather', icon: 'weather-partly-cloudy', about: 'Now, later and the next days' },
   energy: { label: 'Energy totals', icon: 'solar-power-variant', about: "Today's solar, use, import, export" },
@@ -96,7 +98,7 @@ function newSection(type) {
         bucketMin: 60,
         ...Object.fromEntries(SERIES.map(([k]) => [k, { entity: '', kind: 'power' }])),
         forecast: { entity: '', attribute: '', unit: 'auto' },
-        colors: { solar: 3, forecast: 5, fromSolar: 3, fromBattery: 5, fromGrid: 2, gridExport: 4 }
+        colors: { solar: 3, forecast: 5, fromSolar: 3, fromBattery: 5, fromGrid: 2, gridExport: 4, toBattery: 5 }
       };
     case 'battery':
       return { ...base, soc: '', status: '', eta: '', power: '', idleWatts: 100, chargeEta: '', dischargeEta: '', colors: { charging: 4, full: 4, discharging: 3, critical: 2, idle: 1 } };
@@ -283,7 +285,8 @@ const SERIES = [
   ['gridImport', 'Grid import', ''],
   ['gridExport', 'Grid export', ''],
   ['batteryCharge', 'Battery charging', 'Optional.'],
-  ['batteryDischarge', 'Battery discharging', 'Optional: without it, use that solar didn’t cover counts as from the battery.']
+  ['batteryDischarge', 'Battery discharging', 'Optional: without it, use that solar didn’t cover counts as from the battery.'],
+  ['batteryPower', 'Battery power (one sensor, ±)', 'Optional, instead of the two above: charging one way, discharging the other.']
 ];
 
 const GRAPH_COLORS = [
@@ -292,7 +295,8 @@ const GRAPH_COLORS = [
   ['fromSolar', 'Use from solar'],
   ['fromBattery', 'Use from battery'],
   ['fromGrid', 'Use from grid'],
-  ['gridExport', 'Export (below the line)']
+  ['gridExport', 'Export (below the line)'],
+  ['toBattery', 'Charging the battery (below the line)']
 ];
 
 function EnergyGraphEditor({ s, set }) {
@@ -302,11 +306,13 @@ function EnergyGraphEditor({ s, set }) {
       <${Field} label="Range"><${Select} value=${s.range} onChange=${(v) => set({ ...s, range: v })} options=${[{ value: 'today', label: 'Today (midnight to midnight)' }, { value: '24h', label: 'Last 24 hours' }]} /><//>
       <${Field} label="Bars every"><${Select} value=${String(s.bucketMin)} onChange=${(v) => set({ ...s, bucketMin: Number(v) })} options=${[{ value: '60', label: 'Hour' }, { value: '30', label: '30 minutes' }, { value: '15', label: '15 minutes' }]} /><//>
     </div>
-    <p class="hint">Top panel: actual solar against the prediction. Bottom panel: what the house used, stacked by where it came from (grid, battery, solar), with export to the grid below the line.</p>
+    <p class="hint">Top panel: actual solar against the prediction. Bottom panel: what the house used, stacked by where it came from (grid, battery, solar); below the line, what went into the battery and out to the grid.</p>
     ${SERIES.map(
       ([k, label, hint]) => html`<div class="row" style="align-items:flex-end">
         <${Field} label=${label} hint=${hint}><${EntityPicker} domains=${['sensor']} value=${s[k].entity} onChange=${(id, e) => set({ ...s, [k]: { ...s[k], entity: id, kind: e && e.unit && /Wh$/.test(e.unit) ? 'energy' : e && e.unit && /W$/.test(e.unit) ? 'power' : s[k].kind } })} /><//>
-        <div style="width:190px"><${Field} label="It measures"><${Select} value=${s[k].kind} onChange=${(v) => set({ ...s, [k]: { ...s[k], kind: v } })} options=${[{ value: 'power', label: 'Power (W / kW)' }, { value: 'energy', label: 'Energy meter (kWh)' }]} /><//></div>
+        ${k === 'batteryPower'
+          ? html`<div style="width:190px"><${Field} label="While charging, it reads"><${Select} value=${s.batteryChargingWhen || 'negative'} onChange=${(v) => set({ ...s, batteryChargingWhen: v })} options=${[{ value: 'negative', label: 'Negative (most)' }, { value: 'positive', label: 'Positive' }]} /><//></div>`
+          : html`<div style="width:190px"><${Field} label="It measures"><${Select} value=${s[k].kind} onChange=${(v) => set({ ...s, [k]: { ...s[k], kind: v } })} options=${[{ value: 'power', label: 'Power (W / kW)' }, { value: 'energy', label: 'Energy meter (kWh)' }]} /><//></div>`}
       </div>`
     )}
     <div class="row" style="align-items:flex-end">
@@ -543,18 +549,43 @@ function TransportEditor({ s, set }) {
     onChange=${(l) => set({ ...s, routes: l })}
     max=${4}
     addLabel="Add route"
-    newItem=${() => ({ id: newId(), name: '', stop: '', icon: 'bus', color: 4, departure1: '', departure2: '' })}
+    newItem=${() => ({ id: newId(), name: '', stop: '', icon: 'bus', color: 4, departure1: '', departure1Attribute: '', departure2: '', departure2Attribute: '', stopEntity: '', listAttribute: 'arrivals', routes: '' })}
     render=${(it, upd) => html`<div class="row">
         <${IconPicker} value=${it.icon} onChange=${(icon) => upd({ ...it, icon })} />
         <${Field} label="Route"><${TextInput} value=${it.name} placeholder="42 · City Centre" onInput=${(v) => upd({ ...it, name: v })} /><//>
         <${Field} label="Stop"><${TextInput} value=${it.stop} placeholder="High Street" onInput=${(v) => upd({ ...it, stop: v })} /><//>
         <${Field} label="Colour"><${ColorPicker} value=${it.color} onChange=${(v) => upd({ ...it, color: v })} /><//>
       </div>
-      <div class="row">
-        <${Field} label="Next departure" hint="A time, timestamp or minutes."><${EntityPicker} domains=${['sensor']} value=${it.departure1} onChange=${(id) => upd({ ...it, departure1: id })} /><//>
-        <${Field} label="The one after"><${EntityPicker} domains=${['sensor']} value=${it.departure2} onChange=${(id) => upd({ ...it, departure2: id })} /><//>
-      </div>`}
+      <${DepartureFields} it=${it} upd=${upd} />`}
   />`;
+}
+
+// A stop sensor with every arrival in a list attribute, or one entity (or
+// attribute) per departure.
+function DepartureFields({ it, upd }) {
+  const stop = useEntity(it.stopEntity);
+  const e1 = useEntity(it.departure1);
+  const e2 = useEntity(it.departure2);
+  if (it.stopEntity) {
+    return html`<div class="row">
+        <${Field} label="Stop sensor" hint="Every arrival in a list attribute: route, headsign, real-time and scheduled times."><${EntityPicker} domains=${['sensor']} value=${it.stopEntity} onChange=${(id) => upd({ ...it, stopEntity: id })} /><//>
+        <div style="width:150px"><${Field} label="List attribute"><${SuggestInput} value=${it.listAttribute} placeholder="arrivals" suggestions=${(stop && stop.attributes) || []} onInput=${(v) => upd({ ...it, listAttribute: v })} /><//></div>
+        <div style="width:150px"><${Field} label="Only routes" hint="Blank: all."><${TextInput} value=${it.routes} placeholder="C3, 66" onInput=${(v) => upd({ ...it, routes: v })} /><//></div>
+      </div>
+      <p class="hint">The next two: by their live time in the route's colour, or by the timetable in black when there isn't one (red either way when due soon). Leave Route blank to show the next bus's route and destination.</p>
+      <${Button} kind="ghost" small onClick=${() => upd({ ...it, stopEntity: '' })}>Use one sensor per departure instead<//>`;
+  }
+  const attr = (k, e) => html`<div style="width:160px"><${Field} label="Attribute (optional)"><${SuggestInput} value=${it[k]} placeholder="state" suggestions=${(e && e.attributes) || []} onInput=${(v) => upd({ ...it, [k]: v })} /><//></div>`;
+  return html`<div class="row">
+      <${Field} label="Next departure"><${EntityPicker} domains=${['sensor']} value=${it.departure1} onChange=${(id) => upd({ ...it, departure1: id })} /><//>
+      ${attr('departure1Attribute', e1)}
+    </div>
+    <div class="row">
+      <${Field} label="The one after" hint="Often the same sensor, with the next bus in an attribute."><${EntityPicker} domains=${['sensor']} value=${it.departure2} onChange=${(id) => upd({ ...it, departure2: id })} /><//>
+      ${attr('departure2Attribute', e2)}
+    </div>
+    <p class="hint">Understood: “Due”; minutes (12, “12 min”); a time (17:05); or a timestamp.</p>
+    <${Button} kind="ghost" small onClick=${() => upd({ ...it, stopEntity: it.departure1 || 'sensor.', listAttribute: it.listAttribute || 'arrivals' })}>Use a stop sensor’s arrivals list instead<//>`;
 }
 
 function AlarmEditor({ s, set }) {
@@ -645,7 +676,9 @@ function NowEditor({ s, set }) {
 
 function HeatingEditor({ s, set }) {
   return html`<div class="row">${sensorField(s, set, 'entity', 'Whole house (optional)', ['climate'])}${sensorField(s, set, 'hotWater', 'Hot water (optional)', ['water_heater'])}</div>
-    <${NamedList} items=${s.zones} onChange=${(l) => set({ ...s, zones: l })} domains=${['climate']} max=${16} addLabel="Add zone" />
+    <${NamedList} items=${s.zones} onChange=${(l) => set({ ...s, zones: l })} domains=${['climate']} max=${16} addLabel="Add zone"
+      extra=${(it, upd) => html`<${IconPicker} value=${it.icon} onChange=${(icon) => upd({ ...it, icon })} />`} />
+    <p class="hint">A zone's icon (optional) is drawn beside its name, red while it's calling for heat.</p>
     <div class="row" style="align-items:flex-end">
       <div style="width:260px"><${Field} label="Calling when below setpoint by more than °" hint="In heat or auto."><${NumberInput} step="0.1" min="0" value=${s.callingDelta} onChange=${(v) => set({ ...s, callingDelta: v })} /><//></div>
       <${Toggle} checked=${s.houseTemps !== false} onChange=${(v) => set({ ...s, houseTemps: v })} label="The whole house’s “now” and “set” temperatures" />
@@ -967,7 +1000,7 @@ function ScreensCard({ screens, selected, onSelect, onChange, useDragOrder }) {
     onSelect(s.id);
     setAdding(false);
   };
-  return html`<${Card} icon="view-carousel-outline" title="Screens" subtitle="The pages the left/right buttons step through. Drag to reorder; click one to edit it."
+  return html`<${Card} icon="view-carousel-outline" title="Screens" subtitle="The display's buttons step through these: left previous, middle next, the green one back to the first. Drag to reorder; click one to edit it."
     actions=${html`<${Button} small icon="plus" disabled=${screens.length >= 12} onClick=${() => setAdding(!adding)}>Add screen<//>`}>
     ${adding &&
     html`<div class="section-palette" style="grid-template-columns:1fr 1fr 1fr">
@@ -1034,12 +1067,6 @@ function CarouselCard({ layout, onChange }) {
           { value: 'returnFirst', label: 'Go back to the first screen' }
         ]} />
       <//>
-      <${Field} label="Buttons">
-        <${Select} value=${c.buttons || 'step'} onChange=${(v) => set('buttons', v)} options=${[
-          { value: 'step', label: 'Right / left step through the screens, middle refreshes' },
-          { value: 'direct', label: 'Straight to a screen: middle the first, right the second, left the last' }
-        ]} />
-      <//>
       ${c.mode !== 'stay' && html`<div style="width:150px"><${Field} label="Every (minutes)"><${NumberInput} min="5" max="240" value=${c.everyMin} onChange=${(v) => set('everyMin', v)} /><//></div>`}
       <div style="width:200px"><${Field} label="Refresh data every">
         <${Select} value=${String(layout.refreshIntervalMin)} onChange=${(v) => onChange({ ...layout, refreshIntervalMin: Number(v) })}
@@ -1049,6 +1076,10 @@ function CarouselCard({ layout, onChange }) {
     <p class="hint">${c.mode === 'stay'
       ? 'The screen only changes when someone presses a button.'
       : 'Each change is a full panel refresh (15–20 s), which costs battery.'}</p>
+    <${Toggle} checked=${Boolean(layout.refreshAligned)} onChange=${(v) => onChange({ ...layout, refreshAligned: v })} label="On the clock" />
+    <p class="hint">${layout.refreshAligned
+      ? `Refreshes at ${CLOCK_MARKS[layout.refreshIntervalMin] || 'the marks'} (server time; in quiet hours, at its own interval's marks), not ${layout.refreshIntervalMin} minutes after it last slept. Each display is 7 seconds after the one before, after the remotes, so they don't all ask the server at once.`
+      : `Refreshes ${layout.refreshIntervalMin} minutes after it last went to sleep.`}</p>
     <div class="row" style="align-items:flex-end">
       <${Toggle} checked=${q.enabled} onChange=${(v) => setQ('enabled', v)} label="Quiet hours" />
       ${q.enabled &&

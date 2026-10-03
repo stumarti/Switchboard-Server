@@ -98,7 +98,7 @@ const data = (screen, id) => screen.columns.flat().find((s) => s.id === id).data
 test('the kitchen dashboard: Status, Heating and Security, returning to Status, quieter overnight', () => {
   const l = dashboard.defaultLayout();
   assert.deepEqual(l.screens.map((s) => s.id), ['status', 'heating', 'security']);
-  assert.deepEqual(l.carousel, { mode: 'returnFirst', everyMin: 30, buttons: 'direct' });
+  assert.deepEqual(l.carousel, { mode: 'returnFirst', everyMin: 30 });
   assert.equal(l.refreshIntervalMin, 30);
   assert.deepEqual(l.quietHours, { enabled: true, start: 23, end: 6, intervalMin: 60 });
   assert.equal(l.screens[2].template, 'triple');
@@ -335,4 +335,58 @@ test("today's calendar in the panel's order: timed by HH:MM (last night's 20:00 
   const sc = buildScreens(dashboard.defaultLayout(), { states: house(), forecasts, calendars: cals, now: NOW, timeZone: TZ });
   const lines = data(sc.status, 'status-today').lines.map((l) => `${l.time}|${l.title}`);
   assert.deepEqual(lines, ['09:00|Same time B', '09:00|Same time A', '20:00|Overnight', '|Zeta all day', '|Alpha all day']);
+});
+
+test("the bundle stays within the viewport's JSON nesting limit (ARDUINOJSON_DEFAULT_NESTING_LIMIT=32)", () => {
+  const depth = (v) => (v && typeof v === 'object' ? 1 + Math.max(0, ...Object.values(v).map(depth)) : 0);
+  // The deepest layouts: the kitchen dashboard and a meeting-room sign, in a
+  // bundle ({layout, ...}), with room to spare: the display refuses deeper
+  // JSON outright and then says it isn't connected.
+  for (const layout of [dashboard.defaultLayout(), dashboard.meetingRoomLayout()]) {
+    assert.ok(depth({ layout }) <= 24, `bundle depth ${depth({ layout })}`);
+  }
+});
+
+test('on the clock: refreshes at the marks, each display 7 s after the last (after the remotes)', () => {
+  const { viewportStaggerFor } = require('../lib/clients');
+  const layout = { ...dashboard.defaultLayout(), refreshAligned: true };
+  const at = (iso, stagger = 0) => refreshPlan(layout, new Date(iso), TZ, { staggerSec: stagger });
+  // 30 minutes: :00 and :30 (13:12:30 BST -> 13:30:00, plus its slot).
+  assert.deepEqual(at('2026-09-28T12:12:30Z', 7), { quiet: false, interval: 17 * 60 + 30 + 7 });
+  // Woken a little early, or just after the mark: the next mark, not one
+  // within two minutes.
+  assert.equal(at('2026-09-28T12:29:10Z').interval, 30 * 60 + 50);
+  assert.equal(at('2026-09-28T12:30:20Z', 7).interval, 29 * 60 + 40 + 7);
+  // Quiet hours (23-06, hourly): on the hour; and never past where they end.
+  assert.deepEqual(at('2026-09-28T23:40:00Z'), { quiet: true, interval: 20 * 60 });
+  const fourHourly = { ...layout, quietHours: { ...layout.quietHours, intervalMin: 240 } };
+  // 4-hourly marks are 00:00, 04:00, 08:00: at 04:10 the next is 08:00, but
+  // quiet hours end at 06:00 first.
+  assert.equal(refreshPlan(fourHourly, new Date('2026-09-29T03:10:00Z'), TZ).interval, 110 * 60);
+  // Off the clock: the interval after it last slept, as before.
+  assert.equal(refreshPlan(dashboard.defaultLayout(), new Date('2026-09-28T12:12:30Z'), TZ).interval, 30 * 60);
+  // Slots: after every approved remote, in MAC order.
+  const devices = {
+    'aa:00:00:00:00:01': { type: 'remote', status: 'approved' },
+    'aa:00:00:00:00:02': { type: 'remote', status: 'approved' },
+    'bb:00:00:00:00:01': { type: 'viewport', status: 'approved' },
+    'bb:00:00:00:00:02': { type: 'viewport', status: 'approved' },
+    'bb:00:00:00:00:03': { type: 'viewport', status: 'pending' }
+  };
+  assert.equal(viewportStaggerFor('bb:00:00:00:00:01', devices), 14);
+  assert.equal(viewportStaggerFor('bb:00:00:00:00:02', devices), 21);
+  assert.equal(viewportStaggerFor('bb:00:00:00:00:03', devices), 0);
+});
+
+test('heating zones can have an icon: in the state, and in the icons a display fetches', () => {
+  const { iconsUsed } = require('../lib/dashboard-state');
+  const layout = dashboard.defaultLayout();
+  const heating = layout.screens[1].columns[0][0];
+  heating.zones[0].icon = 'stove';
+  const l = dashboard.normalizeLayout(layout);
+  assert.equal(l.screens[1].columns[0][0].zones[0].icon, 'stove');
+  assert.equal(l.screens[1].columns[0][0].zones[1].icon, '');
+  assert.ok(iconsUsed(l).includes('stove'));
+  const h = buildScreens(l, { states: house(), forecasts, calendars, now: NOW, timeZone: TZ }).heating.columns[0][0].data;
+  assert.deepEqual(h.zones.map((z) => z.icon), ['stove', '', '', '', '']);
 });

@@ -123,11 +123,12 @@ export function DashEnergy({ d }) {
 export function DashBattery({ d }) {
   if (!d) return html`<div class="kd-block" style="height:48px"></div>`;
   const pct = Math.max(0, Math.min(100, d.soc || 0));
+  // The status and time raised as the display has them, clear of the bar.
   return html`<div class="kd-block" style="height:48px">
     <${I} x=${5} y=${-4} name="battery-high" size=${24} />
     <${T} x=${32} y=${16} size=${24} bold>${d.socText || (d.soc == null ? '--' : `${d.soc} %`)}<//>
-    <${T} right=${20} y=${8} bold color=${d.color}>${d.statusText}<//>
-    ${d.eta && html`<${T} right=${20} y=${22}>${d.eta}<//>`}
+    <${T} right=${20} y=${1} bold color=${d.color}>${d.statusText}<//>
+    ${d.eta && html`<${T} right=${20} y=${19}>${d.eta}<//>`}
     <${Box} x=${5} y=${23} w=${225} h=${22} border />
     <${Box} x=${230} y=${28} w=${6} h=${12} />
     ${pct > 0 && html`<${Box} x=${8} y=${26} w=${Math.round((219 * pct) / 100)} h=${16} color=${d.color} />`}
@@ -200,7 +201,10 @@ export function DashHeating({ d }) {
       const hasBoth = z.current != null && z.target != null;
       const xc = z.current != null ? xOf(z.current) : null;
       const xs = z.target != null ? xOf(z.target) : null;
-      return html`<${T} x=${X0} y=${y + 14} size=${24} bold color=${z.active ? 2 : 1}>${z.name}<//>
+      // An icon (if the zone has one) beside the name, centred on its capitals.
+      const nameX = z.icon ? X0 + 30 : X0;
+      return html`${z.icon && html`<${I} x=${X0} y=${y - 5} name=${z.icon} size=${24} color=${z.active ? 2 : 1} />`}
+        <${T} x=${nameX} y=${y + 14} size=${24} bold color=${z.active ? 2 : 1}>${z.name}<//>
         <${T} right=${800 - X0 - W} y=${y + 14}>${z.current != null ? `${z.current.toFixed(1)}C` : ''}${z.target != null ? `  set ${Math.round(z.target)}C` : ''}<//>
         <${Box} x=${X0} y=${by} w=${W} h=${12} border />
         ${hasBoth && Math.abs(xc - xs) > 1 && html`<${Box} x=${Math.min(xc, xs) + 1} y=${by + 1} w=${Math.abs(xc - xs) - 1} h=${10} color=${z.current < z.target ? 2 : 5} />`}

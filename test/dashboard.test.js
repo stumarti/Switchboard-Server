@@ -72,7 +72,7 @@ test('normalizeLayout: carousel defaults to staying put, sections are validated,
       { id: 's3', template: 'columns', columns: [[{ type: 'statusIcons', icons: new Array(20).fill({ entity: 'a.b', rules: [{ cond: 'x', color: 9 }] }) }]] }
     ]
   });
-  assert.deepEqual(l.carousel, { mode: 'stay', everyMin: 5, buttons: 'step' });
+  assert.deepEqual(l.carousel, { mode: 'stay', everyMin: 5 });
   const [s1, s2, s3] = l.screens;
   assert.equal(s1.columns.length, 1);
   assert.deepEqual(s1.columns[0].map((s) => s.type), ['weather', 'people']); // the extra column folds in
@@ -585,4 +585,88 @@ test('conditional section: on an entity state, and "playing" only means somethin
   assert.deepEqual(run('armed_away').columns[0].map((s) => s.id), ['a', 'b']);
   assert.deepEqual(run('disarmed').columns[0].map((s) => s.id), ['b']);
   assert.equal(run('armed_away').nextChangeInSec, null); // liveMin 0: no extra wakes
+});
+
+test('energy graph: charging the battery goes below the line, from one signed sensor or its own', () => {
+  const graph = (extra, history) => {
+    const l = dashboard.normalizeLayout({
+      screens: [{ id: 'e', template: 'single', columns: [[{ id: 'g', type: 'energyGraph', range: 'today', bucketMin: 60, ...extra }]] }]
+    });
+    const st = { 'sensor.battery_power': { state: '0', attributes: { unit_of_measurement: 'W' } }, 'sensor.export_power': { state: '0', attributes: { unit_of_measurement: 'W' } } };
+    return buildScreens(l, { states: st, forecasts: {}, calendars: {}, history, now: NOW, timeZone: TZ }).e.columns[0][0].data;
+  };
+  // Charging at 1.5 kW from 12:00 local, discharging 0.8 kW before; 0.5 kW exported throughout.
+  const history = {
+    'sensor.battery_power': [
+      { entity_id: 'sensor.battery_power', state: '800', last_changed: '2026-09-27T23:00:00Z' },
+      { state: '-1500', last_changed: '2026-09-28T11:00:00Z' }
+    ],
+    'sensor.export_power': [{ entity_id: 'sensor.export_power', state: '500', last_changed: '2026-09-27T23:00:00Z' }]
+  };
+  let g = graph({ batteryPower: { entity: 'sensor.battery_power', kind: 'power' }, gridExport: { entity: 'sensor.export_power', kind: 'power' } }, history);
+  assert.equal(g.usage.toBattery[12], 1.5); // 12:00-13:00 local
+  assert.equal(g.usage.toBattery[10], 0); // discharging then
+  assert.equal(g.usage.toBattery[14], null); // the future
+  assert.equal(g.usage.exportMax, 2); // charging and export, stacked
+  assert.equal(g.colors.toBattery, 5);
+  // Positive while charging, for inverters that report it that way.
+  g = graph({ batteryPower: { entity: 'sensor.battery_power', kind: 'power' }, batteryChargingWhen: 'positive' }, history);
+  assert.equal(g.usage.toBattery[10], 0.8);
+  assert.equal(g.usage.toBattery[12], 0);
+  // None configured: nothing below the line for it.
+  g = graph({}, history);
+  assert.deepEqual([...new Set(g.usage.toBattery)], [null]);
+  assert.equal(g.totals.toBattery, null);
+});
+
+test('bus stops: departures however the stop sensor gives them', () => {
+  const run = (states, routes) => {
+    const l = dashboard.normalizeLayout({ screens: [{ id: 't', template: 'single', columns: [[{ id: 'tr', type: 'transport', routes }]] }] });
+    return buildScreens(l, { states, forecasts: {}, calendars: {}, now: NOW, timeZone: TZ }).t.columns[0][0].data.routes[0].departures;
+  };
+  const one = (state, attrs = {}) => run({ 'sensor.stop': { state, attributes: attrs } }, [{ name: '39A', departure1: 'sensor.stop' }])[0];
+  // Now is 13:30 BST.
+  assert.deepEqual([one('Due').text, one('Due').urgent, one('Due').time], ['Due', true, '13:30']);
+  assert.equal(one('12').text, '12 min');
+  assert.equal(one('12 min').time, '13:42');
+  assert.equal(one('12 mins').minutes, 12);
+  assert.equal(one('7m').minutes, 7);
+  assert.equal(one('600', { unit_of_measurement: 's' }).minutes, 10);
+  assert.equal(one('17:05').text, '215 min');
+  assert.equal(one('2026-09-28 13:50:00').time, '13:50'); // local, no offset
+  assert.equal(one('2026-09-28T12:50:00+00:00').time, '13:50');
+  assert.equal(one('0').text, 'Due');
+  assert.deepEqual(one('Cancelled'), { time: '', minutes: null, urgent: false, color: 4, text: 'Cancelled' });
+  assert.equal(one('unavailable'), undefined);
+  // The next bus in the state, the one after in an attribute (Dublin Bus's "Next bus").
+  const deps = run({ 'sensor.stop': { state: '4', attributes: { 'Next bus': 19, unit_of_measurement: 'min' } } }, [
+    { name: '39A', departure1: 'sensor.stop', departure2: 'sensor.stop', departure2Attribute: 'Next bus' }
+  ]);
+  assert.deepEqual(deps.map((d) => d.text), ['4 min', '19 min']);
+});
+
+test("bus stops: a stop sensor's arrivals list (live time, else timetabled), soonest first", () => {
+  // As a TFI stop sensor gives it (local times, no offset). Now is 13:30 BST.
+  const arrivals = [
+    { agency: 'Bus Átha Cliath – Dublin Bus', headsign: 'Maynooth', real_time_arrival: '2026-09-28T13:41:54', route: 'C3', scheduled_arrival: '2026-09-28T13:34:19' },
+    { agency: 'Bus Átha Cliath – Dublin Bus', headsign: 'Maynooth', real_time_arrival: null, route: 'C3', scheduled_arrival: '2026-09-28T14:05:49' },
+    { agency: 'Bus Átha Cliath – Dublin Bus', headsign: 'Lucan', real_time_arrival: '2026-09-28T13:33:00', route: 'C4', scheduled_arrival: '2026-09-28T13:33:00' },
+    { agency: 'Bus Átha Cliath – Dublin Bus', headsign: 'Maynooth', real_time_arrival: '2026-09-28T13:20:00', route: 'C3', scheduled_arrival: '2026-09-28T13:20:00' }
+  ];
+  const run = (route) => {
+    const l = dashboard.normalizeLayout({ screens: [{ id: 't', template: 'single', columns: [[{ id: 'tr', type: 'transport', routes: [route] }]] }] });
+    const st = { 'sensor.stop_123': { state: '2', attributes: { arrivals } } };
+    return buildScreens(l, { states: st, forecasts: {}, calendars: {}, now: NOW, timeZone: TZ }).t.columns[0][0].data.routes[0];
+  };
+  let r = run({ stopEntity: 'sensor.stop_123' });
+  assert.equal(r.name, 'C4 Lucan'); // the soonest's, when the route has no name
+  assert.deepEqual(r.departures.map((d) => [d.time, d.text, d.live]), [['13:33', '3 min', true], ['13:41', '12 min', true]]);
+  // Only the C3: the live time over the timetabled one; one without a live time
+  // by the timetable; the one that's gone (13:20) left out.
+  r = run({ stopEntity: 'sensor.stop_123', routes: 'c3', name: '' });
+  assert.equal(r.name, 'C3 Maynooth');
+  assert.deepEqual(r.departures.map((d) => [d.time, d.minutes, d.live, d.urgent, d.color]), [['13:41', 12, true, false, 4], ['14:05', 36, false, false, 1]]);
+  // A name given wins; no list there: no departures.
+  assert.equal(run({ stopEntity: 'sensor.stop_123', name: 'To Maynooth', routes: 'C3' }).name, 'To Maynooth');
+  assert.deepEqual(run({ stopEntity: 'sensor.other' }).departures, []);
 });
