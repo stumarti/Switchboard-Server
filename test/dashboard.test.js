@@ -653,20 +653,42 @@ test("bus stops: a stop sensor's arrivals list (live time, else timetabled), soo
     { agency: 'Bus Átha Cliath – Dublin Bus', headsign: 'Lucan', real_time_arrival: '2026-09-28T13:33:00', route: 'C4', scheduled_arrival: '2026-09-28T13:33:00' },
     { agency: 'Bus Átha Cliath – Dublin Bus', headsign: 'Maynooth', real_time_arrival: '2026-09-28T13:20:00', route: 'C3', scheduled_arrival: '2026-09-28T13:20:00' }
   ];
-  const run = (route) => {
+  const rows = (route) => {
     const l = dashboard.normalizeLayout({ screens: [{ id: 't', template: 'single', columns: [[{ id: 'tr', type: 'transport', routes: [route] }]] }] });
     const st = { 'sensor.stop_123': { state: '2', attributes: { arrivals } } };
-    return buildScreens(l, { states: st, forecasts: {}, calendars: {}, now: NOW, timeZone: TZ }).t.columns[0][0].data.routes[0];
+    return buildScreens(l, { states: st, forecasts: {}, calendars: {}, now: NOW, timeZone: TZ }).t.columns[0][0].data.routes;
   };
-  let r = run({ stopEntity: 'sensor.stop_123' });
-  assert.equal(r.name, 'C4 Lucan'); // the soonest's, when the route has no name
-  assert.deepEqual(r.departures.map((d) => [d.time, d.text, d.live]), [['13:33', '3 min', true], ['13:41', '12 min', true]]);
-  // Only the C3: the live time over the timetabled one; one without a live time
-  // by the timetable; the one that's gone (13:20) left out.
-  r = run({ stopEntity: 'sensor.stop_123', routes: 'c3', name: '' });
-  assert.equal(r.name, 'C3 Maynooth');
-  assert.deepEqual(r.departures.map((d) => [d.time, d.minutes, d.live, d.urgent, d.color]), [['13:41', 12, true, false, 4], ['14:05', 36, false, false, 1]]);
-  // A name given wins; no list there: no departures.
-  assert.equal(run({ stopEntity: 'sensor.stop_123', name: 'To Maynooth', routes: 'C3' }).name, 'To Maynooth');
-  assert.deepEqual(run({ stopEntity: 'sensor.other' }).departures, []);
+  // As a stop board: a line per route and headsign (what the front of the
+  // bus says), soonest first, each with its next two.
+  let r = rows({ stopEntity: 'sensor.stop_123' });
+  assert.deepEqual(r.map((x) => [x.route, x.destination]), [['C4', 'Lucan'], ['C3', 'Maynooth']]);
+  assert.deepEqual(r[0].departures.map((d) => [d.time, d.text, d.live]), [['13:33', '3 min', true]]);
+  // The live time over the timetabled one; one without a live time by the
+  // timetable (in black); the one that's gone (13:20) left out.
+  assert.deepEqual(r[1].departures.map((d) => [d.time, d.minutes, d.live, d.urgent, d.color]), [['13:41', 12, true, false, 4], ['14:05', 36, false, false, 1]]);
+  // Only some routes; at most `lines` lines.
+  assert.deepEqual(rows({ stopEntity: 'sensor.stop_123', routes: 'c3' }).map((x) => x.route), ['C3']);
+  assert.equal(rows({ stopEntity: 'sensor.stop_123', lines: 1 }).length, 1);
+  // Named: one line with every arrival on it.
+  r = rows({ stopEntity: 'sensor.stop_123', name: 'To town' });
+  assert.equal(r.length, 1);
+  assert.deepEqual([r[0].name, r[0].departures.map((d) => d.time)], ['To town', ['13:33', '13:41']]);
+  // No list there: a line saying so.
+  r = rows({ stopEntity: 'sensor.other' });
+  assert.deepEqual([r.length, r[0].departures], [1, []]);
+});
+
+test('bus stops: the route number for a badge and the destination, split from the name', () => {
+  const routeOf = (name) => {
+    const l = dashboard.normalizeLayout({ screens: [{ id: 't', template: 'single', columns: [[{ id: 'tr', type: 'transport', routes: [{ name }] }]] }] });
+    const r = buildScreens(l, { states: {}, forecasts: {}, calendars: {}, now: NOW, timeZone: TZ }).t.columns[0][0].data.routes[0];
+    return [r.route, r.destination];
+  };
+  assert.deepEqual(routeOf('42 · City Centre'), ['42', 'City Centre']);
+  assert.deepEqual(routeOf('39A - Ongar'), ['39A', 'Ongar']);
+  assert.deepEqual(routeOf('C3 Maynooth'), ['C3', 'Maynooth']);
+  assert.deepEqual(routeOf('N4'), ['', 'N4']);
+  assert.deepEqual(routeOf('DART · Howth'), ['DART', 'Howth']);
+  assert.deepEqual(routeOf('Overground · Waterloo'), ['', 'Overground · Waterloo']); // too long for a badge
+  assert.deepEqual(routeOf('Luas Green Line'), ['', 'Luas Green Line']);
 });

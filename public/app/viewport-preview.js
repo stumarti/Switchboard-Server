@@ -262,12 +262,18 @@ const Media = ({ d }) =>
       )}</div>`
     : html`<${Missing} what="Nothing playing" />`;
 
+// A stop board: the route in a badge of its colour (or its icon), where it's
+// going, the stop under it; the next departures' minutes, clock times under.
 const Transport = ({ d }) =>
   html`<div>${d.routes.map(
-    (t) => html`<div class="vp-row" style="align-items:flex-start;margin-bottom:6px">
-      <span style=${{ color: c(t.color) }}><${Icon} name=${t.icon || 'bus'} size=${24} /></span>
-      <div style="flex:1"><div class="vp-med">${t.name}</div><div class="vp-tiny">${t.stop}</div></div>
-      ${t.departures.map((x) => html`<div style="width:64px;text-align:right"><div class="vp-small">${x.time}</div><div class="vp-med" style=${{ color: c(x.color) }}>${x.text}</div></div>`)}
+    (t) => html`<div class="vp-row vp-rowline" style="align-items:center;padding:4px 0">
+      ${t.route
+        ? html`<span style=${{ background: c(t.color), color: '#fff', fontWeight: 700, borderRadius: '4px', padding: '2px 8px', minWidth: '32px', textAlign: 'center' }}>${t.route}</span>`
+        : html`<span style=${{ color: c(t.color), width: '48px', textAlign: 'center' }}><${Icon} name=${t.icon || 'bus'} size=${24} /></span>`}
+      <div style="flex:1;min-width:0"><div class="vp-med" style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.destination || t.name}</div>${t.stop && html`<div class="vp-tiny">${t.stop}</div>`}</div>
+      ${t.departures.length
+        ? t.departures.slice(0, 2).map((x) => html`<div style="width:76px;text-align:right"><div class="vp-med" style=${{ color: c(x.color), fontWeight: 700 }}>${x.text}</div><div class="vp-tiny">${x.time}</div></div>`)
+        : html`<div class="vp-small">No departures</div>`}
     </div>`
   )}</div>`;
 
