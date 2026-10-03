@@ -336,3 +336,13 @@ test("today's calendar in the panel's order: timed by HH:MM (last night's 20:00 
   const lines = data(sc.status, 'status-today').lines.map((l) => `${l.time}|${l.title}`);
   assert.deepEqual(lines, ['09:00|Same time B', '09:00|Same time A', '20:00|Overnight', '|Zeta all day', '|Alpha all day']);
 });
+
+test("the bundle stays within the viewport's JSON nesting limit (ARDUINOJSON_DEFAULT_NESTING_LIMIT=32)", () => {
+  const depth = (v) => (v && typeof v === 'object' ? 1 + Math.max(0, ...Object.values(v).map(depth)) : 0);
+  // The deepest layouts: the kitchen dashboard and a meeting-room sign, in a
+  // bundle ({layout, ...}), with room to spare: the display refuses deeper
+  // JSON outright and then says it isn't connected.
+  for (const layout of [dashboard.defaultLayout(), dashboard.meetingRoomLayout()]) {
+    assert.ok(depth({ layout }) <= 24, `bundle depth ${depth({ layout })}`);
+  }
+});

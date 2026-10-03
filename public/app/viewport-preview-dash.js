@@ -123,11 +123,12 @@ export function DashEnergy({ d }) {
 export function DashBattery({ d }) {
   if (!d) return html`<div class="kd-block" style="height:48px"></div>`;
   const pct = Math.max(0, Math.min(100, d.soc || 0));
+  // The status and time raised as the display has them, clear of the bar.
   return html`<div class="kd-block" style="height:48px">
     <${I} x=${5} y=${-4} name="battery-high" size=${24} />
     <${T} x=${32} y=${16} size=${24} bold>${d.socText || (d.soc == null ? '--' : `${d.soc} %`)}<//>
-    <${T} right=${20} y=${8} bold color=${d.color}>${d.statusText}<//>
-    ${d.eta && html`<${T} right=${20} y=${22}>${d.eta}<//>`}
+    <${T} right=${20} y=${1} bold color=${d.color}>${d.statusText}<//>
+    ${d.eta && html`<${T} right=${20} y=${19}>${d.eta}<//>`}
     <${Box} x=${5} y=${23} w=${225} h=${22} border />
     <${Box} x=${230} y=${28} w=${6} h=${12} />
     ${pct > 0 && html`<${Box} x=${8} y=${26} w=${Math.round((219 * pct) / 100)} h=${16} color=${d.color} />`}
