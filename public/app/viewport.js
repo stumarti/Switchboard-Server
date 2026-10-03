@@ -5,7 +5,7 @@
 //   Screens      the pages, as cards: drag to reorder, switch off, duplicate,
 //                add (a sections screen, a meeting room, or a room finder —
 //                the other rooms that are free)
-//   The screen   its template (sidebar | two columns | single) and, per
+//   The screen   its template (sidebar | two | three columns | single) and, per
 //                column, its sections — any type, any order, each fully
 //                configured — with a live preview beside it
 //
@@ -27,7 +27,9 @@ const CONDITIONS = [
   { value: 'ne', label: 'is not' },
   { value: 'contains', label: 'contains' },
   { value: 'gt', label: 'is above' },
-  { value: 'lt', label: 'is below' }
+  { value: 'lt', label: 'is below' },
+  { value: 'in', label: 'is one of' },
+  { value: 'startsWith', label: 'starts with' }
 ];
 
 // States an entity's domain can take, to suggest in rule editors.
@@ -68,21 +70,25 @@ export const SECTION_META = {
   openings: { label: 'Doors & windows', icon: 'door', about: 'Open (red) or closed' },
   motion: { label: 'Motion', icon: 'motion-sensor', about: 'Last motion, blue when recent' },
   cameras: { label: 'Cameras', icon: 'cctv', about: 'Last motion per camera' },
+  now: { label: 'Now', icon: 'lightning-bolt-outline', about: 'What’s happening: alarm, heating, doors, robots…' },
+  heating: { label: 'Heating', icon: 'radiator', about: 'Zones against their setpoints, hot water' },
   announcements: { label: 'Announcements', icon: 'bullhorn-outline', about: 'The latest from a company RSS or Atom feed' }
 };
 
 const TEMPLATES = [
   { value: 'sidebar', label: 'Sidebar + main', icon: 'page-layout-sidebar-left', columns: ['Sidebar', 'Main'] },
   { value: 'columns', label: 'Two columns', icon: 'view-column-outline', columns: ['Left', 'Right'] },
-  { value: 'single', label: 'Single column', icon: 'view-agenda-outline', columns: ['Screen'] }
+  { value: 'single', label: 'Single column', icon: 'view-agenda-outline', columns: ['Screen'] },
+  { value: 'triple', label: 'Three columns', icon: 'view-parallel-outline', columns: ['Left', 'Middle', 'Right'] }
 ];
+const GRID_COLUMNS = { sidebar: '1fr 1.6fr', columns: '1fr 1fr', single: '1fr', triple: '1fr 1fr 1fr' };
 
 // A new section of each type, with sensible starting settings.
 function newSection(type) {
   const base = { id: newId(), type, title: '' };
   switch (type) {
     case 'weather':
-      return { ...base, entity: '', later: true, days: 2 };
+      return { ...base, entity: '', later: true, days: 2, hourlyEntity: '', rain: false, rainHours: 12, rainThresholdMm: 0.1, solarForecast: '' };
     case 'energyGraph':
       return {
         ...base,
@@ -93,13 +99,13 @@ function newSection(type) {
         colors: { solar: 3, forecast: 5, fromSolar: 3, fromBattery: 5, fromGrid: 2, gridExport: 4 }
       };
     case 'battery':
-      return { ...base, soc: '', status: '', eta: '', colors: { charging: 4, full: 4, discharging: 3, critical: 2, idle: 1 } };
+      return { ...base, soc: '', status: '', eta: '', power: '', idleWatts: 100, chargeEta: '', dischargeEta: '', colors: { charging: 4, full: 4, discharging: 3, critical: 2, idle: 1 } };
     case 'statusIcons':
       return { ...base, icons: [] };
     case 'alerts':
       return { ...base, slots: [], maxLines: 6, allClear: 'All clear' };
     case 'calendar':
-      return { ...base, entities: [], days: 7, lines: 4 };
+      return { ...base, entities: [], colors: {}, days: 7, lines: 4, today: false, timedFirst: false, descriptions: false };
     case 'roomClimate':
       return { ...base, rooms: [] };
     case 'roomList':
@@ -118,6 +124,10 @@ function newSection(type) {
       return { ...base, cameras: [] };
     case 'announcements':
       return { ...base, title: 'Announcements', url: '', count: 3, summary: true, maxAgeDays: 0, showDate: true, color: 1 };
+    case 'now':
+      return { ...base, title: 'Now', items: [] };
+    case 'heating':
+      return { ...base, entity: '', zones: [], hotWater: '', callingDelta: 0.5 };
     default:
       return base;
   }
@@ -201,8 +211,20 @@ function RuleList({ rules, onChange, entity, attribute, withIcon }) {
         ${withIcon && html`<${Toggle} checked=${r.hide} onChange=${(v) => upd(i, { ...r, hide: v })} label="Hide" />`}
         ${!r.hide && html`<${ColorPicker} value=${r.color} onChange=${(v) => upd(i, { ...r, color: v })} />`}
         ${withIcon && !r.hide && html`<${IconPicker} value=${r.icon} title="Icon for this state (optional)" onChange=${(v) => upd(i, { ...r, icon: v })} />`}
+        <${Button} kind="ghost" small icon="tune-variant" title="On another entity, or with a second condition" onClick=${() => upd(i, { ...r, _more: !r._more })} />
         <${Button} kind="ghost" small icon="close" title="Remove rule" onClick=${() => onChange(list.filter((_, j) => j !== i))} />
-      </div>`
+      </div>
+      ${(r._more || r.entity || r.also) &&
+      html`<div class="rule rule-more">
+        <span class="hint">reading</span>
+        <div style="flex:1;min-width:160px"><${EntityPicker} value=${r.entity || ''} onChange=${(id) => upd(i, { ...r, entity: id })} /></div>
+        <span class="hint">and also</span>
+        <div style="flex:1;min-width:160px"><${EntityPicker} value=${(r.also && r.also.entity) || ''} onChange=${(id) => upd(i, { ...r, also: { cond: 'eq', value: '', attribute: '', ...(r.also || {}), entity: id } })} /></div>
+        <div style="width:110px"><${TextInput} value=${(r.also && r.also.attribute) || ''} placeholder="attribute" onInput=${(v) => upd(i, { ...r, also: { cond: 'eq', value: '', entity: '', ...(r.also || {}), attribute: v } })} /></div>
+        <div style="width:110px"><${CondSelect} value=${(r.also && r.also.cond) || 'eq'} onChange=${(v) => upd(i, { ...r, also: { value: '', entity: '', attribute: '', ...(r.also || {}), cond: v } })} /></div>
+        <div style="width:90px"><${TextInput} value=${(r.also && r.also.value) || ''} placeholder="value" onInput=${(v) => upd(i, { ...r, also: { cond: 'eq', entity: '', attribute: '', ...(r.also || {}), value: v } })} /></div>
+        ${r.also && html`<${Button} kind="ghost" small icon="close" title="No second condition" onClick=${() => upd(i, { ...r, also: null })} />`}
+      </div>`}`
     )}
     <div><${Button} small icon="plus" disabled=${list.length >= 8} onClick=${() => onChange([...list, { cond: 'eq', value: suggestions[0] || 'on', color: 2, icon: '', hide: false }])}>Rule<//></div>
   </div>`;
@@ -230,11 +252,18 @@ const sensorField = (s, set, key, label, domains = ['sensor']) =>
   html`<${Field} label=${label}><${EntityPicker} domains=${domains} value=${s[key]} onChange=${(id) => set({ ...s, [key]: id })} /><//>`;
 
 function WeatherEditor({ s, set }) {
-  return html`${sensorField(s, set, 'entity', 'Weather entity', ['weather'])}
+  return html`<div class="row">${sensorField(s, set, 'entity', 'Weather entity', ['weather'])}${sensorField(s, set, 'hourlyEntity', 'Hourly forecast from (optional)', ['weather'])}</div>
     <div class="row" style="align-items:center">
       <${Toggle} checked=${s.later} onChange=${(v) => set({ ...s, later: v })} label="“Later” (about 3 hours out)" />
       <div style="width:130px"><${Field} label="Days ahead"><${NumberInput} min="0" max="5" value=${s.days} onChange=${(v) => set({ ...s, days: v })} /><//></div>
-    </div>`;
+    </div>
+    <div class="row" style="align-items:flex-end">
+      <${Toggle} checked=${s.rain} onChange=${(v) => set({ ...s, rain: v })} label="Rain outlook (“Rain at 14:00”)" />
+      ${s.rain &&
+      html`<div style="width:130px"><${Field} label="Hours ahead"><${NumberInput} min="1" max="24" value=${s.rainHours} onChange=${(v) => set({ ...s, rainHours: v })} /><//></div>
+        <div style="width:170px"><${Field} label="Wet above (mm/h)"><${NumberInput} step="0.1" min="0" value=${s.rainThresholdMm} onChange=${(v) => set({ ...s, rainThresholdMm: v })} /><//></div>`}
+    </div>
+    ${sensorField(s, set, 'solarForecast', 'Solar forecast today (shown when dry, optional)')}`;
 }
 
 function EnergyEditor({ s, set }) {
@@ -295,6 +324,12 @@ function EnergyGraphEditor({ s, set }) {
 function BatteryEditor({ s, set }) {
   return html`<div class="row">${sensorField(s, set, 'soc', 'Charge %')}${sensorField(s, set, 'status', 'Status')}</div>
     ${sensorField(s, set, 'eta', 'Time to full/empty')}
+    <p class="hint">Or work the status out from a power sensor (negative while charging) — then the two times come from timestamp sensors.</p>
+    <div class="row">
+      ${sensorField(s, set, 'power', 'Battery power (W)')}
+      <div style="width:150px"><${Field} label="Idle within ± W"><${NumberInput} min="0" value=${s.idleWatts} onChange=${(v) => set({ ...s, idleWatts: v })} /><//></div>
+    </div>
+    ${s.power && html`<div class="row">${sensorField(s, set, 'chargeEta', 'Full at')}${sensorField(s, set, 'dischargeEta', 'Empty at')}</div>`}
     <${Field} label="Colours" hint="Critical is at or below the critical threshold (Carousel & settings).">
       ${[['charging', 'Charging'], ['full', 'Full'], ['discharging', 'Discharging'], ['critical', 'Critical'], ['idle', 'Idle']].map(
         ([k, label]) => html`<div class="row" style="align-items:center"><span style="width:100px">${label}</span><${ColorPicker} value=${s.colors[k]} onChange=${(v) => set({ ...s, colors: { ...s.colors, [k]: v } })} /></div>`
@@ -310,6 +345,16 @@ function StatusIconEditor({ it, upd }) {
       <div style="width:150px"><${Field} label="Attribute (optional)"><${SuggestInput} value=${it.attribute} placeholder="state" suggestions=${(e && e.attributes) || []} onInput=${(v) => upd({ ...it, attribute: v })} /><//></div>
       <div style="width:150px"><${Field} label="Label"><${TextInput} value=${it.name} onInput=${(v) => upd({ ...it, name: v })} /><//></div>
     </div>
+    <${Field} label="Also follows (optional)" hint="A rule then matches when any of these does — “a door is open”.">
+      <${ItemList}
+        items=${(it.entities || []).map((x, i) => ({ id: String(i), entity: x }))}
+        onChange=${(l) => upd({ ...it, entities: l.map((x) => x.entity) })}
+        max=${12}
+        addLabel="Add entity"
+        newItem=${() => ({ id: newId(), entity: '' })}
+        render=${(x, u) => html`<${EntityPicker} value=${x.entity} onChange=${(id) => u({ ...x, entity: id })} />`}
+      />
+    <//>
     <div class="row" style="align-items:center">
       <${Toggle} checked=${it.showByDefault} onChange=${(v) => upd({ ...it, showByDefault: v })} label="Show when no rule matches" />
       ${it.showByDefault && html`<span class="hint">in</span><${ColorPicker} value=${it.color} onChange=${(v) => upd({ ...it, color: v })} />`}
@@ -320,7 +365,7 @@ function StatusIconEditor({ it, upd }) {
 function StatusIconsEditor({ s, set, presets }) {
   const add = (key) => {
     const p = (presets || {})[key] || { name: '', icon: '', rules: [] };
-    const icon = { id: newId(), name: p.name, entity: '', attribute: '', icon: p.icon, color: 1, showByDefault: p.showByDefault !== false, rules: clone(p.rules || []).map((r) => ({ icon: '', hide: false, ...r })) };
+    const icon = { id: newId(), name: p.name, entity: '', entities: [], attribute: '', icon: p.icon, color: 1, showByDefault: p.showByDefault !== false, rules: clone(p.rules || []).map((r) => ({ icon: '', hide: false, ...r })) };
     set({ ...s, icons: [...s.icons, icon] });
   };
   return html`<${ItemList}
@@ -328,7 +373,7 @@ function StatusIconsEditor({ s, set, presets }) {
       onChange=${(l) => set({ ...s, icons: l })}
       max=${12}
       addLabel="Blank icon"
-      newItem=${() => ({ id: newId(), name: '', entity: '', attribute: '', icon: '', color: 1, showByDefault: true, rules: [] })}
+      newItem=${() => ({ id: newId(), name: '', entity: '', entities: [], attribute: '', icon: '', color: 1, showByDefault: true, rules: [] })}
       render=${(it, upd) => html`<${StatusIconEditor} it=${it} upd=${upd} />`}
     />
     ${presets &&
@@ -403,17 +448,26 @@ function AnnouncementsEditor({ s, set }) {
 }
 
 function CalendarEditor({ s, set }) {
+  const colors = s.colors || {};
   return html`<${ItemList}
-      items=${s.entities.map((x, i) => ({ id: String(i), entity: x }))}
-      onChange=${(l) => set({ ...s, entities: l.map((x) => x.entity) })}
+      items=${s.entities.map((x, i) => ({ id: String(i), entity: x, color: colors[x] || 1 }))}
+      onChange=${(l) => set({ ...s, entities: l.map((x) => x.entity), colors: Object.fromEntries(l.filter((x) => x.entity).map((x) => [x.entity, x.color || 1])) })}
       max=${8}
       addLabel="Add calendar"
-      newItem=${() => ({ id: newId(), entity: '' })}
-      render=${(it, upd) => html`<${EntityPicker} domains=${['calendar']} value=${it.entity} onChange=${(id) => upd({ ...it, entity: id })} />`}
+      newItem=${() => ({ id: newId(), entity: '', color: 1 })}
+      render=${(it, upd) => html`<div class="row" style="align-items:center">
+        <div style="flex:1"><${EntityPicker} domains=${['calendar']} value=${it.entity} onChange=${(id) => upd({ ...it, entity: id })} /></div>
+        <${ColorPicker} value=${it.color} onChange=${(v) => upd({ ...it, color: v })} />
+      </div>`}
     />
+    <div class="row" style="align-items:center">
+      <${Toggle} checked=${s.today} onChange=${(v) => set({ ...s, today: v })} label="Today only (including earlier today)" />
+      <${Toggle} checked=${s.timedFirst} onChange=${(v) => set({ ...s, timedFirst: v })} label="Timed events before all-day" />
+      <${Toggle} checked=${s.descriptions} onChange=${(v) => set({ ...s, descriptions: v })} label="Description under each" />
+    </div>
     <div class="row">
-      <${Field} label="Days ahead"><${NumberInput} min="1" max="31" value=${s.days} onChange=${(v) => set({ ...s, days: v })} /><//>
-      <${Field} label="Lines shown"><${NumberInput} min="1" max="8" value=${s.lines} onChange=${(v) => set({ ...s, lines: v })} /><//>
+      ${!s.today && html`<${Field} label="Days ahead"><${NumberInput} min="1" max="31" value=${s.days} onChange=${(v) => set({ ...s, days: v })} /><//>`}
+      <${Field} label="Lines at most"><${NumberInput} min="1" max="20" value=${s.lines} onChange=${(v) => set({ ...s, lines: v })} /><//>
       <${Field} label="Lines while a conditional section shows" hint="Makes room for e.g. Now playing in the same column. 0 = keep them all.">
         <${NumberInput} min="0" max="8" value=${s.shrinkTo ?? 2} onChange=${(v) => set({ ...s, shrinkTo: v })} />
       <//>
@@ -502,6 +556,7 @@ function TransportEditor({ s, set }) {
 
 function AlarmEditor({ s, set }) {
   return html`${sensorField(s, set, 'entity', 'Alarm panel', ['alarm_control_panel'])}
+    <${Toggle} checked=${s.summary} onChange=${(v) => set({ ...s, summary: v })} label="Summary under it (doors, windows, motion and cameras on this screen)" />
     <p class="hint">Optional: a timestamp sensor (or any entity that changes when it happens) for each of these.</p>
     <div class="row">${sensorField(s, set, 'lastArmed', 'Last armed', [])}${sensorField(s, set, 'lastDisarmed', 'Last disarmed', [])}</div>
     ${sensorField(s, set, 'lastTriggered', 'Last triggered', [])}`;
@@ -515,7 +570,85 @@ function OpeningsEditor({ s, set }) {
     </div>`;
 }
 
+// "Now": one item per thing that can be happening, each a kind that words
+// itself — the alarm always shows; the rest only while active.
+const NOW_KINDS = [
+  { value: 'alarm', label: 'Alarm', icon: 'shield-check' },
+  { value: 'heating', label: 'Heating zones calling', icon: 'radiator' },
+  { value: 'hotWater', label: 'Hot water heating', icon: 'water-boiler' },
+  { value: 'openings', label: 'Doors or windows open', icon: 'door-open' },
+  { value: 'plants', label: 'Plants need water', icon: 'watering-can' },
+  { value: 'robot', label: 'Vacuum or mower working', icon: 'robot-vacuum' },
+  { value: 'entity', label: 'Any entity', icon: 'alert' }
+];
+const NOW_HINT = 'Words can use {n} (how many), {names}, {state}, {battery}, {name}.';
+
+function NowItemEditor({ it, upd }) {
+  const kind = NOW_KINDS.find((k) => k.value === it.kind) || NOW_KINDS[6];
+  const field = (key, label, domains) => html`<${Field} label=${label}><${EntityPicker} domains=${domains} value=${it[key]} onChange=${(id, e) => upd({ ...it, [key]: id, name: it.name || (key === 'entity' && e && e.name) || '' })} /><//>`;
+  const words = (withMany) => html`<div class="row">
+      <${Field} label=${withMany ? 'Title (one)' : 'Title'}><${TextInput} value=${it.title} onInput=${(v) => upd({ ...it, title: v })} /><//>
+      ${withMany && html`<${Field} label="Title (several)"><${TextInput} value=${it.titleMany} placeholder="{n} open" onInput=${(v) => upd({ ...it, titleMany: v })} /><//>`}
+      <${Field} label="Second line" hint=${NOW_HINT}><${TextInput} value=${it.detail} onInput=${(v) => upd({ ...it, detail: v })} /><//>
+    </div>`;
+  return html`<div class="row" style="align-items:flex-end">
+      <${IconPicker} value=${it.icon} onChange=${(icon) => upd({ ...it, icon })} />
+      <div style="width:230px"><${Field} label="Kind"><${Select} value=${it.kind} onChange=${(v) => upd({ ...it, kind: v, icon: (NOW_KINDS.find((k) => k.value === v) || kind).icon })} options=${NOW_KINDS} /><//></div>
+      ${it.kind !== 'alarm' && html`<${Field} label="Colour"><${ColorPicker} value=${it.color} onChange=${(v) => upd({ ...it, color: v })} /><//>`}
+    </div>
+    ${it.kind === 'alarm' &&
+    html`<div class="row">${field('entity', 'Alarm state', [])}${field('eventEntity', 'Last event message (optional)', ['sensor'])}</div>
+      <p class="hint">“Alarm disarmed” (green), “Alarm part set” or “Alarm armed” (red), with the last event under it.</p>`}
+    ${it.kind === 'heating' &&
+    html`<${NamedList} items=${it.items} onChange=${(l) => upd({ ...it, items: l })} domains=${['climate']} max=${10} addLabel="Add zone" />
+      <div style="width:220px"><${Field} label="Calling when below setpoint by more than °"><${NumberInput} step="0.1" min="0" value=${it.callingDelta} onChange=${(v) => upd({ ...it, callingDelta: v })} /><//></div>
+      ${words(false)}`}
+    ${it.kind === 'hotWater' && html`${field('entity', 'Water heater', ['water_heater'])}${words(false)}`}
+    ${it.kind === 'openings' &&
+    html`<${NamedList} items=${it.items} onChange=${(l) => upd({ ...it, items: l })} domains=${['binary_sensor', 'cover', 'lock']} max=${10} addLabel="Add door or window" />
+      <div style="width:240px"><${Field} label="Names"><${Select} value=${it.join} onChange=${(v) => upd({ ...it, join: v })} options=${[{ value: 'list', label: 'Kitchen, Side' }, { value: 'and', label: 'Front & back' }]} /><//></div>
+      ${words(true)}`}
+    ${it.kind === 'plants' &&
+    html`<${NamedList} items=${it.items} onChange=${(l) => upd({ ...it, items: l })} domains=${['sensor', 'plant', 'binary_sensor']} max=${10} addLabel="Add plant" />
+      <div style="width:220px"><${Field} label="Needs water when it contains"><${TextInput} value=${it.value} onInput=${(v) => upd({ ...it, value: v })} /><//></div>
+      ${words(true)}`}
+    ${it.kind === 'robot' &&
+    html`<div class="row">${field('entity', 'Vacuum or mower', ['vacuum', 'lawn_mower'])}${field('battery', 'Battery %', ['sensor'])}</div>
+      <div class="row">
+        <div style="width:160px"><${Field} label="Working when"><${TextInput} value=${it.value} placeholder="cleaning" onInput=${(v) => upd({ ...it, value: v })} /><//></div>
+        <${Field} label="Name"><${TextInput} value=${it.name} onInput=${(v) => upd({ ...it, name: v })} /><//>
+      </div>
+      ${words(false)}`}
+    ${it.kind === 'entity' &&
+    html`<div class="row" style="align-items:flex-end">
+        ${field('entity', 'Entity', [])}
+        <div style="width:120px"><${Field} label="Attribute"><${TextInput} value=${it.attribute} placeholder="state" onInput=${(v) => upd({ ...it, attribute: v })} /><//></div>
+        <div style="width:110px"><${Field} label="Is"><${CondSelect} value=${it.cond} onChange=${(v) => upd({ ...it, cond: v })} /><//></div>
+        <div style="width:110px"><${Field} label="Value"><${TextInput} value=${it.value} onInput=${(v) => upd({ ...it, value: v })} /><//></div>
+      </div>
+      ${words(false)}`}`;
+}
+
+function NowEditor({ s, set }) {
+  return html`<${ItemList}
+    items=${s.items}
+    onChange=${(l) => set({ ...s, items: l })}
+    max=${12}
+    addLabel="Add item"
+    newItem=${() => ({ id: newId(), kind: 'entity', name: '', icon: 'alert', color: 2, title: '{name}', titleMany: '', detail: '{state}', entity: '', eventEntity: '', battery: '', attribute: '', cond: 'eq', value: 'on', items: [], join: 'list', callingDelta: 0.5, maxChars: 50 })}
+    render=${(it, upd) => html`<${NowItemEditor} it=${it} upd=${upd} />`}
+  />`;
+}
+
+function HeatingEditor({ s, set }) {
+  return html`<div class="row">${sensorField(s, set, 'entity', 'Whole house (optional)', ['climate'])}${sensorField(s, set, 'hotWater', 'Hot water (optional)', ['water_heater'])}</div>
+    <${NamedList} items=${s.zones} onChange=${(l) => set({ ...s, zones: l })} domains=${['climate']} max=${16} addLabel="Add zone" />
+    <div style="width:260px"><${Field} label="Calling when below setpoint by more than °" hint="In heat or auto."><${NumberInput} step="0.1" min="0" value=${s.callingDelta} onChange=${(v) => set({ ...s, callingDelta: v })} /><//></div>`;
+}
+
 const EDITORS = {
+  now: NowEditor,
+  heating: HeatingEditor,
   weather: WeatherEditor,
   energy: EnergyEditor,
   energyGraph: EnergyGraphEditor,
@@ -591,7 +724,7 @@ function SectionCard({ s, set, remove, duplicate, move, moveColumn, columnLabels
         <${Button} kind="ghost" small icon="chevron-up" title="Move up" disabled=${!move.up} onClick=${move.up} />
         <${Button} kind="ghost" small icon="chevron-down" title="Move down" disabled=${!move.down} onClick=${move.down} />
         ${columnLabels.length > 1 &&
-        html`<${Button} kind="ghost" small icon=${colIndex === 0 ? 'arrow-right' : 'arrow-left'} title=${`Move to ${columnLabels[colIndex === 0 ? 1 : 0]}`} onClick=${moveColumn} />`}
+        html`<${Button} kind="ghost" small icon=${colIndex < columnLabels.length - 1 ? 'arrow-right' : 'arrow-left'} title=${`Move to ${columnLabels[(colIndex + 1) % columnLabels.length]}`} onClick=${moveColumn} />`}
         <${Button} kind="ghost" small icon="content-copy" title="Duplicate" onClick=${duplicate} />
         <${Button} kind="ghost" small icon="trash-can-outline" title="Remove" onClick=${remove} />
       </div>
@@ -647,7 +780,7 @@ function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId }) {
         ${TEMPLATES.map((t) => html`<button type="button" class=${`chip ${t.value === screen.template ? 'on' : ''}`} onClick=${() => setTemplate(t.value)}><${Icon} name=${t.icon} size=${16} />${t.label}</button>`)}
       </div>
     </div>
-    <div class="section-columns" style=${{ gridTemplateColumns: screen.template === 'sidebar' ? '1fr 1.6fr' : screen.template === 'columns' ? '1fr 1fr' : '1fr' }}>
+    <div class="section-columns" style=${{ gridTemplateColumns: GRID_COLUMNS[screen.template] || '1fr' }}>
       ${screen.columns.map((col, ci) => {
         const setCol = (next) => setColumns(screen.columns.map((c, j) => (j === ci ? next : c)));
         return html`<div class="stack">
@@ -669,7 +802,7 @@ function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId }) {
             }}
             move=${{ up: si > 0 ? () => setCol(moveItem(col, si, si - 1)) : null, down: si < col.length - 1 ? () => setCol(moveItem(col, si, si + 1)) : null }}
             moveColumn=${() => {
-              const other = ci === 0 ? 1 : 0;
+              const other = (ci + 1) % screen.columns.length;
               setColumns(screen.columns.map((c, j) => (j === ci ? c.filter((x) => x.id !== s.id) : j === other ? [...c, s] : c)));
             }}
           />`)}
@@ -871,6 +1004,8 @@ function ScreensCard({ screens, selected, onSelect, onChange, useDragOrder }) {
 
 // --- Carousel, thresholds, import ---------------------------------------------------------------------------
 
+const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, '0')}:00` }));
+
 const THRESHOLDS = [
   ['batteryCritical', 'Battery critical %', 'Battery turns its “critical” colour.'],
   ['batteryLow', 'Battery low %', ''],
@@ -882,6 +1017,8 @@ const THRESHOLDS = [
 function CarouselCard({ layout, onChange }) {
   const c = layout.carousel;
   const set = (k, v) => onChange({ ...layout, carousel: { ...c, [k]: v } });
+  const q = layout.quietHours || { enabled: false, start: 23, end: 6, intervalMin: 60 };
+  const setQ = (k, v) => onChange({ ...layout, quietHours: { ...q, [k]: v } });
   return html`<${Card} icon="rotate-right" title="Carousel" subtitle="What the display does between button presses, and how often it refreshes.">
     <div class="row" style="align-items:flex-end">
       <${Field} label="Between presses">
@@ -900,6 +1037,15 @@ function CarouselCard({ layout, onChange }) {
     <p class="hint">${c.mode === 'stay'
       ? 'The screen only changes when someone presses a button.'
       : 'Each change is a full panel refresh (15–20 s), which costs battery.'}</p>
+    <div class="row" style="align-items:flex-end">
+      <${Toggle} checked=${q.enabled} onChange=${(v) => setQ('enabled', v)} label="Quiet hours" />
+      ${q.enabled &&
+      html`<div style="width:110px"><${Field} label="From"><${Select} value=${String(q.start)} onChange=${(v) => setQ('start', Number(v))} options=${HOURS} /><//></div>
+        <div style="width:110px"><${Field} label="Until"><${Select} value=${String(q.end)} onChange=${(v) => setQ('end', Number(v))} options=${HOURS} /><//></div>
+        <div style="width:200px"><${Field} label="Refresh every"><${Select} value=${String(q.intervalMin)} onChange=${(v) => setQ('intervalMin', Number(v))}
+          options=${[30, 60, 120, 240].map((n) => ({ value: String(n), label: n < 60 ? `${n} minutes` : n === 60 ? 'Hour' : `${n / 60} hours` }))} /><//></div>`}
+    </div>
+    ${q.enabled && html`<p class="hint">Overnight the display wakes less often, and shows a small bed-and-clock icon by the time.</p>`}
   <//>`;
 }
 
@@ -940,7 +1086,7 @@ function SettingsCard({ layout, onChange }) {
     <//>
     <${Card} icon="import" title="Start from…" subtitle="Replace the whole layout, then adjust it.">
       <div class="row">
-        <${Button} icon="home-outline" onClick=${() => load('')}>Kitchen panel defaults<//>
+        <${Button} icon="home-outline" onClick=${() => load('')}>Kitchen dashboard<//>
         <${Button} icon="calendar-account-outline" onClick=${() => load('meetingRoom')}>Meeting room sign<//>
       </div>
       <${Field} label="Import an existing kitchen panel" hint="Put the panel in config mode (long-press the middle button), then enter its IP.">

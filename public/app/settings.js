@@ -216,8 +216,8 @@ function ClockTab() {
 
 // --- Theme ------------------------------------------------------------------------
 
-function IconSlots({ overrides, setOverrides }) {
-  const [slots] = useApi('/api/assets/icon-slots');
+function IconSlots({ kind, overrides, setOverrides }) {
+  const [slots] = useApi(`/api/assets/icon-slots?kind=${kind}`);
   const [picking, setPicking] = useState(null);
   const [filter, setFilter] = useState('');
   if (!slots) return html`<p class="hint">Loading…</p>`;
@@ -324,7 +324,7 @@ function Fonts({ theme, reloadTheme }) {
       setBusy(false);
     }
   };
-  return html`<${Card} icon="format-font" title="Font" subtitle="One typeface, rendered at every size the firmware uses."
+  return html`<${Card} icon="format-font" title="Font" subtitle="One typeface for remotes and viewports, rendered at every size each draws (viewports also use its bold weight)."
     actions=${theme && theme.fontsVersion ? html`<${Badge} icon="package-variant-closed">${theme.fontsVersion}<//>` : html`<${Badge}>Built-in<//>`}>
     <${Field} label="Google Font family"><${TextInput} value=${googleFont} placeholder="e.g. Inter" onInput=${(v) => {
       setGoogleFont(v);
@@ -338,8 +338,15 @@ function Fonts({ theme, reloadTheme }) {
   <//>`;
 }
 
-function ThemeTab() {
-  const [theme, , reloadTheme] = useApi('/api/theme');
+// Remotes and viewports draw different icons, so each has its own set to
+// re-skin (and its own pack); the font is shared.
+const THEME_KINDS = [
+  { id: 'remote', label: 'Remotes', icon: 'remote' },
+  { id: 'viewport', label: 'Viewports', icon: 'monitor-dashboard' }
+];
+
+function IconsCard({ kind, setKind }) {
+  const [theme, , reloadTheme] = useApi(`/api/theme?kind=${kind}`);
   const [overrides, setOverrides] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, flash] = useFlash();
@@ -349,7 +356,7 @@ function ThemeTab() {
   const compile = async () => {
     setBusy(true);
     try {
-      const r = await api('/api/assets/icons/compile', { method: 'POST', body: { overrides } });
+      const r = await api('/api/assets/icons/compile', { method: 'POST', body: { overrides, kind } });
       flash(`Icon pack ${r.version} built — devices update on their next refresh`, 6000);
       reloadTheme();
     } catch (e) {
@@ -359,16 +366,25 @@ function ThemeTab() {
     }
   };
   const count = overrides ? Object.keys(overrides).length : 0;
-  return html`<div class="stack">
-    <${Card} icon="shape-outline" title="Icons" subtitle="Replace any icon the firmware draws. Changes take effect once the pack is built."
+  return html`<${Card} icon="shape-outline" title="Icons" subtitle="Replace any icon the firmware draws. Changes take effect once the pack is built."
       actions=${html`${theme && theme.iconsVersion ? html`<${Badge} icon="package-variant-closed">${theme.iconsVersion}<//>` : html`<${Badge}>Built-in<//>`}`}>
+      <div class="row" style="align-items:center">
+        ${THEME_KINDS.map((k) => html`<${Button} kind=${k.id === kind ? 'primary' : 'ghost'} icon=${k.icon} onClick=${() => setKind(k.id)}>${k.label}<//>`)}
+      </div>
       <div class="row" style="align-items:center">
         <${Button} kind="primary" icon="hammer-wrench" disabled=${busy || !overrides} onClick=${compile}>${busy ? 'Building…' : 'Build icon pack'}<//>
         ${count > 0 && html`<${Button} icon="restore" onClick=${() => setOverrides({})}>Reset ${count} changed<//>`}
         <span class=${`flash ${msg.startsWith('Failed') ? 'flash-bad' : ''}`}>${msg}</span>
       </div>
-      ${overrides && html`<${IconSlots} overrides=${overrides} setOverrides=${setOverrides} />`}
-    <//>
+      ${overrides && html`<${IconSlots} kind=${kind} overrides=${overrides} setOverrides=${setOverrides} />`}
+    <//>`;
+}
+
+function ThemeTab() {
+  const [theme, , reloadTheme] = useApi('/api/theme');
+  const [kind, setKind] = useState('remote');
+  return html`<div class="stack">
+    <${IconsCard} key=${kind} kind=${kind} setKind=${setKind} />
     <div class="grid">
       <${Fonts} theme=${theme} reloadTheme=${reloadTheme} />
       <${CustomIcons} />

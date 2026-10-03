@@ -228,32 +228,46 @@ async function seed() {
     screens: { lighting: true, climate: true, blinds: true, music: true, tv: false, xbox: false, receiver: false }
   });
 
-  // Wall displays: the kitchen panel, and a meeting-room sign.
+  // Wall displays: the kitchen panel (the kitchen dashboard as is, with the
+  // Energy and Presence screens after it), and a meeting-room sign.
   const kitchen = await api('POST', '/api/dashboards', { name: 'Kitchen panel', template: 'kitchen' });
   const k = await api('GET', `/api/dashboards/${kitchen.slug}`);
-  const home = k.layout.screens.find((s) => s.id === 'home');
-  const cal = home.columns[1].find((s) => s.type === 'calendar');
-  if (cal) cal.entities = ['calendar.family'];
-  const climate = k.layout.screens.find((s) => s.id === 'climate');
-  const hp = climate && climate.columns[0].find((s) => s.type === 'heatPump');
-  if (hp) Object.assign(hp, { outsideTemperature: 'sensor.outside_temperature', cop: 'sensor.heat_pump_cop' });
-  const presence = k.layout.screens.find((s) => s.id === 'presence');
-  if (presence) {
-    const people = presence.columns[1].find((s) => s.type === 'people');
-    if (people) people.people = [{ entity: 'person.alex', name: 'Alex' }, { entity: 'person.sam', name: 'Sam' }, { entity: 'person.jo', name: 'Jo' }];
-    const media = presence.columns[1].find((s) => s.type === 'media');
-    if (media) media.players = [{ entity: 'media_player.living_room_speaker', name: 'Living room' }];
-  }
-  const security = k.layout.screens.find((s) => s.id === 'security');
-  if (security) {
-    const [left, right] = security.columns;
-    const doors = left.find((s) => s.title === 'Doors');
-    if (doors) doors.items = [{ entity: 'binary_sensor.front_door', name: 'Front door' }, { entity: 'binary_sensor.back_door', name: 'Back door' }];
-    const windows = left.find((s) => s.title === 'Windows');
-    if (windows) windows.items = [{ entity: 'binary_sensor.kitchen_window', name: 'Kitchen window' }];
-    const motion = right.find((s) => s.type === 'motion');
-    if (motion) motion.sensors = [{ entity: 'binary_sensor.hall_motion', name: 'Hall' }, { entity: 'binary_sensor.garden_motion', name: 'Garden' }];
-  }
+  const rooms = [
+    ['Main Bed', 'upstairs', 'bed', 'main_bed'], ['Guest', 'upstairs', 'bed', 'guest'], ['Bathroom', 'upstairs', 'shower', 'bathroom'],
+    ['Office', 'upstairs', 'desk', 'office'], ['Living', 'downstairs', 'sofa', 'living'], ['Kitchen', 'downstairs', 'fridge-outline', 'kitchen']
+  ].map(([name, floor, icon, key]) => ({ name, floor, icon, temperature: `sensor.${key}_temperature`, humidity: `sensor.${key}_humidity`, target: 21 }));
+  k.layout.screens.push(
+    {
+      id: 'energy', title: 'Energy', template: 'sidebar',
+      columns: [
+        [{ id: 'energy-totals', type: 'energy', style: 'list', solarToday: 'sensor.solar_energy_today', solarExpected: 'sensor.solar_forecast_today', loadToday: 'sensor.home_consumption_today', gridExport: 'sensor.grid_export_today', gridImport: 'sensor.grid_import_today' }],
+        [{
+          id: 'energy-graph', type: 'energyGraph',
+          solar: { entity: 'sensor.solar_power', kind: 'power' }, load: { entity: 'sensor.home_power', kind: 'power' },
+          gridImport: { entity: 'sensor.grid_import_power', kind: 'power' }, gridExport: { entity: 'sensor.grid_export_power', kind: 'power' },
+          batteryCharge: { entity: 'sensor.battery_charge_power', kind: 'power' }, batteryDischarge: { entity: 'sensor.battery_discharge_power', kind: 'power' },
+          forecast: { entity: 'sensor.solar_forecast_today', attribute: 'detailedForecast' }
+        }]
+      ]
+    },
+    {
+      id: 'presence', title: 'Presence', template: 'sidebar',
+      columns: [
+        [{ id: 'presence-rooms', type: 'roomList', rooms }],
+        [
+          { id: 'presence-people', type: 'people', people: [{ entity: 'person.alex', name: 'Alex' }, { entity: 'person.sam', name: 'Sam' }, { entity: 'person.jo', name: 'Jo' }] },
+          { id: 'presence-media', type: 'media', players: [{ entity: 'media_player.living_room_speaker', name: 'Living room' }] },
+          {
+            id: 'presence-transport', type: 'transport',
+            routes: [
+              { name: '42 · City Centre', icon: 'bus', color: 4, departure1: 'sensor.bus_42_next', departure2: 'sensor.bus_42_next2' },
+              { name: 'Overground · Waterloo', icon: 'train', color: 5, departure1: 'sensor.train_next', departure2: 'sensor.train_next2' }
+            ]
+          }
+        ]
+      ]
+    }
+  );
   await api('PUT', `/api/dashboards/${kitchen.slug}`, { name: 'Kitchen panel', layout: k.layout });
 
   const board = await api('POST', '/api/dashboards', { name: 'Boardroom', template: 'meetingRoom' });

@@ -1,9 +1,12 @@
 // A true-size (800×480) preview of a viewport screen in the panel's six
 // colours, drawn from the same evaluated state the device receives
-// (/api/viewports/:mac/preview). Close to the device's own drawing, not
-// pixel-exact: it's for checking what shows, where, and in which colour.
+// (/api/viewports/:mac/preview). The sections the kitchen dashboard has are
+// drawn as the panel draws them (viewport-preview-dash.js); the rest are
+// close to the device's drawing, not pixel-exact: they're for checking what
+// shows, where, and in which colour.
 
 import { html, useState, useEffect, useRef, Icon } from './lib.js';
+import { DASH_SECTIONS, DashFooter } from './viewport-preview-dash.js';
 
 export const PALETTE = {
   0: { name: 'White', hex: '#ffffff' },
@@ -316,15 +319,21 @@ const SECTIONS = {
   announcements: Announcements
 };
 
-const COLS = { sidebar: '250px 1fr', columns: '1fr 1fr', single: '1fr' };
+// The panel's columns: a 250 px sidebar and the main column (a dotted
+// divider between), three columns of 244 / 286 / 270, two halves, or one.
+const COLS = { sidebar: '250px 550px', columns: '400px 400px', single: '800px', triple: '244px 286px 270px' };
 
 function SectionsScreen({ d, highlight }) {
-  return html`<div class="vp-cols" style=${{ gridTemplateColumns: COLS[d.template] || '1fr' }}>
+  const all = d.columns.flat();
+  return html`<div class=${`vp-cols kd-${d.template}`} style=${{ gridTemplateColumns: COLS[d.template] || '800px' }}>
     ${d.columns.map(
-      (col) => html`<div class="vp-col">
+      (col) => html`<div class="vp-col kd-col">
         ${col.map((s) => {
+          const Dash = DASH_SECTIONS[s.type];
+          const drawn = Dash && s.data != null ? Dash({ d: s.data, title: s.title, siblings: all }) : null;
+          if (drawn) return html`<div class=${`kd-section ${highlight === s.id ? 'vp-hl' : ''}`}>${drawn}</div>`;
           const S = SECTIONS[s.type];
-          return html`<div class=${`vp-section ${highlight === s.id ? 'vp-hl' : ''}`}>
+          return html`<div class=${`vp-section kd-other ${highlight === s.id ? 'vp-hl' : ''}`}>
             <${Label}>${s.title}<//>
             ${S ? html`<${S} d=${s.data} />` : null}
           </div>`;
@@ -401,11 +410,6 @@ function RoomFinder({ d, title }) {
   </div>`;
 }
 
-function Footer({ generatedAt }) {
-  const t = generatedAt ? new Date(generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
-  return html`<div class="vp-footer">updated ${t}</div>`;
-}
-
 // Scales the 800×480 panel to the width available.
 export function ViewportPreview({ screen, state, error, loading, highlight }) {
   const wrap = useRef(null);
@@ -426,7 +430,7 @@ export function ViewportPreview({ screen, state, error, loading, highlight }) {
           ? html`<${RoomFinder} d=${d.data} title=${d.title} />`
           : html`<${SectionsScreen} d=${d} highlight=${highlight} />`
         : html`<div class="vp-empty">${error ? error : loading ? 'Loading…' : 'No preview'}</div>`}
-      ${d && d.kind === 'sections' && html`<${Footer} generatedAt=${state.generatedAt} />`}
+      ${d && d.kind === 'sections' && html`<${DashFooter} generatedAt=${state.generatedAt} quiet=${state.quiet} />`}
       ${loading && d && html`<div class="vp-loading"><${Icon} name="refresh" size=${16} /></div>`}
     </div>
   </div>`;
