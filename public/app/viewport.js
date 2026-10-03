@@ -98,7 +98,7 @@ function newSection(type) {
         bucketMin: 60,
         ...Object.fromEntries(SERIES.map(([k]) => [k, { entity: '', kind: 'power' }])),
         forecast: { entity: '', attribute: '', unit: 'auto' },
-        colors: { solar: 3, forecast: 5, fromSolar: 3, fromBattery: 5, fromGrid: 2, gridExport: 4 }
+        colors: { solar: 3, forecast: 5, fromSolar: 3, fromBattery: 5, fromGrid: 2, gridExport: 4, toBattery: 5 }
       };
     case 'battery':
       return { ...base, soc: '', status: '', eta: '', power: '', idleWatts: 100, chargeEta: '', dischargeEta: '', colors: { charging: 4, full: 4, discharging: 3, critical: 2, idle: 1 } };
@@ -285,7 +285,8 @@ const SERIES = [
   ['gridImport', 'Grid import', ''],
   ['gridExport', 'Grid export', ''],
   ['batteryCharge', 'Battery charging', 'Optional.'],
-  ['batteryDischarge', 'Battery discharging', 'Optional: without it, use that solar didn’t cover counts as from the battery.']
+  ['batteryDischarge', 'Battery discharging', 'Optional: without it, use that solar didn’t cover counts as from the battery.'],
+  ['batteryPower', 'Battery power (one sensor, ±)', 'Optional, instead of the two above: charging one way, discharging the other.']
 ];
 
 const GRAPH_COLORS = [
@@ -294,7 +295,8 @@ const GRAPH_COLORS = [
   ['fromSolar', 'Use from solar'],
   ['fromBattery', 'Use from battery'],
   ['fromGrid', 'Use from grid'],
-  ['gridExport', 'Export (below the line)']
+  ['gridExport', 'Export (below the line)'],
+  ['toBattery', 'Charging the battery (below the line)']
 ];
 
 function EnergyGraphEditor({ s, set }) {
@@ -304,11 +306,13 @@ function EnergyGraphEditor({ s, set }) {
       <${Field} label="Range"><${Select} value=${s.range} onChange=${(v) => set({ ...s, range: v })} options=${[{ value: 'today', label: 'Today (midnight to midnight)' }, { value: '24h', label: 'Last 24 hours' }]} /><//>
       <${Field} label="Bars every"><${Select} value=${String(s.bucketMin)} onChange=${(v) => set({ ...s, bucketMin: Number(v) })} options=${[{ value: '60', label: 'Hour' }, { value: '30', label: '30 minutes' }, { value: '15', label: '15 minutes' }]} /><//>
     </div>
-    <p class="hint">Top panel: actual solar against the prediction. Bottom panel: what the house used, stacked by where it came from (grid, battery, solar), with export to the grid below the line.</p>
+    <p class="hint">Top panel: actual solar against the prediction. Bottom panel: what the house used, stacked by where it came from (grid, battery, solar); below the line, what went into the battery and out to the grid.</p>
     ${SERIES.map(
       ([k, label, hint]) => html`<div class="row" style="align-items:flex-end">
         <${Field} label=${label} hint=${hint}><${EntityPicker} domains=${['sensor']} value=${s[k].entity} onChange=${(id, e) => set({ ...s, [k]: { ...s[k], entity: id, kind: e && e.unit && /Wh$/.test(e.unit) ? 'energy' : e && e.unit && /W$/.test(e.unit) ? 'power' : s[k].kind } })} /><//>
-        <div style="width:190px"><${Field} label="It measures"><${Select} value=${s[k].kind} onChange=${(v) => set({ ...s, [k]: { ...s[k], kind: v } })} options=${[{ value: 'power', label: 'Power (W / kW)' }, { value: 'energy', label: 'Energy meter (kWh)' }]} /><//></div>
+        ${k === 'batteryPower'
+          ? html`<div style="width:190px"><${Field} label="While charging, it reads"><${Select} value=${s.batteryChargingWhen || 'negative'} onChange=${(v) => set({ ...s, batteryChargingWhen: v })} options=${[{ value: 'negative', label: 'Negative (most)' }, { value: 'positive', label: 'Positive' }]} /><//></div>`
+          : html`<div style="width:190px"><${Field} label="It measures"><${Select} value=${s[k].kind} onChange=${(v) => set({ ...s, [k]: { ...s[k], kind: v } })} options=${[{ value: 'power', label: 'Power (W / kW)' }, { value: 'energy', label: 'Energy meter (kWh)' }]} /><//></div>`}
       </div>`
     )}
     <div class="row" style="align-items:flex-end">

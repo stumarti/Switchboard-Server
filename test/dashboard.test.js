@@ -586,3 +586,35 @@ test('conditional section: on an entity state, and "playing" only means somethin
   assert.deepEqual(run('disarmed').columns[0].map((s) => s.id), ['b']);
   assert.equal(run('armed_away').nextChangeInSec, null); // liveMin 0: no extra wakes
 });
+
+test('energy graph: charging the battery goes below the line, from one signed sensor or its own', () => {
+  const graph = (extra, history) => {
+    const l = dashboard.normalizeLayout({
+      screens: [{ id: 'e', template: 'single', columns: [[{ id: 'g', type: 'energyGraph', range: 'today', bucketMin: 60, ...extra }]] }]
+    });
+    const st = { 'sensor.battery_power': { state: '0', attributes: { unit_of_measurement: 'W' } }, 'sensor.export_power': { state: '0', attributes: { unit_of_measurement: 'W' } } };
+    return buildScreens(l, { states: st, forecasts: {}, calendars: {}, history, now: NOW, timeZone: TZ }).e.columns[0][0].data;
+  };
+  // Charging at 1.5 kW from 12:00 local, discharging 0.8 kW before; 0.5 kW exported throughout.
+  const history = {
+    'sensor.battery_power': [
+      { entity_id: 'sensor.battery_power', state: '800', last_changed: '2026-09-27T23:00:00Z' },
+      { state: '-1500', last_changed: '2026-09-28T11:00:00Z' }
+    ],
+    'sensor.export_power': [{ entity_id: 'sensor.export_power', state: '500', last_changed: '2026-09-27T23:00:00Z' }]
+  };
+  let g = graph({ batteryPower: { entity: 'sensor.battery_power', kind: 'power' }, gridExport: { entity: 'sensor.export_power', kind: 'power' } }, history);
+  assert.equal(g.usage.toBattery[12], 1.5); // 12:00-13:00 local
+  assert.equal(g.usage.toBattery[10], 0); // discharging then
+  assert.equal(g.usage.toBattery[14], null); // the future
+  assert.equal(g.usage.exportMax, 2); // charging and export, stacked
+  assert.equal(g.colors.toBattery, 5);
+  // Positive while charging, for inverters that report it that way.
+  g = graph({ batteryPower: { entity: 'sensor.battery_power', kind: 'power' }, batteryChargingWhen: 'positive' }, history);
+  assert.equal(g.usage.toBattery[10], 0.8);
+  assert.equal(g.usage.toBattery[12], 0);
+  // None configured: nothing below the line for it.
+  g = graph({}, history);
+  assert.deepEqual([...new Set(g.usage.toBattery)], [null]);
+  assert.equal(g.totals.toBattery, null);
+});
