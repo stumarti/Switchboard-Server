@@ -975,7 +975,7 @@ function ScreensCard({ screens, selected, onSelect, onChange, useDragOrder }) {
     onSelect(s.id);
     setAdding(false);
   };
-  return html`<${Card} icon="view-carousel-outline" title="Screens" subtitle="The pages the left/right buttons step through. Drag to reorder; click one to edit it."
+  return html`<${Card} icon="view-carousel-outline" title="Screens" subtitle="The display's buttons step through these: left previous, middle next, the green one back to the first. Drag to reorder; click one to edit it."
     actions=${html`<${Button} small icon="plus" disabled=${screens.length >= 12} onClick=${() => setAdding(!adding)}>Add screen<//>`}>
     ${adding &&
     html`<div class="section-palette" style="grid-template-columns:1fr 1fr 1fr">
@@ -1040,12 +1040,6 @@ function CarouselCard({ layout, onChange }) {
           { value: 'stay', label: 'Stay on the current screen (refresh it)' },
           { value: 'advance', label: 'Move to the next screen' },
           { value: 'returnFirst', label: 'Go back to the first screen' }
-        ]} />
-      <//>
-      <${Field} label="Buttons">
-        <${Select} value=${c.buttons || 'step'} onChange=${(v) => set('buttons', v)} options=${[
-          { value: 'step', label: 'Right / left step through the screens, middle refreshes' },
-          { value: 'direct', label: 'Straight to a screen: middle the first, right the second, left the last' }
         ]} />
       <//>
       ${c.mode !== 'stay' && html`<div style="width:150px"><${Field} label="Every (minutes)"><${NumberInput} min="5" max="240" value=${c.everyMin} onChange=${(v) => set('everyMin', v)} /><//></div>`}

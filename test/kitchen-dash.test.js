@@ -98,7 +98,7 @@ const data = (screen, id) => screen.columns.flat().find((s) => s.id === id).data
 test('the kitchen dashboard: Status, Heating and Security, returning to Status, quieter overnight', () => {
   const l = dashboard.defaultLayout();
   assert.deepEqual(l.screens.map((s) => s.id), ['status', 'heating', 'security']);
-  assert.deepEqual(l.carousel, { mode: 'returnFirst', everyMin: 30, buttons: 'direct' });
+  assert.deepEqual(l.carousel, { mode: 'returnFirst', everyMin: 30 });
   assert.equal(l.refreshIntervalMin, 30);
   assert.deepEqual(l.quietHours, { enabled: true, start: 23, end: 6, intervalMin: 60 });
   assert.equal(l.screens[2].template, 'triple');
