@@ -72,7 +72,7 @@ test('normalizeLayout: carousel defaults to staying put, sections are validated,
       { id: 's3', template: 'columns', columns: [[{ type: 'statusIcons', icons: new Array(20).fill({ entity: 'a.b', rules: [{ cond: 'x', color: 9 }] }) }]] }
     ]
   });
-  assert.deepEqual(l.carousel, { mode: 'stay', everyMin: 5 });
+  assert.deepEqual(l.carousel, { mode: 'stay', everyMin: 5, buttons: 'step' });
   const [s1, s2, s3] = l.screens;
   assert.equal(s1.columns.length, 1);
   assert.deepEqual(s1.columns[0].map((s) => s.type), ['weather', 'people']); // the extra column folds in
@@ -526,9 +526,10 @@ test('screen etags change only when that screen changes; icons used are listed',
   const b = build({ states: s });
   assert.equal(screenEtag(a.home), screenEtag(b.home));
   assert.notEqual(screenEtag(a.presence), screenEtag(b.presence));
-  // The meeting room's four status icons are listed too.
+  // The meeting room's four status icons are listed too, and each screen's
+  // own icon (its mark in the footer's carousel).
   assert.deepEqual(iconsUsed(layout()), [
-    'account-group', 'account-off-outline', 'bus', 'clock-alert-outline', 'door-open', 'lock', 'lock-open-variant', 'shield-home', 'trash-can'
+    'account-group', 'account-off-outline', 'bus', 'calendar-account-outline', 'clock-alert-outline', 'door-open', 'lock', 'lock-open-variant', 'shield-home', 'trash-can', 'view-dashboard-outline'
   ]);
 });
 

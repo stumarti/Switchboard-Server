@@ -431,6 +431,9 @@ app.get('/api/viewports/:mac/bundle', auth.requireAdminOrDevice, (req, res) => {
     wifiNetworks: globals.wifiNetworks || [],
     ntpServer: globals.ntpServer || 'pool.ntp.org',
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    // The server's offset from UTC now (minutes), for the device's clock:
+    // it re-reads it every wake, so a DST change follows within one.
+    utcOffsetMin: clients.utcOffsetMin(),
     // Over-the-air updates, as a remote gets them: an offer only for a
     // display whose firmware says its board (X-Board) and has a release.
     firmware: firmware.configFor(device.mac, req.device ? deviceNow(req) : device)
@@ -776,7 +779,10 @@ app.post('/api/assets/icons/compile', auth.requireAdminSession, async (req, res)
   try {
     const overrides = (req.body && req.body.overrides) || {};
     const kind = themeKindOf(req);
-    const buf = await iconsCompiler.compileIconsPack(overrides, slotsFor(kind).listSlots());
+    // A viewport's pack carries only the slots you changed (its built-in
+    // art is in colour); a remote's, every slot.
+    const slots = kind === 'viewport' ? viewportSlots.packSlots(overrides) : slotsFor(kind).listSlots();
+    const buf = await iconsCompiler.compileIconsPack(overrides, slots);
     const version = require('crypto').createHash('sha256').update(buf).digest('hex').slice(0, 16);
     store.saveIconsPack(buf, kind);
     const theme = store.getTheme();
@@ -1308,6 +1314,8 @@ haPublish.start();
 
 app.listen(PORT, HOST, () => {
   console.log(`homeremote-server listening on http://${HOST}:${PORT}`);
+  // The house's time zone from Home Assistant, unless TZ is set.
+  require('./lib/house-tz').start(() => store.getGlobals());
   console.log(`profiles stored under ${store.DATA_DIR}`);
 
   if (DISABLE_MDNS) {

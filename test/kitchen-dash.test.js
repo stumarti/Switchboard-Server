@@ -16,8 +16,7 @@ const st = (state, attributes = {}, changed = '2026-09-28T11:45:00Z') => ({ stat
 
 function house(over = {}) {
   return {
-    'weather.forecast_home': st('partlycloudy', { temperature: 17.6, temperature_unit: '°C', humidity: 71.4, wind_speed: 12.6, wind_speed_unit: 'km/h', wind_bearing: 225, uv_index: 3 }),
-    'weather.home': st('rainy'),
+    'weather.home': st('partlycloudy', { temperature: 17.6, temperature_unit: '°C', humidity: 71.4, wind_speed: 12.6, wind_speed_unit: 'km/h', wind_bearing: 225, uv_index: 3 }),
     'sensor.solar_forecast_today': st('14.26', { unit_of_measurement: 'kWh' }),
     'sensor.solar_generation': st('6.42', { unit_of_measurement: 'kWh' }),
     'sensor.load_today': st('9.1', { unit_of_measurement: 'kWh' }),
@@ -64,7 +63,7 @@ function house(over = {}) {
 
 const forecasts = {
   daily: {
-    'weather.forecast_home': [
+    'weather.home': [
       { datetime: '2026-09-28T00:00:00Z', condition: 'rainy', temperature: 15, templow: 9 },
       { datetime: '2026-09-29T00:00:00Z', condition: 'cloudy', temperature: 16.4, templow: 8 },
       { datetime: '2026-09-30T00:00:00Z', condition: 'sunny', temperature: 18, templow: 10 },
@@ -99,7 +98,7 @@ const data = (screen, id) => screen.columns.flat().find((s) => s.id === id).data
 test('the kitchen dashboard: Status, Heating and Security, returning to Status, quieter overnight', () => {
   const l = dashboard.defaultLayout();
   assert.deepEqual(l.screens.map((s) => s.id), ['status', 'heating', 'security']);
-  assert.deepEqual(l.carousel, { mode: 'returnFirst', everyMin: 30 });
+  assert.deepEqual(l.carousel, { mode: 'returnFirst', everyMin: 30, buttons: 'direct' });
   assert.equal(l.refreshIntervalMin, 30);
   assert.deepEqual(l.quietHours, { enabled: true, start: 23, end: 6, intervalMin: 60 });
   assert.equal(l.screens[2].template, 'triple');
@@ -151,6 +150,30 @@ test('energy and home battery: HA text, charging with the time it will be full',
   assert.deepEqual([idle.statusText, idle.eta, idle.color], ['Idle', '', 1]);
   const out = data(screens(house({ 'sensor.battery_power': st('900'), 'sensor.battery_discharge_eta': st('2026-09-28T21:00:00Z') })).status, 'status-battery');
   assert.deepEqual([out.statusText, out.eta, out.color], ['Discharging', 'empty at 22:00', 2]);
+  // Low, idle: black, as the panel drew it (no "critical" red from a power sensor).
+  const low = data(screens(house({ 'sensor.battery_soc': st('6', { unit_of_measurement: '%' }), 'sensor.battery_power': st('0') })).status, 'status-battery');
+  assert.deepEqual([low.statusText, low.color], ['Idle', 1]);
+  // The power sensor unreadable: no word at all.
+  const gone = data(screens(house({ 'sensor.battery_power': st('unavailable') })).status, 'status-battery');
+  assert.deepEqual([gone.statusText, gone.eta, gone.color], ['', '', 1]);
+});
+
+test('battery times: full at / empty at only while charging / discharging, only from a timestamp, in local time', () => {
+  const bat = (over) => data(screens(house(over)).status, 'status-battery');
+  // Charging: the charge ETA (UTC in HA) as local time; the discharge one ignored.
+  let b = bat({ 'sensor.battery_power': st('-500'), 'sensor.battery_charge_eta': st('2026-09-28T16:45:00+00:00'), 'sensor.battery_discharge_eta': st('2026-09-28T23:00:00+00:00') });
+  assert.deepEqual([b.statusText, b.eta, b.color], ['Charging', 'full at 17:45', 4]);
+  // Exactly at the idle threshold is idle (the panel: below -100 / above +100).
+  assert.deepEqual([bat({ 'sensor.battery_power': st('-100') }).statusText, bat({ 'sensor.battery_power': st('100') }).statusText], ['Idle', 'Idle']);
+  // Discharging: the discharge ETA; a fractional-second timestamp too.
+  b = bat({ 'sensor.battery_power': st('101'), 'sensor.battery_discharge_eta': st('2026-09-29T05:30:00.250+00:00') });
+  assert.deepEqual([b.statusText, b.eta, b.color], ['Discharging', 'empty at 06:30', 2]);
+  // No usable ETA (unknown, a duration, missing): the status alone.
+  assert.equal(bat({ 'sensor.battery_power': st('-900'), 'sensor.battery_charge_eta': st('unknown') }).eta, '');
+  assert.equal(bat({ 'sensor.battery_power': st('-900'), 'sensor.battery_charge_eta': st('1h 10m') }).eta, '');
+  assert.equal(bat({ 'sensor.battery_power': st('900'), 'sensor.battery_discharge_eta': undefined }).eta, '');
+  // Idle never shows a time, even with ETAs about.
+  assert.equal(bat({ 'sensor.battery_power': st('20') }).eta, '');
 });
 
 test('status icons: any door or window, heating calling, robots working, charging or in error', () => {
@@ -223,8 +246,9 @@ test('heating: zones on a shared scale, calling when more than half a degree bel
   assert.equal(h.on, true);
   assert.equal(h.calling, 2);
   assert.equal(h.total, 5); // zones HA has
-  assert.equal(h.current, 19.2);
-  assert.equal(h.target, 20.5);
+  // The panel's Heating page never showed the whole house's now / set.
+  assert.equal(h.current, null);
+  assert.equal(h.target, null);
   assert.equal(h.scaleMin, 15);
   assert.equal(h.scaleMax, 25);
   assert.deepEqual(h.zones.map((z) => [z.name, z.active]), [['Kitchen', true], ['Living Room', false], ['Hall', true], ['Bathroom', false], ['Office', false]]);
@@ -249,4 +273,38 @@ test('the bundle lists every icon the kitchen dashboard can show', () => {
   for (const n of ['shield-check', 'shield-alert', 'door-open', 'door-closed', 'window-open', 'radiator-off', 'water-boiler', 'flower', 'watering-can', 'robot-mower']) {
     assert.ok(names.includes(n), n);
   }
+});
+
+test("numbers come out as the panel's firmware wrote them (String(float, n), roundf)", () => {
+  const { arduinoFixed, roundf } = require('../lib/dashboard-state');
+  // dtostrf(v, n + 2, n): half away from zero, padded on the left to n + 2.
+  assert.equal(arduinoFixed(68, 0), '68');
+  assert.equal(arduinoFixed(5, 0), ' 5');
+  assert.equal(arduinoFixed(3.4, 0), ' 3');
+  assert.equal(arduinoFixed(20.5, 0), '21');
+  assert.equal(arduinoFixed(18.5, 0), '19');
+  assert.equal(arduinoFixed(-3, 0), '-3');
+  assert.equal(arduinoFixed(3, 1), '3.0');
+  assert.equal(arduinoFixed(14.25, 1), '14.3');
+  assert.equal(arduinoFixed(123.45, 1), '123.4'); // a float: 123.4499...
+  assert.equal(roundf(-0.5), -1);
+  assert.equal(roundf(-2.5), -3);
+  assert.equal(roundf(2.5), 3);
+  assert.equal(roundf(-0.4), 0);
+});
+
+test("today's calendar in the panel's order: timed by HH:MM (last night's 20:00 sorts as 20:00), ties and all-day by calendar", () => {
+  const day = '2026-09-28';
+  const cals = {
+    'calendar.home_schedule': [
+      { start: { date: day }, end: { date: '2026-09-29' }, summary: 'Zeta all day' },
+      { start: { dateTime: '2026-09-27T20:00:00+01:00' }, end: { dateTime: '2026-09-28T18:00:00+01:00' }, summary: 'Overnight' },
+      { start: { dateTime: `${day}T09:00:00+01:00` }, end: { dateTime: `${day}T10:00:00+01:00` }, summary: 'Same time B' }
+    ],
+    'calendar.work': [{ start: { dateTime: `${day}T09:00:00+01:00` }, end: { dateTime: `${day}T10:00:00+01:00` }, summary: 'Same time A' }],
+    'calendar.birthdays': [{ start: { date: day }, end: { date: '2026-09-29' }, summary: 'Alpha all day' }]
+  };
+  const sc = buildScreens(dashboard.defaultLayout(), { states: house(), forecasts, calendars: cals, now: NOW, timeZone: TZ });
+  const lines = data(sc.status, 'status-today').lines.map((l) => `${l.time}|${l.title}`);
+  assert.deepEqual(lines, ['09:00|Same time B', '09:00|Same time A', '20:00|Overnight', '|Zeta all day', '|Alpha all day']);
 });

@@ -27,7 +27,7 @@ const art = (name) => `http://127.0.0.1:${PORT}/art/${name}.png`;
 
 const states = [
   // Weather and the house
-  S('weather.home', 'partlycloudy', { friendly_name: 'Home', temperature: 16.4, apparent_temperature: 15, humidity: 68, wind_speed: 14, wind_speed_unit: 'km/h', temperature_unit: '°C', uv_index: 3, pressure: 1016 }),
+  S('weather.home', 'partlycloudy', { friendly_name: 'Home', temperature: 16.4, apparent_temperature: 15, humidity: 68, wind_speed: 14, wind_speed_unit: 'km/h', wind_bearing: 230, temperature_unit: '°C', uv_index: 3, pressure: 1016 }),
   S('sun.sun', 'above_horizon', { friendly_name: 'Sun', next_setting: new Date(now + 5 * 3600000).toISOString() }),
   S('person.alex', 'home', { friendly_name: 'Alex' }, 300),
   S('person.sam', 'not_home', { friendly_name: 'Sam' }, 90),
@@ -148,7 +148,6 @@ const states = [
   S('sensor.boardroom_humidity', '48', { friendly_name: 'Boardroom humidity', unit_of_measurement: '%' }),
   S('calendar.focus', 'off', { friendly_name: 'Focus room' }),
   // The kitchen dashboard (the viewport's default layout) and its entities.
-  S('weather.forecast_home', 'partlycloudy', { friendly_name: 'Forecast home', temperature: 16.4, humidity: 68, wind_speed: 14, wind_speed_unit: 'km/h', wind_bearing: 230, temperature_unit: '°C', uv_index: 3 }),
   S('sensor.solar_generation', '11.8', { friendly_name: 'Solar generation', unit_of_measurement: 'kWh' }),
   S('sensor.load_today', '9.1', { friendly_name: 'Load today', unit_of_measurement: 'kWh' }),
   S('sensor.grid_import', '0.6', { friendly_name: 'Grid import', unit_of_measurement: 'kWh' }),
@@ -185,7 +184,15 @@ const states = [
   S('calendar.quiet', 'off', { friendly_name: 'Quiet room' }),
   S('calendar.huddle', 'off', { friendly_name: 'Huddle' }),
   S('binary_sensor.huddle_occupied', 'on', { friendly_name: 'Huddle occupancy', device_class: 'occupancy' }, 5)
-];
+].reduce((list, st) => {
+  // One state per entity, as in a real Home Assistant: an entity listed
+  // again (the kitchen dashboard's zones and sensors reuse a few of the
+  // rooms') merges into the first.
+  const first = list.find((x) => x.entity_id === st.entity_id);
+  if (!first) list.push(st);
+  else Object.assign(first, { ...st, attributes: { ...first.attributes, ...st.attributes } });
+  return list;
+}, []);
 const byId = Object.fromEntries(states.map((s) => [s.entity_id, s]));
 
 // Pictures: album art, box art. Drawn as SVG, so there's nothing to ship.
