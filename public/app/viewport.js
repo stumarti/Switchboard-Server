@@ -52,6 +52,8 @@ const DOMAIN_STATES = {
   update: ['on', 'off']
 };
 
+const CLOCK_MARKS = { 5: ':00, :05, :10 …', 10: ':00, :10, :20 …', 15: ':00, :15, :30 and :45', 30: ':00 and :30', 60: 'on the hour' };
+
 export const SECTION_META = {
   weather: { label: 'Weather', icon: 'weather-partly-cloudy', about: 'Now, later and the next days' },
   energy: { label: 'Energy totals', icon: 'solar-power-variant', about: "Today's solar, use, import, export" },
@@ -1049,6 +1051,10 @@ function CarouselCard({ layout, onChange }) {
     <p class="hint">${c.mode === 'stay'
       ? 'The screen only changes when someone presses a button.'
       : 'Each change is a full panel refresh (15–20 s), which costs battery.'}</p>
+    <${Toggle} checked=${Boolean(layout.refreshAligned)} onChange=${(v) => onChange({ ...layout, refreshAligned: v })} label="On the clock" />
+    <p class="hint">${layout.refreshAligned
+      ? `Refreshes at ${CLOCK_MARKS[layout.refreshIntervalMin] || 'the marks'} (server time; in quiet hours, at its own interval's marks), not ${layout.refreshIntervalMin} minutes after it last slept. Each display is 7 seconds after the one before, after the remotes, so they don't all ask the server at once.`
+      : `Refreshes ${layout.refreshIntervalMin} minutes after it last went to sleep.`}</p>
     <div class="row" style="align-items:flex-end">
       <${Toggle} checked=${q.enabled} onChange=${(v) => setQ('enabled', v)} label="Quiet hours" />
       ${q.enabled &&

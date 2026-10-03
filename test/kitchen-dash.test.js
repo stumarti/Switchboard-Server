@@ -346,3 +346,34 @@ test("the bundle stays within the viewport's JSON nesting limit (ARDUINOJSON_DEF
     assert.ok(depth({ layout }) <= 24, `bundle depth ${depth({ layout })}`);
   }
 });
+
+test('on the clock: refreshes at the marks, each display 7 s after the last (after the remotes)', () => {
+  const { viewportStaggerFor } = require('../lib/clients');
+  const layout = { ...dashboard.defaultLayout(), refreshAligned: true };
+  const at = (iso, stagger = 0) => refreshPlan(layout, new Date(iso), TZ, { staggerSec: stagger });
+  // 30 minutes: :00 and :30 (13:12:30 BST -> 13:30:00, plus its slot).
+  assert.deepEqual(at('2026-09-28T12:12:30Z', 7), { quiet: false, interval: 17 * 60 + 30 + 7 });
+  // Woken a little early, or just after the mark: the next mark, not one
+  // within two minutes.
+  assert.equal(at('2026-09-28T12:29:10Z').interval, 30 * 60 + 50);
+  assert.equal(at('2026-09-28T12:30:20Z', 7).interval, 29 * 60 + 40 + 7);
+  // Quiet hours (23-06, hourly): on the hour; and never past where they end.
+  assert.deepEqual(at('2026-09-28T23:40:00Z'), { quiet: true, interval: 20 * 60 });
+  const fourHourly = { ...layout, quietHours: { ...layout.quietHours, intervalMin: 240 } };
+  // 4-hourly marks are 00:00, 04:00, 08:00: at 04:10 the next is 08:00, but
+  // quiet hours end at 06:00 first.
+  assert.equal(refreshPlan(fourHourly, new Date('2026-09-29T03:10:00Z'), TZ).interval, 110 * 60);
+  // Off the clock: the interval after it last slept, as before.
+  assert.equal(refreshPlan(dashboard.defaultLayout(), new Date('2026-09-28T12:12:30Z'), TZ).interval, 30 * 60);
+  // Slots: after every approved remote, in MAC order.
+  const devices = {
+    'aa:00:00:00:00:01': { type: 'remote', status: 'approved' },
+    'aa:00:00:00:00:02': { type: 'remote', status: 'approved' },
+    'bb:00:00:00:00:01': { type: 'viewport', status: 'approved' },
+    'bb:00:00:00:00:02': { type: 'viewport', status: 'approved' },
+    'bb:00:00:00:00:03': { type: 'viewport', status: 'pending' }
+  };
+  assert.equal(viewportStaggerFor('bb:00:00:00:00:01', devices), 14);
+  assert.equal(viewportStaggerFor('bb:00:00:00:00:02', devices), 21);
+  assert.equal(viewportStaggerFor('bb:00:00:00:00:03', devices), 0);
+});
