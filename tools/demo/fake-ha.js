@@ -147,6 +147,41 @@ const states = [
   S('sensor.boardroom_co2', '1180', { friendly_name: 'Boardroom CO2', unit_of_measurement: 'ppm', device_class: 'carbon_dioxide' }),
   S('sensor.boardroom_humidity', '48', { friendly_name: 'Boardroom humidity', unit_of_measurement: '%' }),
   S('calendar.focus', 'off', { friendly_name: 'Focus room' }),
+  // The kitchen dashboard (the viewport's default layout) and its entities.
+  S('weather.forecast_home', 'partlycloudy', { friendly_name: 'Forecast home', temperature: 16.4, humidity: 68, wind_speed: 14, wind_speed_unit: 'km/h', wind_bearing: 230, temperature_unit: '°C', uv_index: 3 }),
+  S('sensor.solar_generation', '11.8', { friendly_name: 'Solar generation', unit_of_measurement: 'kWh' }),
+  S('sensor.load_today', '9.1', { friendly_name: 'Load today', unit_of_measurement: 'kWh' }),
+  S('sensor.grid_import', '0.6', { friendly_name: 'Grid import', unit_of_measurement: 'kWh' }),
+  S('sensor.grid_export', '3.4', { friendly_name: 'Grid export', unit_of_measurement: 'kWh' }),
+  S('sensor.battery_power', '-1250', { friendly_name: 'Battery power', unit_of_measurement: 'W' }),
+  S('sensor.battery_charge_eta', new Date(now + 70 * 60000).toISOString(), { friendly_name: 'Battery full at', device_class: 'timestamp' }),
+  S('sensor.battery_discharge_eta', 'unknown', { friendly_name: 'Battery empty at', device_class: 'timestamp' }),
+  S('sensor.home_alarm_state', 'disarmed', { friendly_name: 'Alarm state' }, 300),
+  S('sensor.home_alarm_event', 'Disarmed by Alex at the front door', { friendly_name: 'Alarm event' }, 300),
+  S('alarm_control_panel.home_alarm', 'disarmed', { friendly_name: 'Home alarm' }, 300),
+  S('climate.whole_house', 'heat', { friendly_name: 'Whole house', current_temperature: 19.6, temperature: 20.5, active_member_count: 8 }),
+  S('water_heater.home_tank', 'eco', { friendly_name: 'Hot water', operation_mode: 'heating', current_temperature: 47.6, temperature: 55 }),
+  ...[
+    ['kitchen', 'Kitchen', 19.4, 21, 'heat'], ['living_room', 'Living Room', 20.5, 21, 'heat'], ['hall', 'Hall', 17.2, 18.5, 'auto'],
+    ['bathroom', 'Bathroom', 21.8, 22, 'heat'], ['landing', 'Landing', 18.1, 18, 'heat'], ['bedroom', 'Bedroom', 18.6, 18, 'heat'],
+    ['bedroom_2', 'Bedroom 2', 17.9, 16, 'off'], ['office', 'Office', 20.2, 20, 'heat']
+  ].map(([k, name, cur, tgt, mode]) => S(`climate.${k}`, mode, { friendly_name: name, current_temperature: cur, temperature: tgt })),
+  ...['side', 'living_room', 'kitchen', 'office_left', 'office_right', 'bedroom_left', 'bedroom_right'].map((w, i) => S(`binary_sensor.window_${w}`, i === 1 ? 'on' : 'off', { device_class: 'window' }, 40 + i * 30)),
+  S('sensor.plant_soil_moisture', 'Almost Dry', { friendly_name: 'House plant' }),
+  S('vacuum.vacuum1', 'cleaning', { friendly_name: 'Vacuum 1' }, 12),
+  S('sensor.vacuum1_battery', '72', { unit_of_measurement: '%' }),
+  S('binary_sensor.vacuum1_charging', 'off'),
+  S('vacuum.vacuum2', 'docked', { friendly_name: 'Vacuum 2' }),
+  S('sensor.vacuum2_battery', '100', { unit_of_measurement: '%' }),
+  S('lawn_mower.mower', 'docked', { friendly_name: 'Mower' }),
+  S('sensor.mower_battery', '64', { unit_of_measurement: '%' }),
+  S('binary_sensor.mower_charging', 'on'),
+  ...[['front_door_motion', 3], ['hall_motion', 8], ['landing_motion', 95], ['recessed_landing_motion', 180], ['back_garden_motion', 1]].map(([m, ago]) => S(`binary_sensor.${m}`, ago < 5 ? 'on' : 'off', { device_class: 'motion' }, ago)),
+  ...[['camera_front_motion', 22], ['camera_back_motion', 140], ['camera_kitchen_motion', 61], ['doorbell_recent_motion', 3]].map(([m, ago]) => S(`binary_sensor.${m}`, ago < 5 ? 'on' : 'off', { device_class: 'motion' }, ago)),
+  S('calendar.home_schedule', 'off', { friendly_name: 'Home schedule' }),
+  S('calendar.work', 'off', { friendly_name: 'Work' }),
+  S('calendar.birthdays', 'off', { friendly_name: 'Birthdays' }),
+  S('calendar.holidays', 'off', { friendly_name: 'Holidays' }),
   S('calendar.quiet', 'off', { friendly_name: 'Quiet room' }),
   S('calendar.huddle', 'off', { friendly_name: 'Huddle' }),
   S('binary_sensor.huddle_occupied', 'on', { friendly_name: 'Huddle occupancy', device_class: 'occupancy' }, 5)
@@ -197,6 +232,12 @@ function calendar(id) {
   switch (id) {
     case 'calendar.family':
       return [ev(270, 330, 'Football practice'), { start: { date: day(1) }, end: { date: day(2) }, summary: 'Bin day: recycling' }, ev(1500, 1560, 'Dentist'), ev(2940, 3060, "Sam's birthday dinner")];
+    case 'calendar.home_schedule':
+      return [ev(-300, -270, 'School run'), ev(270, 330, 'Football practice')];
+    case 'calendar.work':
+      return [{ ...ev(60, 90, 'Weekly planning'), description: 'Agenda in the shared drive, bring the roadmap' }];
+    case 'calendar.birthdays':
+      return [{ start: { date: day(0) }, end: { date: day(1) }, summary: "Gran's birthday" }];
     case 'calendar.boardroom':
       return [ev(-30, 30, 'Quarterly review'), ev(30, 60, 'Design sync'), ev(180, 240, 'Hiring panel')];
     case 'calendar.focus':
@@ -254,7 +295,7 @@ http.createServer((req, res) => {
       const b = JSON.parse(body || '{}');
       const conds = ['partlycloudy', 'rainy', 'sunny', 'cloudy', 'sunny', 'partlycloudy', 'rainy'];
       const forecast = b.type === 'hourly'
-        ? [0, 1, 2, 3, 4, 5].map((h) => ({ datetime: new Date(now + h * 3600000).toISOString(), condition: h > 3 ? 'rainy' : 'partlycloudy', temperature: 16 - h * 0.4, precipitation_probability: h > 3 ? 70 : 10 }))
+        ? [0, 1, 2, 3, 4, 5].map((h) => ({ datetime: new Date(Math.floor(now / 3600000) * 3600000 + h * 3600000).toISOString(), condition: h > 3 ? 'rainy' : 'partlycloudy', temperature: 16 - h * 0.4, precipitation: h > 3 ? 1.2 : 0, precipitation_probability: h > 3 ? 70 : 10 }))
         : conds.map((c, d) => ({ datetime: new Date(now + d * 86400000).toISOString(), condition: c, temperature: 17 + (d % 3), templow: 9 + (d % 2) }));
       return json({ service_response: { [b.entity_id]: { forecast } } });
     }

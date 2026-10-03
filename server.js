@@ -304,6 +304,8 @@ app.get('/api/clients/schema', auth.requireAdminSession, (req, res) => {
       sectionTypes: dashboard.SECTION_TYPES,
       templates: Object.keys(dashboard.TEMPLATES),
       carouselModes: dashboard.CAROUSEL_MODES,
+      quietChoices: dashboard.QUIET_CHOICES,
+      nowKinds: dashboard.NOW_KINDS,
       colors: dashboard.COLORS,
       conditions: dashboard.CONDITIONS,
       limits: dashboard.LIMITS,
