@@ -2,7 +2,7 @@
 // connection, Wi-Fi, the clock, the theme (icon + font packs), sign out.
 
 import {
-  html, useState, useEffect, api, Icon, Card, Field, TextInput, SecretInput, Button, Badge, useFlash, useApi, setIn, Toggle, timeAgo
+  html, useState, useEffect, api, Icon, Card, Field, TextInput, SecretInput, Select, Button, Badge, useFlash, useApi, setIn, Toggle, timeAgo
 } from './lib.js';
 import { haStatus, useHaStatus, IconPickerModal, IconPreview } from './pickers.js';
 import { ItemList } from './rooms.js';
@@ -14,7 +14,8 @@ const TABS = [
   { id: 'wifi', label: 'Wi-Fi', icon: 'wifi' },
   { id: 'clock', label: 'Clock', icon: 'clock-outline' },
   { id: 'theme', label: 'Theme', icon: 'palette-outline' },
-  { id: 'updates', label: 'Remote updates', icon: 'update' },
+  { id: 'updates', label: 'Updates', icon: 'update' },
+  { id: 'security', label: 'Security', icon: 'shield-lock-outline' },
   { id: 'account', label: 'Account', icon: 'account-circle-outline' }
 ];
 
@@ -437,6 +438,108 @@ function PasswordCard() {
   <//>`;
 }
 
+const SESSION_LABELS = { 1: '1 hour', 8: '8 hours', 24: '1 day', 168: '7 days', 720: '30 days' };
+
+// Sign-in length, the failed sign-in limit, signing out other browsers, and
+// whether new devices may ask to pair (lib/security.js). Saved as changed.
+function SecuritySettings({ data, take }) {
+  const [msg, flash] = useFlash();
+  const st = data.settings;
+  const put = async (path, body, done) => {
+    try {
+      take(await api(path, body ? { method: 'PUT', body } : { method: 'POST' }), true);
+      flash(done || 'Saved');
+    } catch (e) {
+      flash(`Failed: ${e.message}`, 8000);
+    }
+  };
+  const others = data.sessions - 1;
+  return html`
+    <${Card} icon="account-lock-outline" title="Sign-in" subtitle="This admin site's sign-ins.">
+      <${Field} label="Stay signed in for" hint="How long a browser stays signed in without being used. A shorter time applies to browsers already signed in too.">
+        <div style="max-width:200px"><${Select} value=${String(st.sessionHours)} onChange=${(v) => put('/api/security/settings', { sessionHours: Number(v) })}
+          options=${data.sessionChoices.map((h) => ({ value: String(h), label: SESSION_LABELS[h] || `${h} hours` }))} /></div>
+      <//>
+      <${Toggle} checked=${st.loginLockout} onChange=${(v) => put('/api/security/settings', { loginLockout: v })} label="Pause sign-in after 5 wrong passwords" />
+      <p class="hint">After 5 wrong passwords from one address within 15 minutes, that address can't try again for 15 minutes.</p>
+      <div class="row" style="align-items:center">
+        <span class="hint">${data.sessions} browser${data.sessions === 1 ? '' : 's'} signed in, this one included.</span>
+        <${Button} small icon="logout-variant" disabled=${others < 1} onClick=${() => confirm(`Sign out the other ${others} browser${others === 1 ? '' : 's'}?`) && put('/api/security/sign-out-others', null, 'Signed out the others')}>Sign out everywhere else<//>
+      </div>
+      ${msg && html`<p class=${`hint ${msg.startsWith('Failed') ? 'text-bad' : ''}`}>${msg}</p>`}
+    <//>
+    <${Card} icon="devices" title="New devices" subtitle="Who may ask to pair.">
+      <${Toggle} checked=${st.acceptNewDevices} onChange=${(v) => put('/api/security/settings', { acceptNewDevices: v })} label="Accept new devices" />
+      <p class="hint">${st.acceptNewDevices
+        ? 'A device the server has never seen can ask to pair, and waits on the Remotes page for you to approve it.'
+        : 'Off: a device the server has never seen is turned away, so nothing new appears on the Remotes page. Devices it already knows still work, and can get a new token after a reset. Switch this on while you add a device.'}</p>
+    <//>`;
+}
+
+// Allowed networks (lib/netguard.js): the server answers only these.
+function SecurityTab() {
+  const [data, setData] = useState(null);
+  const [enabled, setEnabled] = useState(false);
+  const [text, setText] = useState('');
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, flash] = useFlash();
+  // `keepEdits`: another card saved; leave unsaved network edits alone.
+  const take = (d, keepEdits) => {
+    setData(d);
+    if (keepEdits) return;
+    setEnabled(d.enabled);
+    setText((d.allowed || []).join('\n'));
+    setDirty(false);
+  };
+  useEffect(() => {
+    api('/api/security').then(take).catch((e) => flash(e.message, 0));
+  }, []);
+  if (!data) return html`<p class="hint">${msg || 'Loading…'}</p>`;
+  const lines = text.split(/[\s,]+/).filter(Boolean);
+  const edit = (fn) => {
+    fn();
+    setDirty(true);
+  };
+  const addPrivate = () => edit(() => setText([...lines, ...data.private.filter((p) => !lines.includes(p))].join('\n')));
+  const addMine = () => edit(() => setText([...lines, data.you].join('\n')));
+  const save = async () => {
+    setBusy(true);
+    try {
+      take(await api('/api/security', { method: 'PUT', body: { enabled, allowed: lines } }));
+      flash('Saved');
+    } catch (e) {
+      flash(`Save failed: ${e.message}`, 10000);
+    }
+    setBusy(false);
+  };
+  return html`<div class="grid">
+    <${Card} icon="shield-lock-outline" title="Allowed networks"
+      subtitle="Answer only requests from these addresses: the admin pages, the devices' API and pairing alike. This server itself is always allowed."
+      actions=${data.enabled ? html`<${Badge} kind="ok" icon="shield-check-outline">On<//>` : html`<${Badge}>Off<//>`}>
+      ${data.fromEnv
+        ? html`<p class="hint">Set on the server by <code>ALLOWED_NETWORKS</code>${data.enabled ? '' : ' (any)'}, which replaces this list while it's there: change or remove it to edit here.</p>
+            ${data.enabled && html`<pre class="mono">${data.allowed.join('\n')}</pre>`}`
+        : html`
+          <${Toggle} checked=${enabled} onChange=${(v) => edit(() => setEnabled(v))} label="Only answer these networks" />
+          <${Field} label="Networks" hint="One per line: a range such as 192.168.1.0/24, or one address. Include every network a remote, display or browser reaches this server from.">
+            <textarea rows="7" class="mono" value=${text} placeholder="192.168.1.0/24" onInput=${(e) => edit(() => setText(e.target.value))}></textarea>
+          <//>
+          <div class="row" style="flex-wrap:wrap">
+            <${Button} small icon="lan" onClick=${addPrivate}>Add private networks<//>
+            <${Button} small kind="ghost" icon="account-network-outline" disabled=${lines.includes(data.you) || lines.includes(`${data.you}/32`)} onClick=${addMine}>Add my address<//>
+          </div>
+          <p class="hint">Private networks: ${data.private.join(', ')}.</p>
+          <div class="row" style="align-items:center">
+            <${Button} kind="primary" icon="content-save-outline" disabled=${!dirty || busy} onClick=${save}>Save<//>
+            <span class=${`flash ${msg.startsWith('Save failed') ? 'flash-bad' : ''}`}>${msg}</span>
+          </div>`}
+      <p class="hint">You're reaching the server from <code>${data.you || 'an unknown address'}</code>${data.trustProxy ? html` (forwarded by <code>${data.trustProxy}</code>)` : ''}. A list without it can't be saved, so you can't shut yourself out from here. If you ever are, set <code>ALLOWED_NETWORKS=any</code> on the container and restart it.</p>
+    <//>
+    <${SecuritySettings} data=${data} take=${take} />
+  </div>`;
+}
+
 function AccountTab({ onSignOut }) {
   const [health] = useApi('/api/health');
   const signOut = async () => {
@@ -468,6 +571,7 @@ export function SettingsPage({ tab, onSignOut }) {
   else if (active.id === 'clock') body = html`<${ClockTab} />`;
   else if (active.id === 'theme') body = html`<${ThemeTab} />`;
   else if (active.id === 'updates') body = html`<${RemoteUpdatesTab} />`;
+  else if (active.id === 'security') body = html`<${SecurityTab} />`;
   else body = html`<${AccountTab} onSignOut=${onSignOut} />`;
   return html`<div class="page">
     <div class="page-head">

@@ -70,6 +70,8 @@ const feeds = require('./lib/feeds');
 const firmware = require('./lib/firmware');
 const batteryHistory = require('./lib/battery-history');
 const haPublish = require('./lib/ha-publish');
+const netguard = require('./lib/netguard');
+const security = require('./lib/security');
 const xboxLibrary = require('./lib/xbox-library');
 const iconSlots = require('./lib/assets/icon-slots');
 const fontSlots = require('./lib/assets/font-slots');
@@ -94,11 +96,18 @@ const DISABLE_MDNS = /^(1|true|yes)$/i.test(process.env.DISABLE_MDNS || '');
 auth.ensureSettings();
 
 const app = express();
+// Behind a reverse proxy, TRUST_PROXY names it (its address(es), or e.g.
+// "loopback"), so req.ip is the forwarded client's — what Settings →
+// Security's allowed networks then check. Without it, req.ip still follows
+// X-Forwarded-For for a device's last address (cosmetic), but the allowed
+// networks check the connection's own address, which can't be faked.
+app.set('trust proxy', process.env.TRUST_PROXY ? process.env.TRUST_PROXY.split(',').map((x) => x.trim()) : true);
+// Allowed networks (lib/netguard.js): before anything else answers.
+app.use(netguard.middleware);
 // 3mb (not the original 1mb) - a base64-encoded font upload (POST
 // /api/assets/fonts/compile) can run a few hundred KB inflated ~33% by
 // base64; everything else here is tiny by comparison.
 app.use(express.json({ limit: '3mb' }));
-app.set('trust proxy', true); // req.ip reflects X-Forwarded-For behind a reverse proxy, for device lastIp
 app.use(express.static(path.join(__dirname, 'public')));
 // The admin UI's libraries, straight from node_modules — no build step:
 // Preact + htm as ES modules (index.html's import map points at these), and
@@ -139,10 +148,16 @@ app.post('/api/auth/setup', (req, res) => {
 });
 
 app.post('/api/auth/login', (req, res) => {
+  // Too many wrong passwords from this address lately (Settings → Security).
+  const from = netguard.clientAddress(req);
+  const wait = security.lockedFor(from);
+  if (wait) return res.status(429).json({ error: `Too many wrong passwords. Try again in ${Math.ceil(wait / 60000)} min.` });
   const password = req.body && req.body.password;
   if (!password || !auth.checkPassword(String(password))) {
-    return res.status(401).json({ error: 'incorrect password' });
+    const locked = security.noteFailure(from);
+    return res.status(401).json({ error: locked ? `incorrect password; too many tries, so wait ${Math.ceil(locked / 60000)} min` : 'incorrect password' });
   }
+  security.noteSuccess(from);
   const token = auth.createSession();
   auth.setSessionCookie(res, token);
   res.json({ ok: true });
@@ -187,7 +202,7 @@ app.post('/api/auth/logout', (req, res) => {
 // token. Also polled (still unauthenticated) while pending/revoked.
 app.post('/api/pairing/register', (req, res) => {
   const result = pairing.register(req.body && req.body.mac, req.ip, req.body && req.body.type);
-  if (result.error) return res.status(400).json(result);
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
   res.json(result);
 });
 
@@ -232,6 +247,51 @@ app.delete('/api/pairing/:mac', auth.requireAdminSession, (req, res) => {
 //
 // The server holds the HA token, so the browser never needs it: these proxy
 // HA's own entity list, trimmed to what the pickers show.
+
+// Settings → Security: the networks the server answers (lib/netguard.js).
+// `you` is the address this browser is seen from, so the UI can say whether
+// a list would include it (a save that wouldn't is refused).
+// The rest (sign-in length, the failed sign-in limit, accepting new
+// devices) is lib/security.js, at /api/security/settings.
+function securityView(req) {
+  return {
+    ...netguard.current(),
+    you: netguard.clientAddress(req),
+    private: netguard.PRIVATE,
+    trustProxy: process.env.TRUST_PROXY || '',
+    settings: security.get(),
+    sessionChoices: security.SESSION_CHOICES,
+    sessions: auth.sessionCount()
+  };
+}
+
+app.get('/api/security', auth.requireAdminSession, (req, res) => {
+  res.json(securityView(req));
+});
+
+app.put('/api/security', auth.requireAdminSession, (req, res) => {
+  try {
+    netguard.save(req.body, netguard.clientAddress(req));
+    res.json(securityView(req));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+app.put('/api/security/settings', auth.requireAdminSession, (req, res) => {
+  try {
+    security.save(req.body);
+    res.json(securityView(req));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Sign out every other browser; this one stays signed in.
+app.post('/api/security/sign-out-others', auth.requireAdminSession, (req, res) => {
+  auth.destroyOtherSessions(auth.sessionFromRequest(req));
+  res.json(securityView(req));
+});
 
 // Battery sensors published to Home Assistant (lib/ha-publish.js): whether
 // it's on, when it last synced, which entities, and any error.

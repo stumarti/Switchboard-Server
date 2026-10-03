@@ -462,8 +462,8 @@ function ClientEditor({ client, rooms, dashboards, reloadClients, reloadDashboar
           ${client.health && client.health.temperature != null && html`<${Badge} icon="thermometer">${client.health.temperature}°<//>`}
           ${client.health && client.health.humidity != null && html`<${Badge} icon="water-percent">${client.health.humidity}%<//>`}
           ${client.health && client.health.rssi != null && html`<${Badge} icon="wifi">${client.health.rssi} dBm<//>`}
-          ${isRemote
-            ? html`<${DeviceUpdateBadge} mac=${client.mac} firmware=${client.health && client.health.firmware} />`
+          ${isRemote || (client.health && client.health.board)
+            ? html`<${DeviceUpdateBadge} mac=${client.mac} firmware=${client.health && client.health.firmware} board=${client.health && client.health.board} />`
             : client.health && client.health.firmware && html`<${Badge} icon="chip">fw ${client.health.firmware}<//>`}
           <${Badge} icon="chip">${client.mac}<//>
         </div>
