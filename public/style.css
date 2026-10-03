@@ -667,6 +667,7 @@ textarea { min-height: 70px; font-family: ui-monospace, monospace; font-size: 12
 .kd-sec-row { height: 28px; }
 .kd-mark { display: inline-flex; padding-bottom: 2px; border-bottom: 2px solid transparent; margin-right: 2px; }
 .kd-mark.on { border-bottom-color: #111; }
+.kd-bar { width: 1px; height: 18px; background: #111; margin: 0 6px; }
 .kd-footer {
   position: absolute; right: 12px; bottom: 6px; display: flex; align-items: center; gap: 4px;
   font: 400 18px/1 'Atkinson Hyperlegible', system-ui, sans-serif; color: #111;

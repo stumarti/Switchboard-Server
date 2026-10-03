@@ -288,10 +288,12 @@ export function DashFooter({ generatedAt, quiet, carousel, current }) {
   const marks = carousel && carousel.length > 1 ? carousel : [];
   return html`<div class="kd-footer">
     ${marks.map((m) => html`<span class=${`kd-mark ${m.id === current ? 'on' : ''}`}><${Icon} name=${m.icon || 'view-dashboard-outline'} size=${16} /></span>`)}
+    ${marks.length > 0 && html`<span class="kd-bar"></span>`}
     ${quiet && html`<span style=${{ color: k(5) }}><${Icon} name="bed-clock" size=${16} /></span>`}
     <${Icon} name="refresh" size=${16} />
     <span>${t}</span>
-    <span style=${{ color: k(4), marginLeft: '10px' }}><${Icon} name="battery" size=${24} /></span>
+    <span class="kd-bar"></span>
+    <span style=${{ color: k(4) }}><${Icon} name="battery" size=${24} /></span>
     <span style=${{ color: k(4) }}>100%</span>
   </div>`;
 }
