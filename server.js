@@ -72,6 +72,8 @@ const batteryHistory = require('./lib/battery-history');
 const haPublish = require('./lib/ha-publish');
 const xboxLibrary = require('./lib/xbox-library');
 const iconSlots = require('./lib/assets/icon-slots');
+const fontSlots = require('./lib/assets/font-slots');
+const viewportSlots = require('./lib/assets/viewport-slots');
 const iconsCompiler = require('./lib/assets/icons');
 const fontsCompiler = require('./lib/assets/fonts');
 const googleFonts = require('./lib/assets/google-fonts');
@@ -570,28 +572,44 @@ app.get('/api/art', auth.requireAdminOrDevice, async (req, res) => {
 
 // --- Theme (compiled icon/font packs a paired device downloads) ---------
 
+// Which kind of device's theme a request is for: a device gets its own
+// (remotes and viewports draw different icons at different sizes); the
+// admin UI says which with ?kind=.
+function themeKindOf(req) {
+  if (req.device) return clients.normalizeType(req.device.type) === 'viewport' ? 'viewport' : 'remote';
+  return store.themeKind(String(req.query.kind || (req.body && req.body.kind) || 'remote'));
+}
+const slotsFor = (kind) => (kind === 'viewport' ? viewportSlots : iconSlots);
+
 app.get('/api/theme', auth.requireAdminOrDevice, (req, res) => {
   const theme = store.getTheme();
-  const out = { iconsVersion: theme.iconsVersion, fontsVersion: theme.fontsVersion };
+  const kind = themeKindOf(req);
+  const t = store.themeFor(theme, kind);
+  const out = { iconsVersion: t.iconsVersion, fontsVersion: t.fontsVersion };
   // The admin UI also gets the slot overrides the current pack was built
   // from, so the Theme page reopens with them instead of starting blank.
-  if (!req.device) out.iconOverrides = theme.iconOverrides || {};
+  if (!req.device) {
+    out.kind = kind;
+    out.iconOverrides = t.iconOverrides;
+  }
   res.json(out);
 });
 
 app.get('/api/theme/icons.pack', auth.requireAdminOrDevice, (req, res) => {
-  const buf = store.getIconsPack();
+  const kind = themeKindOf(req);
+  const buf = store.getIconsPack(kind);
   if (!buf) return res.status(404).json({ error: 'no icons pack compiled yet' });
   res.set('Content-Type', 'application/octet-stream');
-  res.set('ETag', store.getTheme().iconsVersion || '');
+  res.set('ETag', store.themeFor(store.getTheme(), kind).iconsVersion);
   res.send(buf);
 });
 
 app.get('/api/theme/fonts.pack', auth.requireAdminOrDevice, (req, res) => {
-  const buf = store.getFontsPack();
+  const kind = themeKindOf(req);
+  const buf = store.getFontsPack(kind);
   if (!buf) return res.status(404).json({ error: 'no fonts pack compiled yet' });
   res.set('Content-Type', 'application/octet-stream');
-  res.set('ETag', store.getTheme().fontsVersion || '');
+  res.set('ETag', store.themeFor(store.getTheme(), kind).fontsVersion);
   res.send(buf);
 });
 
@@ -620,7 +638,7 @@ app.get('/api/icons/mdi/:name', auth.requireAdminOrDevice, async (req, res) => {
 // --- Asset compiler (admin only) -----------------------------------------
 
 app.get('/api/assets/icon-slots', auth.requireAdminSession, (req, res) => {
-  res.json(iconSlots.listSlots());
+  res.json(slotsFor(themeKindOf(req)).listSlots());
 });
 
 app.get('/api/assets/icons/search', auth.requireAdminSession, async (req, res) => {
@@ -695,12 +713,17 @@ app.post('/api/assets/icons/preview', auth.requireAdminSession, async (req, res)
 app.post('/api/assets/icons/compile', auth.requireAdminSession, async (req, res) => {
   try {
     const overrides = (req.body && req.body.overrides) || {};
-    const buf = await iconsCompiler.compileIconsPack(overrides);
+    const kind = themeKindOf(req);
+    const buf = await iconsCompiler.compileIconsPack(overrides, slotsFor(kind).listSlots());
     const version = require('crypto').createHash('sha256').update(buf).digest('hex').slice(0, 16);
-    store.saveIconsPack(buf);
+    store.saveIconsPack(buf, kind);
     const theme = store.getTheme();
-    theme.iconsVersion = version;
-    theme.iconOverrides = overrides;
+    if (kind === 'viewport') {
+      theme.viewport = { ...(theme.viewport || {}), iconsVersion: version, iconOverrides: overrides };
+    } else {
+      theme.iconsVersion = version;
+      theme.iconOverrides = overrides;
+    }
     theme.updatedAt = new Date().toISOString();
     store.saveTheme(theme);
     res.json({ ok: true, version });
@@ -711,22 +734,32 @@ app.post('/api/assets/icons/compile', auth.requireAdminSession, async (req, res)
 
 app.post('/api/assets/fonts/compile', auth.requireAdminSession, async (req, res) => {
   try {
+    // One font for every device: the remote's faces, and the viewport's in
+    // its regular and bold weights (a Google Font's 700, or an uploaded bold
+    // file; else the same font).
     let ttfBuffer;
+    let boldBuffer = null;
     if (req.body && req.body.ttfBase64) {
       ttfBuffer = Buffer.from(req.body.ttfBase64, 'base64');
+      if (req.body.boldTtfBase64) boldBuffer = Buffer.from(req.body.boldTtfBase64, 'base64');
     } else if (req.body && req.body.googleFont) {
       ttfBuffer = await googleFonts.fetchGoogleFontTtf(req.body.googleFont);
+      boldBuffer = await googleFonts.fetchGoogleFontTtf(req.body.googleFont, 700).catch(() => null);
     } else {
       return res.status(400).json({ error: 'ttfBase64 or googleFont is required' });
     }
-    const buf = await fontsCompiler.compileFontsPack(ttfBuffer);
-    const version = require('crypto').createHash('sha256').update(buf).digest('hex').slice(0, 16);
-    store.saveFontsPack(buf);
+    const hash = (b) => require('crypto').createHash('sha256').update(b).digest('hex').slice(0, 16);
+    const buf = await fontsCompiler.compileFontsPack(ttfBuffer, fontSlots.listFaces());
+    const vbuf = await fontsCompiler.compileFontsPack(ttfBuffer, viewportSlots.listFaces(), boldBuffer);
+    const version = hash(buf);
+    store.saveFontsPack(buf, 'remote');
+    store.saveFontsPack(vbuf, 'viewport');
     const theme = store.getTheme();
     theme.fontsVersion = version;
+    theme.viewport = { ...(theme.viewport || {}), fontsVersion: hash(vbuf) };
     theme.updatedAt = new Date().toISOString();
     store.saveTheme(theme);
-    res.json({ ok: true, version });
+    res.json({ ok: true, version, viewportVersion: theme.viewport.fontsVersion });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
