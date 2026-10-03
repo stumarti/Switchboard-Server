@@ -399,7 +399,7 @@ app.get('/api/viewports/:mac/state', auth.requireAdminOrDevice, async (req, res)
   const device = viewportFor(req, res);
   if (!device) return;
   const layout = viewportLayout(device);
-  const interval = layout.refreshIntervalMin * 60;
+  const { quiet, interval } = dashboardState.refreshPlan(layout, new Date());
   const soonest = (list) => Math.min(interval, ...list.filter((n) => n != null && n > 0));
   try {
     const { screens, errors, generatedAt } = await viewportScreens(layout, device.dashboard || '');
@@ -411,15 +411,16 @@ app.get('/api/viewports/:mac/state', auth.requireAdminOrDevice, async (req, res)
       res.set('ETag', etag);
       res.set('Cache-Control', 'no-cache');
       res.set('X-Refresh-In', String(soonest([screen.nextChangeInSec])));
+      res.set('X-Quiet', quiet ? '1' : '0');
       if (req.get('If-None-Match') === etag) return res.status(304).end();
-      return res.json({ screen: wanted, etag, refreshInSec: soonest([screen.nextChangeInSec]), generatedAt, data: screen });
+      return res.json({ screen: wanted, etag, refreshInSec: soonest([screen.nextChangeInSec]), quiet, generatedAt, data: screen });
     }
     const out = {};
     for (const sc of layout.screens.filter((x) => x.enabled)) {
       out[sc.id] = { etag: dashboardState.screenEtag(screens[sc.id]), data: screens[sc.id] };
     }
     const next = layout.screens.filter((x) => x.enabled).map((x) => screens[x.id].nextChangeInSec);
-    res.json({ refreshInSec: soonest(next), generatedAt, errors, screens: out });
+    res.json({ refreshInSec: soonest(next), quiet, generatedAt, errors, screens: out });
   } catch (e) {
     haError(res, e);
   }

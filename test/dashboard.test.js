@@ -81,14 +81,14 @@ test('normalizeLayout: carousel defaults to staying put, sections are validated,
   assert.equal(s3.columns.length, 2);
   const icons = s3.columns[0][0].icons;
   assert.equal(icons.length, 12);
-  assert.deepEqual(icons[0].rules[0], { cond: 'eq', value: '', color: 1, icon: '', hide: false });
+  assert.deepEqual(icons[0].rules[0], { cond: 'eq', value: '', entity: '', attribute: '', also: null, color: 1, icon: '', hide: false });
 });
 
-test('the default layout is stable (same ids every time) and has the five kitchen screens', () => {
+test('the default layout is stable (same ids every time) and is the kitchen dashboard', () => {
   const a = dashboard.defaultLayout();
   assert.equal(JSON.stringify(a), JSON.stringify(dashboard.defaultLayout()));
-  assert.deepEqual(a.screens.map((s) => s.id), ['home', 'energy', 'climate', 'presence', 'security']);
-  assert.equal(a.carousel.mode, 'stay');
+  assert.deepEqual(a.screens.map((s) => s.id), ['status', 'heating', 'security']);
+  assert.equal(a.carousel.mode, 'returnFirst');
 });
 
 test('a layout saved as the old fixed four screens converts to sections', () => {
@@ -361,7 +361,7 @@ test('security sections: alarm, openings, motion, cameras', () => {
   assert.equal(al.last.triggered, 'Fri');
   const d = sectionData(s, 'd');
   assert.equal(d.open, 1);
-  assert.deepEqual(d.items[0], { name: 'Front door', open: true, state: 'Open', when: '13:25', color: 2 });
+  assert.deepEqual(d.items[0], { name: 'Front door', open: true, state: 'Open', when: '13:25', time: '13:25', color: 2 });
   assert.equal(d.items[1].when, 'yesterday');
   const mo = sectionData(s, 'mo').sensors;
   assert.equal(mo[0].recent, true);
