@@ -39,7 +39,7 @@ const WEATHER_ICONS = {
 const weatherIcon = (cond) => WEATHER_ICONS[cond] || 'weather-cloudy';
 const deg = (v) => (v == null ? '--' : `${Math.round(v)}°`);
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-const val = (m) => (m ? `${m.value}${m.unit ? ` ${m.unit}` : ''}` : '--');
+const val = (m) => (m ? m.text || `${m.value}${m.unit ? ` ${m.unit}` : ''}` : '--');
 
 const Label = ({ children }) => (children ? html`<div class="vp-label">${children}</div>` : null);
 const Bar = ({ pct, color }) => html`<div class="vp-bar"><div style=${{ width: `${Math.max(0, Math.min(100, pct || 0))}%`, background: c(color) }}></div></div>`;
@@ -70,7 +70,7 @@ function Energy({ d }) {
     </div>`;
     return html`<div>
       ${row('weather-sunny-alert', 'Predicted', d.solarExpected, null)}
-      ${row('solar-power-variant', 'Generated', d.solarToday, 3, d.solarPct != null ? `${d.solarPct}% of predicted` : '')}
+      ${row('solar-power-variant', 'Generated', d.solarToday, 4, d.solarPct != null ? `${d.solarPct}% of predicted` : '')}
       ${row('home-lightning-bolt-outline', 'House Used', d.loadToday, null)}
       ${row('transmission-tower-import', 'From Grid', d.gridImport, 2)}
       ${row('transmission-tower-export', 'To Grid', d.gridExport, 4)}
