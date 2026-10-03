@@ -324,13 +324,15 @@ function EnergyGraphEditor({ s, set }) {
 function BatteryEditor({ s, set }) {
   return html`<div class="row">${sensorField(s, set, 'soc', 'Charge %')}${sensorField(s, set, 'status', 'Status')}</div>
     ${sensorField(s, set, 'eta', 'Time to full/empty')}
-    <p class="hint">Or, as the kitchen panel does: the status from a power sensor (W, negative while charging) — “Charging” below −idle, “Discharging” above +idle, else “Idle” — with when charging finishes (“full at 14:10”) or discharging does (“empty at 06:30”) from timestamp sensors.</p>
+    <p class="hint">Or, as the kitchen panel does: the status from the battery's power meter — “Charging” or “Discharging” beyond ± the idle watts, else “Idle” — and, while it's charging, when it'll be full (“full at 14:10”), or while discharging, when it'll be empty (“empty at 06:30”).</p>
     <div class="row">
-      ${sensorField(s, set, 'power', 'Battery power (W)')}
+      ${sensorField(s, set, 'power', 'Battery power (W or kW)')}
+      <div style="width:220px"><${Field} label="While charging, it reads"><${Select} value=${s.chargingWhen || 'negative'} onChange=${(v) => set({ ...s, chargingWhen: v })} options=${[{ value: 'negative', label: 'Negative (most)' }, { value: 'positive', label: 'Positive' }]} /><//></div>
       <div style="width:150px"><${Field} label="Idle within ± W"><${NumberInput} min="0" value=${s.idleWatts} onChange=${(v) => set({ ...s, idleWatts: v })} /><//></div>
     </div>
     ${s.power &&
-    html`<div class="row">${sensorField(s, set, 'chargeEta', 'Charging finishes at (timestamp)')}${sensorField(s, set, 'dischargeEta', 'Discharging finishes at (timestamp)')}</div>`}
+    html`<div class="row">${sensorField(s, set, 'chargeEta', 'Charging finishes', ['sensor', 'input_datetime'])}${sensorField(s, set, 'dischargeEta', 'Discharging finishes', ['sensor', 'input_datetime'])}</div>
+      <p class="hint">Each a time (a timestamp sensor or an input_datetime, shown in local time) or the time left (in s, min or h, or 1:45:00), counted from now.</p>`}
     <${Field} label="Colours" hint="Critical is at or below the critical threshold (Carousel & settings).">
       ${[['charging', 'Charging'], ['full', 'Full'], ['discharging', 'Discharging'], ['critical', 'Critical'], ['idle', 'Idle']].map(
         ([k, label]) => html`<div class="row" style="align-items:center"><span style="width:100px">${label}</span><${ColorPicker} value=${s.colors[k]} onChange=${(v) => set({ ...s, colors: { ...s.colors, [k]: v } })} /></div>`

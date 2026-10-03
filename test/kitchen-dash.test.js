@@ -176,6 +176,34 @@ test('battery times: full at / empty at only while charging / discharging, only 
   assert.equal(bat({ 'sensor.battery_power': st('20') }).eta, '');
 });
 
+test('battery inputs: a meter in kW, positive-while-charging inverters, and finish times however the sensor gives them', () => {
+  const bat = (over, section = {}) => {
+    const layout = dashboard.defaultLayout();
+    Object.assign(layout.screens[0].columns[0].find((x) => x.id === 'status-battery'), section);
+    return data(buildScreens(layout, { states: house(over), forecasts, calendars, now: NOW, timeZone: TZ }).status, 'status-battery');
+  };
+  // kW: -1.25 kW is 1250 W charging (read as W it would be "Idle").
+  assert.equal(bat({ 'sensor.battery_power': st('-1.25', { unit_of_measurement: 'kW' }) }).statusText, 'Charging');
+  assert.equal(bat({ 'sensor.battery_power': st('0.05', { unit_of_measurement: 'kW' }) }).statusText, 'Idle');
+  // An inverter that reports charging as positive.
+  let b = bat({ 'sensor.battery_power': st('900'), 'sensor.battery_charge_eta': st('2026-09-28T15:00:00Z') }, { chargingWhen: 'positive' });
+  assert.deepEqual([b.statusText, b.eta, b.color], ['Charging', 'full at 16:00', 4]);
+  assert.equal(bat({ 'sensor.battery_power': st('-900') }, { chargingWhen: 'positive' }).statusText, 'Discharging');
+  // Finish times: a timestamp with no offset (an input_datetime) is local;
+  // a space instead of the T; an offset honoured.
+  const eta = (v, attrs) => bat({ 'sensor.battery_power': st('-900'), 'sensor.battery_charge_eta': st(v, attrs) }).eta;
+  assert.equal(eta('2026-09-28 17:15:00'), 'full at 17:15');
+  assert.equal(eta('2026-09-28 16:15:00+00:00'), 'full at 17:15');
+  assert.equal(eta('2026-09-28T18:15:00+02:00'), 'full at 17:15');
+  // Or the time left, from now (13:30): minutes, hours, seconds, h:mm:ss.
+  assert.equal(eta('95', { unit_of_measurement: 'min' }), 'full at 15:05');
+  assert.equal(eta('2.5', { unit_of_measurement: 'h' }), 'full at 16:00');
+  assert.equal(eta('600', { unit_of_measurement: 's' }), 'full at 13:40');
+  assert.equal(eta('1:45:00'), 'full at 15:15');
+  // A bare number with no unit says nothing.
+  assert.equal(eta('95'), '');
+});
+
 test('status icons: any door or window, heating calling, robots working, charging or in error', () => {
   const icons = Object.fromEntries(data(screens().status, 'status-icons').icons.map((i) => [i.name, [i.icon, i.color]]));
   assert.deepEqual(icons, {
