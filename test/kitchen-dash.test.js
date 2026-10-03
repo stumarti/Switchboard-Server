@@ -377,3 +377,16 @@ test('on the clock: refreshes at the marks, each display 7 s after the last (aft
   assert.equal(viewportStaggerFor('bb:00:00:00:00:02', devices), 21);
   assert.equal(viewportStaggerFor('bb:00:00:00:00:03', devices), 0);
 });
+
+test('heating zones can have an icon: in the state, and in the icons a display fetches', () => {
+  const { iconsUsed } = require('../lib/dashboard-state');
+  const layout = dashboard.defaultLayout();
+  const heating = layout.screens[1].columns[0][0];
+  heating.zones[0].icon = 'stove';
+  const l = dashboard.normalizeLayout(layout);
+  assert.equal(l.screens[1].columns[0][0].zones[0].icon, 'stove');
+  assert.equal(l.screens[1].columns[0][0].zones[1].icon, '');
+  assert.ok(iconsUsed(l).includes('stove'));
+  const h = buildScreens(l, { states: house(), forecasts, calendars, now: NOW, timeZone: TZ }).heating.columns[0][0].data;
+  assert.deepEqual(h.zones.map((z) => z.icon), ['stove', '', '', '', '']);
+});

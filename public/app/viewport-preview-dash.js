@@ -201,7 +201,10 @@ export function DashHeating({ d }) {
       const hasBoth = z.current != null && z.target != null;
       const xc = z.current != null ? xOf(z.current) : null;
       const xs = z.target != null ? xOf(z.target) : null;
-      return html`<${T} x=${X0} y=${y + 14} size=${24} bold color=${z.active ? 2 : 1}>${z.name}<//>
+      // An icon (if the zone has one) beside the name, centred on its capitals.
+      const nameX = z.icon ? X0 + 30 : X0;
+      return html`${z.icon && html`<${I} x=${X0} y=${y - 5} name=${z.icon} size=${24} color=${z.active ? 2 : 1} />`}
+        <${T} x=${nameX} y=${y + 14} size=${24} bold color=${z.active ? 2 : 1}>${z.name}<//>
         <${T} right=${800 - X0 - W} y=${y + 14}>${z.current != null ? `${z.current.toFixed(1)}C` : ''}${z.target != null ? `  set ${Math.round(z.target)}C` : ''}<//>
         <${Box} x=${X0} y=${by} w=${W} h=${12} border />
         ${hasBoth && Math.abs(xc - xs) > 1 && html`<${Box} x=${Math.min(xc, xs) + 1} y=${by + 1} w=${Math.abs(xc - xs) - 1} h=${10} color=${z.current < z.target ? 2 : 5} />`}

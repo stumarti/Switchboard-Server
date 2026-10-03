@@ -647,7 +647,9 @@ function NowEditor({ s, set }) {
 
 function HeatingEditor({ s, set }) {
   return html`<div class="row">${sensorField(s, set, 'entity', 'Whole house (optional)', ['climate'])}${sensorField(s, set, 'hotWater', 'Hot water (optional)', ['water_heater'])}</div>
-    <${NamedList} items=${s.zones} onChange=${(l) => set({ ...s, zones: l })} domains=${['climate']} max=${16} addLabel="Add zone" />
+    <${NamedList} items=${s.zones} onChange=${(l) => set({ ...s, zones: l })} domains=${['climate']} max=${16} addLabel="Add zone"
+      extra=${(it, upd) => html`<${IconPicker} value=${it.icon} onChange=${(icon) => upd({ ...it, icon })} />`} />
+    <p class="hint">A zone's icon (optional) is drawn beside its name, red while it's calling for heat.</p>
     <div class="row" style="align-items:flex-end">
       <div style="width:260px"><${Field} label="Calling when below setpoint by more than °" hint="In heat or auto."><${NumberInput} step="0.1" min="0" value=${s.callingDelta} onChange=${(v) => set({ ...s, callingDelta: v })} /><//></div>
       <${Toggle} checked=${s.houseTemps !== false} onChange=${(v) => set({ ...s, houseTemps: v })} label="The whole house’s “now” and “set” temperatures" />
