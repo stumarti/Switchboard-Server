@@ -1,7 +1,7 @@
 // Remotes and Viewports: the list column of paired devices, approving new
 // ones, and each device's own layout —
-//   remote    carousel page cards (drag to reorder, switch on/off) and its
-//             Quick Access hub buttons
+//   remote    its room, or its own pages (a list: drag to reorder, switch
+//             on/off) and Quick Access hub buttons
 //   viewport  a tile board (drag to reorder, pick a size and entity per tile)
 
 import {
@@ -11,6 +11,7 @@ import {
 import { EntityPicker, IconPicker } from './pickers.js';
 import { ItemList } from './rooms.js';
 import { UpdatesCard, DeviceUpdateBadge } from './firmware.js';
+import { SideColumn, SideGroup } from './nav.js';
 
 const TYPE_META = {
   remote: { section: 'remotes', icon: 'remote', title: 'Remotes', one: 'remote' },
@@ -39,7 +40,7 @@ function roomName(rooms, slug) {
 
 // --- List column --------------------------------------------------------------------
 
-export function ClientList({ type, selected, clients, rooms, dashboards }) {
+export function ClientList({ type, selected, clients, rooms, dashboards, server }) {
   const meta = TYPE_META[type];
   const all = clients || [];
   // A device still waiting for approval is shown under Remotes whatever it
@@ -56,29 +57,21 @@ export function ClientList({ type, selected, clients, rooms, dashboards }) {
     { label: 'Revoked', items: mine.filter((c) => c.status !== 'approved') }
   ].filter((g) => g.items.length);
 
-  return html`<aside class="sublist">
-    <div class="sublist-head">
-      <${Icon} name=${meta.icon} size=${22} />
-      <h2>${meta.title}</h2>
-    </div>
-    <div class="sublist-body">
-      ${clients === null && html`<p class="hint" style="padding:10px">Loading…</p>`}
-      ${clients && !groups.length && html`<p class="hint" style="padding:10px">No ${meta.one}s yet. Power one on and it will appear here to approve.</p>`}
-      ${groups.map(
-        (g) => html`<div class="sublist-group">${g.label}</div>
-          ${g.items.map(
-            (c) => html`<a class=${`list-item ${selected === c.mac ? 'active' : ''}`} href=${`#/${meta.section}/${encodeURIComponent(c.mac)}`}>
-              <div class="li-icon"><${Icon} name=${c.status === 'pending' ? 'help-circle-outline' : TYPE_META[c.type].icon} size=${20} /></div>
-              <div class="li-text">
-                <div class="li-title">${c.name}</div>
-                <div class="li-sub">${c.status === 'pending' ? c.mac : c.type === 'viewport' ? dashboardName(dashboards, c.dashboard) || 'No layout' : roomName(rooms, c.assignedSlug) || 'No room'} · ${timeAgo(c.lastSeenAt)}</div>
-              </div>
-              <span class=${`dot dot-${onlineKind(c)}`}></span>
-            </a>`
-          )}`
-      )}
-    </div>
-  </aside>`;
+  return html`<${SideColumn} title=${meta.title} server=${server}>
+    ${clients === null && html`<p class="side-note">Loading…</p>`}
+    ${clients && !groups.length && html`<p class="side-note">No ${meta.one}s yet. Power one on and it will appear here to approve.</p>`}
+    ${groups.map(
+      (g) => html`<${SideGroup} label=${g.label}>
+        ${g.items.map(
+          (c) => html`<a class=${`side-link side-link-2 ${selected === c.mac ? 'active' : ''}`} href=${`#/${meta.section}/${encodeURIComponent(c.mac)}`}>
+            <${Icon} name=${c.status === 'pending' ? 'help-circle-outline' : TYPE_META[c.type].icon} size=${17} />
+            <span class="side-text">${c.name}<span class="side-sub">${c.status === 'pending' ? c.mac : c.type === 'viewport' ? dashboardName(dashboards, c.dashboard) || 'No layout' : roomName(rooms, c.assignedSlug) || 'No room'} · ${timeAgo(c.lastSeenAt)}</span></span>
+            <span class=${`dot dot-${onlineKind(c)}`}></span>
+          </a>`
+        )}
+      <//>`
+    )}
+  <//>`;
 }
 
 // --- Approval ------------------------------------------------------------------------
@@ -212,8 +205,9 @@ function pageSummary(page, room) {
   }
 }
 
-// Drag-and-drop ordering shared by the carousel and the tile board.
-export function useDragOrder(list, onChange) {
+// Drag-and-drop ordering shared by the carousel lists and the tile board.
+// `vertical`: a list down the page (drop above or below a row).
+export function useDragOrder(list, onChange, { vertical = false } = {}) {
   const [drag, setDrag] = useState(null); // index being dragged
   const [over, setOver] = useState(null); // {i, after}
   const props = (i) => ({
@@ -230,7 +224,7 @@ export function useDragOrder(list, onChange) {
     onDragOver: (e) => {
       e.preventDefault();
       const r = e.currentTarget.getBoundingClientRect();
-      setOver({ i, after: e.clientX > r.left + r.width / 2 });
+      setOver({ i, after: vertical ? e.clientY > r.top + r.height / 2 : e.clientX > r.left + r.width / 2 });
     },
     onDrop: (e) => {
       e.preventDefault();
@@ -245,6 +239,55 @@ export function useDragOrder(list, onChange) {
   const cls = (i) =>
     [drag === i ? 'dragging' : '', over && over.i === i && drag !== i ? (over.after ? 'drop-after' : 'drop-before') : ''].join(' ');
   return { props, cls };
+}
+
+// The pages a remote swipes through, as a list down the page: the pages it
+// shows, numbered in order (drag a row's grip, or use the arrows, to move
+// it), then the ones switched off. Status is always on.
+// `selected`/`onSelect` (the room editor): a row also picks which page's
+// settings show beside it.
+export function CarouselList({ carousel, onChange, room, roomSlug, selected, onSelect, footer }) {
+  const { props, cls } = useDragOrder(carousel, onChange, { vertical: true });
+  const setOn = (i, on) => {
+    const item = { ...carousel[i], enabled: on };
+    const rest = carousel.filter((_, j) => j !== i);
+    // Switched on: it joins the end of the pages shown.
+    const at = on ? rest.reduce((n, c, j) => (c.enabled ? j + 1 : n), 0) : i;
+    onChange([...rest.slice(0, at), item, ...rest.slice(at)]);
+  };
+  const shown = carousel.map((c, i) => ({ c, i })).filter((x) => x.c.enabled);
+  const off = carousel.map((c, i) => ({ c, i })).filter((x) => !x.c.enabled);
+  const row = ({ c, i }, n) => {
+    const meta = PAGE_META[c.page] || { label: c.page, icon: 'card-outline' };
+    const s = pageSummary(c.page, room);
+    const locked = c.page === 'status';
+    const pos = shown.findIndex((x) => x.i === i);
+    return html`<div class=${`pl-row ${c.enabled ? '' : 'off'} ${selected === c.page ? 'selected' : ''} ${onSelect ? 'selectable' : ''} ${cls(i)}`} key=${c.page}
+      ...${c.enabled ? props(i) : {}} onClick=${onSelect ? () => onSelect(c.page) : undefined}>
+      <span class="pl-grip" title=${c.enabled ? 'Drag to move' : ''}><${Icon} name=${c.enabled ? 'drag-vertical' : 'minus'} size=${16} /></span>
+      <span class="pl-num">${c.enabled ? n : ''}</span>
+      <span class="pl-icon"><${Icon} name=${meta.icon} size=${18} /></span>
+      <span class="pl-text"><b>${meta.label}</b>
+        <span class=${`pl-sub ${!s.ok && c.enabled ? 'pl-warn' : ''}`}>${!s.ok && c.enabled && html`<${Icon} name="alert-outline" size=${13} />`}${s.text}</span>
+      </span>
+      <span class="pl-tools" onClick=${(e) => e.stopPropagation()}>
+        ${c.enabled && html`
+          <${Button} kind="ghost" small icon="chevron-up" title="Move up" disabled=${pos === 0} onClick=${() => onChange(moveItem(carousel, i, shown[pos - 1].i))} />
+          <${Button} kind="ghost" small icon="chevron-down" title="Move down" disabled=${pos === shown.length - 1} onClick=${() => onChange(moveItem(carousel, i, shown[pos + 1].i))} />`}
+        ${locked
+          ? html`<span class="pl-lock" title="The status page is always shown"><${Icon} name="lock-outline" size=${16} /></span>`
+          : html`<${Toggle} checked=${c.enabled} onChange=${(v) => setOn(i, v)} />`}
+      </span>
+    </div>`;
+  };
+  return html`<div class="page-list">
+    ${shown.map((x, k) => row(x, k + 1))}
+    ${off.length > 0 && html`<div class="pl-group">Off <span class="hint">· switch one on to add it to the end</span></div>`}
+    ${off.map((x) => row(x))}
+    ${roomSlug && !onSelect && shown.some(({ c }) => !pageSummary(c.page, room).ok) &&
+    html`<p class="hint pl-note"><${Icon} name="alert-outline" size=${14} /> Set up what's missing in <a href=${`#/remote-layouts/${encodeURIComponent(roomSlug)}`}>the room's layout</a>.</p>`}
+    ${footer}
+  </div>`;
 }
 
 // The Refresh card's "on the clock" switch (room editor and a customised remote).
@@ -268,58 +311,6 @@ export function ClockAlign({ checked, minutes, onChange }) {
       ? `Refreshes at ${MARKS[minutes] || 'the marks'} (server time), not ${minutes} minutes after the remote last slept. Each remote is 7 seconds later than the one before, so they don't all ask the server at once.`
       : `Each remote refreshes ${minutes} minutes after it last went to sleep.`}</p>
   </div>`;
-}
-
-// `selected`/`onSelect` (the room editor): the cards double as a picker for
-// which page's settings show below, and `extras` adds cards after the pages
-// for settings that aren't a page ({id, label, icon, sub}).
-export function CarouselBuilder({ carousel, onChange, room, roomSlug, selected, onSelect, extras = [], subtitle }) {
-  const { props, cls } = useDragOrder(carousel, onChange);
-  const stop = (e) => e.stopPropagation();
-  let num = 0;
-  return html`<${Card} icon="view-carousel-outline" title="Carousel"
-    subtitle=${subtitle || 'The pages this remote swipes through, left to right. Drag to reorder; switch pages off to skip them.'}>
-    <div class=${`carousel ${onSelect ? 'carousel-strip' : ''}`}>
-      ${carousel.map((c, i) => {
-        const meta = PAGE_META[c.page] || { label: c.page, icon: 'card-outline' };
-        const s = pageSummary(c.page, room);
-        const locked = c.page === 'status';
-        if (c.enabled) num += 1;
-        return html`<div class=${`page-card ${c.enabled ? '' : 'off'} ${selected === c.page ? 'selected' : ''} ${onSelect ? 'selectable' : ''} ${cls(i)}`} key=${c.page} ...${props(i)}
-          onClick=${onSelect ? () => onSelect(c.page) : undefined}>
-          <div class="pc-top" onClick=${stop}>
-            <span class="pc-num">${c.enabled ? num : '–'}</span>
-            <span class="spacer"></span>
-            ${locked
-              ? html`<span title="The status page is always shown"><${Icon} name="lock-outline" size=${18} /></span>`
-              : html`<${Toggle} checked=${c.enabled} onChange=${(v) => onChange(carousel.map((x, j) => (j === i ? { ...x, enabled: v } : x)))} />`}
-          </div>
-          <div class="pc-screen"><${Icon} name=${meta.icon} size=${40} /></div>
-          <div class="pc-title">${meta.label}</div>
-          <div class="pc-sub">
-            ${!s.ok && c.enabled
-              ? onSelect
-                ? html`<span class="badge badge-warn"><${Icon} name="alert-outline" size=${13} />${s.text}</span>`
-                : html`<a href=${`#/remote-layouts/${encodeURIComponent(roomSlug)}`} class="badge badge-warn"><${Icon} name="alert-outline" size=${13} />${s.text}</a>`
-              : s.text}
-          </div>
-          <div class="pc-move" onClick=${stop}>
-            <${Button} kind="ghost" small icon="chevron-left" title="Move left" disabled=${i === 0} onClick=${() => onChange(moveItem(carousel, i, i - 1))} />
-            <${Button} kind="ghost" small icon="chevron-right" title="Move right" disabled=${i === carousel.length - 1} onClick=${() => onChange(moveItem(carousel, i, i + 1))} />
-          </div>
-        </div>`;
-      })}
-      ${extras.length > 0 && html`<div class="carousel-divider"></div>`}
-      ${extras.map(
-        (x) => html`<div class=${`page-card extra selectable ${selected === x.id ? 'selected' : ''}`} key=${x.id} onClick=${() => onSelect && onSelect(x.id)}>
-          <div class="pc-top"><span class="pc-num"><${Icon} name="cog-outline" size=${14} /></span></div>
-          <div class="pc-screen"><${Icon} name=${x.icon} size=${40} /></div>
-          <div class="pc-title">${x.label}</div>
-          <div class="pc-sub">${x.sub || ''}</div>
-        </div>`
-      )}
-    </div>
-  <//>`;
 }
 
 // --- Remote: Quick Access hub ------------------------------------------------------------
@@ -511,7 +502,9 @@ function ClientEditor({ client, rooms, dashboards, reloadClients, reloadDashboar
               <${Card} icon="cog-outline" title="Settings on the remote">
                 <${DeveloperMenu} checked=${draft.layout.developerMenu !== false} onChange=${(v) => setLayout('developerMenu', v)} />
               <//>
-              <${CarouselBuilder} carousel=${draft.layout.carousel} onChange=${(c) => setLayout('carousel', c)} room=${room} roomSlug=${draft.room} />
+              <${Card} icon="view-carousel-outline" title="Pages" subtitle="The pages this remote swipes through, in order. Drag to reorder; switch pages off to skip them." class="card-flush">
+                <${CarouselList} carousel=${draft.layout.carousel} onChange=${(c) => setLayout('carousel', c)} room=${room} roomSlug=${draft.room} />
+              <//>
               <${HubBuilder} hub=${draft.layout.hub} onChange=${(h) => setLayout('hub', h)} />`}`
         : html`<div class="grid">
             <${Card} icon="view-dashboard-outline" title="Layout" subtitle="The UI this display shows. Viewport layouts live on the Layouts page and can be built before any display is paired.">

@@ -1,9 +1,15 @@
-// Settings -> Updates: over-the-air firmware (lib/firmware.js). Off
+// Settings -> Firmware updates: over-the-air firmware (lib/firmware.js). Off
 // until switched on. Every build is for one board (a kind of device), and
 // each board has its own release: it goes to that board's pilots first, and
 // to everyone only when promoted here.
+//
+//   Releases  each board's release and how far it has got
+//   Devices   every device's firmware, and which are pilots
+//   Rules     when devices update, and the safety checks
+//   Builds    the firmware this server holds; upload one
+//   Sources   (a popup) the GitHub repositories releases come from
 
-import { html, useState, useEffect, api, Icon, Card, Field, Select, Toggle, Button, Badge, useFlash, useApi, timeAgo, boardLabel } from './lib.js';
+import { html, useState, useEffect, api, Icon, Card, Field, Select, Toggle, Button, Badge, Modal, useFlash, useApi, timeAgo, boardLabel } from './lib.js';
 
 const STATE = {
   current: { kind: 'ok', icon: 'check-circle-outline', label: 'Up to date' },
@@ -15,7 +21,8 @@ const STATE = {
 };
 const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, '0')}:00` }));
 
-function Builds({ data, reload, flash }) {
+// The GitHub repositories releases come from, and adding one release.
+function Sources({ data, reload, flash, onClose, getLatest, busy: latestBusy }) {
   const [busy, setBusy] = useState('');
   const [releases, setReleases] = useState(null);
   const [tag, setTag] = useState('');
@@ -23,6 +30,7 @@ function Builds({ data, reload, flash }) {
   const repos = s.repos || [];
   const [repo, setRepo] = useState(repos[0] || '');
   const [newRepo, setNewRepo] = useState('');
+  const [note, setNote] = useState('');
   const pickRepo = (r) => {
     setRepo(r);
     setReleases(null);
@@ -34,43 +42,27 @@ function Builds({ data, reload, flash }) {
       if (done) done();
       reload();
     } catch (e) {
-      flash(e.message, 8000);
+      setNote(e.message);
     }
   };
   const addRepo = () =>
     saveRepos([...repos, newRepo], () => {
       setNewRepo('');
-      flash(`Added ${newRepo.trim().replace(/^https?:\/\/(www\.)?github\.com\//i, '').replace(/\.git$/i, '')}`);
+      setNote(`Added ${newRepo.trim().replace(/^https?:\/\/(www\.)?github\.com\//i, '').replace(/\.git$/i, '')}`);
     });
   const removeRepo = (r) => {
     if (!confirm(`Remove ${r} from the list? Builds already added from it stay.`)) return;
     saveRepos(repos.filter((x) => x !== r), () => r === repo && pickRepo(repos.find((x) => x !== r) || ''));
   };
   const makeFirst = (r) => saveRepos([r, ...repos.filter((x) => x !== r)]);
-
-  const upload = async (file) => {
-    if (!file) return;
-    setBusy('upload');
-    try {
-      const res = await fetch('/api/firmware/upload', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
-      flash(`Added ${j.build.version} for ${boardLabel(j.build.board)}`);
-      reload();
-    } catch (e) {
-      flash(`Upload failed: ${e.message}`, 8000);
-    } finally {
-      setBusy('');
-    }
-  };
-  const listReleases = async () => {
+  const listReleases = async (r = repo) => {
     setBusy('list');
     try {
-      const r = await api(`/api/firmware/releases?repo=${encodeURIComponent(repo)}`);
-      setReleases(r.releases);
-      setTag((r.releases[0] && r.releases[0].tag) || '');
+      const res = await api(`/api/firmware/releases?repo=${encodeURIComponent(r)}`);
+      setReleases(res.releases);
+      setTag((res.releases[0] && res.releases[0].tag) || '');
     } catch (e) {
-      flash(`GitHub: ${e.message}`, 8000);
+      setNote(`GitHub: ${e.message}`);
     } finally {
       setBusy('');
     }
@@ -81,10 +73,65 @@ function Builds({ data, reload, flash }) {
       const r = await api('/api/firmware/import', { method: 'POST', body: { repo, tag } });
       flash(`Added ${tag} from ${repo} for ${r.builds.map((b) => boardLabel(b.board)).join(', ')}`);
       reload();
+      onClose();
     } catch (e) {
-      flash(`Import failed: ${e.message}`, 8000);
+      setNote(`Couldn't add it: ${e.message}`);
     } finally {
       setBusy('');
+    }
+  };
+  return html`<${Modal} title="Firmware sources" icon="source-repository" onClose=${onClose} wide
+    footer=${html`<span class="hint" style="margin-right:auto">GitHub is only contacted when you press a button here.</span>
+      <${Button} icon="github" disabled=${Boolean(latestBusy) || !repos.length} onClick=${getLatest}>${latestBusy ? 'Checking…' : 'Get latest releases'}<//>
+      <${Button} kind="primary" onClick=${onClose}>Done<//>`}>
+    <p class="hint">Repositories whose releases this server can add: the Switchboard firmware, your own fork, or another kind of device's. A release carries <code>${'switchboard-<board>-app-<version>.bin'}</code> and its <code>.sha256</code> for each board (the firmware's release workflow publishes them). <b>Get latest releases</b> checks them all, top first.</p>
+    <div class="list-box">
+      ${repos.map(
+        (r, i) => html`<div class="list-row">
+          <${Icon} name="github" size=${18} />
+          <a href=${`https://github.com/${r}/releases`} target="_blank" rel="noopener"><code>${r}</code></a>
+          ${i === 0 && repos.length > 1 && html`<${Badge}>Checked first<//>`}
+          <span class="pagebar-sp"></span>
+          <${Button} kind="ghost" small icon="tag-search-outline" title="Pick a release from it" onClick=${() => { pickRepo(r); listReleases(r); }}>Pick a release…<//>
+          ${i > 0 && html`<${Button} kind="ghost" small icon="arrow-up" title="Check it first" onClick=${() => makeFirst(r)} />`}
+          <${Button} kind="ghost" small icon="close" title="Remove" onClick=${() => removeRepo(r)} />
+        </div>`
+      )}
+      ${!repos.length && html`<p class="hint" style="padding:10px 12px">None: builds can only be uploaded.</p>`}
+      <form class="list-row list-row-add" onSubmit=${(e) => { e.preventDefault(); if (newRepo.trim()) addRepo(); }}>
+        <input type="text" value=${newRepo} placeholder="owner/name or https://github.com/owner/name" onInput=${(e) => setNewRepo(e.target.value)} />
+        <${Button} type="submit" icon="plus" disabled=${!newRepo.trim()}>Add repository<//>
+      </form>
+    </div>
+    ${busy === 'list' && html`<p class="hint">Asking GitHub for ${repo}'s releases…</p>`}
+    ${releases &&
+    html`<${Field} label=${`A release from ${repo}`} hint="Each of its app images is checked against its published checksum, and the board and version inside it.">
+      <div class="row" style="align-items:center">
+        <div style="flex:1"><${Select} value=${tag} onChange=${setTag}
+          options=${releases.length ? releases.map((r) => ({ value: r.tag, label: `${r.tag}${r.prerelease ? ' (pre-release)' : ''} · ${r.boards.map(boardLabel).join(', ')} · ${new Date(r.date).toLocaleDateString()}` })) : [{ value: '', label: 'No releases with an app image yet' }]} /></div>
+        <${Button} kind="primary" icon="download" disabled=${!tag || Boolean(busy)} onClick=${importTag}>${busy === 'import' ? 'Adding…' : 'Add this release'}<//>
+      </div>
+    <//>`}
+    ${note && html`<p class=${`hint ${/GitHub|Couldn|fail|invalid|not/i.test(note) ? 'text-bad' : ''}`}>${note}</p>`}
+  <//>`;
+}
+
+function BuildsCard({ data, reload, flash }) {
+  const [busy, setBusy] = useState(false);
+  const s = data.settings;
+  const upload = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/firmware/upload', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      flash(`Added ${j.build.version} for ${boardLabel(j.build.board)}`);
+      reload();
+    } catch (e) {
+      flash(`Upload failed: ${e.message}`, 8000);
+    } finally {
+      setBusy(false);
     }
   };
   const remove = async (b) => {
@@ -96,47 +143,11 @@ function Builds({ data, reload, flash }) {
       flash(e.message, 6000);
     }
   };
-
   const releaseOf = (board) => ((s.boards || {})[board] || {}).release;
-  return html`<${Card} icon="package-variant-closed" title="Builds" subtitle="Firmware this server can send. Only Switchboard app images for ESP32 chips are accepted; the board and version come from the image itself.">
-    <${Field} label="GitHub repositories" hint="Firmware repositories whose releases can be added below: the Switchboard firmware, your own fork, or the repository of another kind of device. A release carries switchboard-<board>-app-<version>.bin and its .sha256 for each board it builds (the firmware's release workflow publishes them). “Get latest release” checks every repository. GitHub is only contacted when you press a button here.">
-      <div class="repo-list">
-        ${repos.map(
-          (r, i) => html`<div class="repo-row">
-            <${Icon} name="github" size=${18} />
-            <a href=${`https://github.com/${r}/releases`} target="_blank" rel="noopener"><code>${r}</code></a>
-            ${i > 0 && html`<${Button} kind="ghost" small icon="arrow-up" title="Move to the top" onClick=${() => makeFirst(r)} />`}
-            <span class="spacer"></span>
-            <${Button} kind="ghost" small icon="close" title="Remove" onClick=${() => removeRepo(r)} />
-          </div>`
-        )}
-        ${!repos.length && html`<p class="hint">None: builds can only be uploaded.</p>`}
-        <form class="row" style="align-items:center" onSubmit=${(e) => { e.preventDefault(); if (newRepo.trim()) addRepo(); }}>
-          <div style="flex:1"><input type="text" value=${newRepo} placeholder="owner/name or https://github.com/owner/name" onInput=${(e) => setNewRepo(e.target.value)} /></div>
-          <${Button} type="submit" icon="plus" disabled=${!newRepo.trim()}>Add repository<//>
-        </form>
-      </div>
-    <//>
-    <div class="row" style="align-items:flex-end">
-      <${Field} label="Add a release" hint="Each of the release's app images is checked against its published checksum, and the board and version inside it.">
-        ${repos.length > 1 &&
-        html`<div style="margin-bottom:8px"><${Select} value=${repo} onChange=${pickRepo} options=${repos.map((r) => ({ value: r, label: r }))} /></div>`}
-        ${!repos.length
-          ? html`<span class="hint">Add a repository first.</span>`
-          : releases
-          ? html`<div class="row" style="align-items:center">
-              <div style="flex:1"><${Select} value=${tag} onChange=${setTag}
-                options=${releases.length ? releases.map((r) => ({ value: r.tag, label: `${r.tag}${r.prerelease ? ' (pre-release)' : ''} · ${r.boards.map(boardLabel).join(', ')} · ${new Date(r.date).toLocaleDateString()}` })) : [{ value: '', label: 'No releases with an app image yet' }]} /></div>
-              <${Button} icon="download" disabled=${!tag || busy} onClick=${importTag}>${busy === 'import' ? 'Adding…' : 'Add'}<//>
-            </div>`
-          : html`<${Button} icon="github" disabled=${Boolean(busy)} onClick=${listReleases}>${busy === 'list' ? 'Looking…' : 'Show releases'}<//>`}
-      <//>
-      <${Field} label="Or upload a file" hint="switchboard-<board>-app-<version>.bin (not the full flasher image)">
-        <label class="btn"><${Icon} name="upload" size=${18} /><span>${busy === 'upload' ? 'Uploading…' : 'Upload .bin'}</span>
-          <input type="file" accept=".bin" style="display:none" disabled=${Boolean(busy)} onChange=${(e) => upload(e.target.files[0])} />
-        </label>
-      <//>
-    </div>
+  return html`<${Card} title="Builds" subtitle="Firmware this server can send. Only Switchboard app images for ESP32 chips are accepted; the board and version come from the image itself." class="card-flush"
+    actions=${html`<label class="btn btn-small" title="switchboard-<board>-app-<version>.bin (not the full flasher image)"><${Icon} name="upload" size=${16} /><span>${busy ? 'Uploading…' : 'Upload .bin'}</span>
+      <input type="file" accept=".bin" style="display:none" disabled=${busy} onChange=${(e) => upload(e.target.files[0])} />
+    </label>`}>
     ${data.builds.length
       ? html`<div class="table-wrap"><table class="table">
           <thead><tr><th>Board</th><th>Version</th><th>Size</th><th>Added</th><th>From</th><th>SHA-256</th><th></th></tr></thead>
@@ -145,42 +156,49 @@ function Builds({ data, reload, flash }) {
               <td>${boardLabel(b.board)}${b.chip ? html` <span class="hint">${b.chip}</span>` : ''}</td>
               <td><code>${b.version}</code> ${releaseOf(b.board) === b.version && html`<${Badge} kind="accent" icon="star-outline">Release<//>`}</td>
               <td>${(b.size / 1048576).toFixed(2)} MB</td>
-              <td>${timeAgo(b.addedAt)}</td>
+              <td class="hint">${timeAgo(b.addedAt)}</td>
               <td class="hint">${b.source}</td>
               <td><code title=${b.sha256}>${b.sha256.slice(0, 12)}…</code></td>
               <td>${releaseOf(b.board) !== b.version && html`<${Button} kind="ghost" small icon="trash-can-outline" title="Delete" onClick=${() => remove(b)} />`}</td>
             </tr>`
           )}</tbody>
         </table></div>`
-      : html`<p class="hint">No builds yet.</p>`}
+      : html`<p class="hint" style="padding:14px 16px">No builds yet. Get the latest releases, pick one in <b>Sources</b>, or upload a file.</p>`}
   <//>`;
 }
 
-// One board's release: which build, and how far it has gone.
+// One board's release: which build, how far it has gone, and the next step.
 function BoardRelease({ board, data, put }) {
   const bs = (data.settings.boards || {})[board] || { release: '', stage: 'pilot' };
   const builds = data.builds.filter((b) => b.board === board);
   const devices = data.remotes.filter((r) => r.board === board);
   const pilots = devices.filter((r) => r.pilot).length;
+  const done = devices.filter((r) => r.state === 'current').length;
   const pilotOnly = bs.stage !== 'everyone';
+  const newest = builds[0] && builds[0].version;
   return html`<tr>
-    <td><b>${boardLabel(board)}</b>${boardLabel(board) !== board ? html` <span class="hint">${board}</span>` : ''}<div class="hint">${devices.length} device${devices.length === 1 ? '' : 's'}</div></td>
-    <td style="min-width:160px"><${Select} value=${bs.release || ''} onChange=${(v) => put({ board, release: v })}
+    <td><b>${boardLabel(board)}</b>${boardLabel(board) !== board ? html` <span class="hint">${board}</span>` : ''}</td>
+    <td style="min-width:150px"><${Select} value=${bs.release || ''} onChange=${(v) => put({ board, release: v })}
       options=${[{ value: '', label: builds.length ? 'None' : 'No builds yet' }, ...builds.map((b) => ({ value: b.version, label: b.version }))]} /></td>
-    <td>${!bs.release
-      ? html`<span class="hint">—</span>`
+    <td>${!bs.release ? html`<span class="hint">—</span>` : pilotOnly ? html`<${Badge} kind="accent" icon="account-hard-hat-outline">Pilots (${pilots})<//>` : html`<${Badge} kind="ok" icon="account-group-outline">Everyone<//>`}</td>
+    <td style="min-width:150px">${bs.release
+      ? html`<div class="progress-cell"><span class="meter"><i style=${{ width: `${devices.length ? Math.max(3, (done / devices.length) * 100) : 0}%`, background: done === devices.length ? 'var(--ok)' : 'var(--accent)' }}></i></span><span class="hint">${done} of ${devices.length}</span></div>`
+      : html`<span class="hint">${devices.length} device${devices.length === 1 ? '' : 's'}</span>`}</td>
+    <td class="td-actions">${!bs.release
+      ? newest && html`<${Button} small onClick=${() => put({ board, release: newest })}>Send ${newest} to pilots<//>`
       : pilotOnly
-        ? html`<div class="row" style="align-items:center"><${Badge} kind="warn" icon="account-hard-hat-outline">Pilots only (${pilots})<//>
-            <${Button} small icon="account-group-outline" onClick=${() => confirm(`Send ${bs.release} to every ${boardLabel(board)}?`) && put({ board, stage: 'everyone' })}>Release to everyone<//></div>`
-        : html`<div class="row" style="align-items:center"><${Badge} kind="accent" icon="account-group-outline">Everyone<//>
-            <${Button} small kind="ghost" icon="undo" onClick=${() => put({ board, stage: 'pilot' })}>Back to pilots<//></div>`}</td>
+        ? html`<${Button} small kind="primary" icon="account-group-outline" onClick=${() => confirm(`Send ${bs.release} to every ${boardLabel(board)}?`) && put({ board, stage: 'everyone' })}>Release to everyone<//>`
+        : html`${newest && newest !== bs.release && html`<${Button} small onClick=${() => put({ board, release: newest })}>Send ${newest} to pilots<//>`}
+            <${Button} small kind="ghost" icon="undo" onClick=${() => put({ board, stage: 'pilot' })}>Back to pilots<//>`}</td>
   </tr>`;
 }
 
-export function RemoteUpdatesTab() {
+export function RemoteUpdatesTab({ head }) {
   const [data, , reload] = useApi('/api/firmware');
   const [msg, flash] = useFlash();
-  if (!data) return html`<p class="hint">Loading…</p>`;
+  const [sources, setSources] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!data) return html`${head()}<p class="hint">Loading…</p>`;
   const s = data.settings;
   const put = async (body) => {
     try {
@@ -190,41 +208,46 @@ export function RemoteUpdatesTab() {
       flash(e.message, 6000);
     }
   };
+  const getLatest = async () => {
+    setBusy(true);
+    try {
+      const r = await api('/api/firmware/latest', { method: 'POST' });
+      flash(r.results
+        .map((x) => (x.error ? `${x.repo}: ${x.error}` : x.added ? `Added ${x.version} (${x.boards.map(boardLabel).join(', ')})` : `${x.repo}: ${x.version} is the newest; already here`))
+        .join(' · '), 10000);
+      reload();
+    } catch (e) {
+      flash(e.message, 8000);
+    } finally {
+      setBusy(false);
+    }
+  };
   const pilots = new Set(s.pilot);
   const togglePilot = (mac, on) => put({ pilot: on ? [...pilots, mac] : [...pilots].filter((m) => m !== mac) });
   const counts = data.remotes.reduce((a, r) => ({ ...a, [r.state]: (a[r.state] || 0) + 1 }), {});
   const boards = data.boards.length ? data.boards : [data.legacyBoard];
   const manyBoards = boards.length > 1;
+  const repos = s.repos || [];
 
-  return html`<div class="stack">
-    ${msg && html`<div class=${`flash ${/fail|error|GitHub|No such/i.test(msg) ? 'flash-bad' : ''}`}>${msg}</div>`}
-    <${Card} icon="update" title="Updates" subtitle="Send new firmware to remotes and displays over Wi-Fi. Off until you switch it on."
-      actions=${html`<${Toggle} checked=${s.enabled} onChange=${(v) => put({ enabled: v })} />`}>
-      <${Field} label="Releases" hint="Each board (a kind of device) runs its own release. Choosing an older build rolls its devices back to it. A new release goes to that board's pilots first; once they've updated and still work, release it to everyone.">
-        <div class="table-wrap"><table class="table">
-          <thead><tr><th>Board</th><th>Release</th><th>Rollout</th></tr></thead>
-          <tbody>${boards.map((b) => html`<${BoardRelease} key=${b} board=${b} data=${data} put=${put} />`)}</tbody>
-        </table></div>
-      <//>
-      <p class="hint">Each device checks the download's SHA-256 and needs at least ${s.minBattery}% battery. If new firmware can't reach this server on its first run, the device goes back to the version it had.</p>
-      <div class="row">
-        <${Toggle} checked=${s.button} onChange=${(v) => put({ button: v })} label="Remotes can update from Settings → Firmware update" />
-      </div>
-      <div class="row" style="align-items:center">
-        <${Toggle} checked=${s.schedule.enabled} onChange=${(v) => put({ schedule: { ...s.schedule, enabled: v } })} label="Update on a schedule, between" />
-        <div style="width:110px"><${Select} value=${String(s.schedule.fromHour)} onChange=${(v) => put({ schedule: { ...s.schedule, fromHour: Number(v) } })} options=${HOURS} /></div>
-        <span class="hint">and</span>
-        <div style="width:110px"><${Select} value=${String(s.schedule.toHour)} onChange=${(v) => put({ schedule: { ...s.schedule, toHour: Number(v) } })} options=${HOURS} /></div>
-        <span class="hint">(server time, on a device's timer wake)</span>
-      </div>
-      <div class="row" style="align-items:center">
-        <span class="hint">Minimum battery</span>
-        <div style="width:110px"><${Select} value=${String(s.minBattery)} onChange=${(v) => put({ minBattery: Number(v) })}
-          options=${[20, 30, 40, 50, 60].map((n) => ({ value: String(n), label: `${n}%` }))} /></div>
-      </div>
+  return html`
+    ${head(html`
+      <${Toggle} checked=${s.enabled} onChange=${(v) => put({ enabled: v })} label=${s.enabled ? 'Updates on' : 'Updates off'} />
+      <span class="vsep"></span>
+      <${Button} icon="source-repository" onClick=${() => setSources(true)}>Sources${repos.length ? ` (${repos.length})` : ''}<//>
+      <${Button} kind="primary" icon="github" disabled=${busy || !repos.length} onClick=${getLatest}>${busy ? 'Checking…' : 'Get latest releases'}<//>`)}
+    <div class="stack">
+    ${msg && html`<div class=${`banner-inline ${/fail|error|GitHub|No such|limiting|took/i.test(msg) ? 'banner-bad' : 'banner-ok'}`}><${Icon} name="information-outline" size=${16} /><span>${msg}</span></div>`}
+    ${!s.enabled && html`<div class="banner-inline"><${Icon} name="power-plug-off-outline" size=${16} /><span>Updates are off: devices only change firmware by USB or the web flasher. Switch them on above to send releases over Wi-Fi.</span></div>`}
+
+    <${Card} title="Releases" subtitle="Each board (a kind of device) runs its own release. A new one goes to that board's pilots first; once they've updated and still work, release it to everyone. Choosing an older build rolls its devices back to it." class="card-flush">
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Board</th><th>Release</th><th>Stage</th><th>Updated</th><th></th></tr></thead>
+        <tbody>${boards.map((b) => html`<${BoardRelease} key=${b} board=${b} data=${data} put=${put} />`)}</tbody>
+      </table></div>
     <//>
 
-    <${Card} icon="remote" title="Devices" subtitle="Tick the pilots: they get each release for their board first."
+    <div class="settings-cols">
+    <${Card} title="Devices" subtitle="Tick the pilots: they get each release for their board first." class="card-flush"
       actions=${html`${counts.failed > 0 && html`<${Badge} kind="bad">${counts.failed} failed<//>`}${counts.pending > 0 && html`<${Badge} kind="accent">${counts.pending} to update<//>`}`}>
       ${data.remotes.length
         ? html`<div class="table-wrap"><table class="table">
@@ -243,12 +266,36 @@ export function RemoteUpdatesTab() {
               </tr>`;
             })}</tbody>
           </table></div>`
-        : html`<p class="hint">No approved devices with a board yet.</p>`}
-      <p class="hint">A device's board is what its firmware says (older remotes are X4 Pros). Remotes on firmware from before updates existed have to be flashed by USB (or the web flasher) once.</p>
+        : html`<p class="hint" style="padding:14px 16px">No approved devices with a board yet.</p>`}
+      <div class="table-foot">A device's board is what its firmware says (older remotes are X4 Pros). Remotes on firmware from before updates existed have to be flashed by USB once.</div>
     <//>
 
-    <${Builds} data=${data} reload=${reload} flash=${flash} />
-  </div>`;
+    <${Card} title="Rules" subtitle="When devices install a release.">
+      <${Field} label="When">
+        <${Toggle} checked=${s.schedule.enabled} onChange=${(v) => put({ schedule: { ...s.schedule, enabled: v } })} label="On a schedule" />
+        <div class="row" style="align-items:center;margin-top:6px">
+          <div style="width:100px"><${Select} disabled=${!s.schedule.enabled} value=${String(s.schedule.fromHour)} onChange=${(v) => put({ schedule: { ...s.schedule, fromHour: Number(v) } })} options=${HOURS} /></div>
+          <span class="hint">to</span>
+          <div style="width:100px"><${Select} disabled=${!s.schedule.enabled} value=${String(s.schedule.toHour)} onChange=${(v) => put({ schedule: { ...s.schedule, toHour: Number(v) } })} options=${HOURS} /></div>
+        </div>
+        <span class="hint">Server time, on a device's timer wake.</span>
+      <//>
+      <${Field} label="From the remote">
+        <${Toggle} checked=${s.button} onChange=${(v) => put({ button: v })} label="Settings → Firmware update on a remote installs it" />
+      <//>
+      <${Field} label="Minimum battery" hint="A device below this waits until it's charged.">
+        <div style="width:100px"><${Select} value=${String(s.minBattery)} onChange=${(v) => put({ minBattery: Number(v) })}
+          options=${[20, 30, 40, 50, 60].map((n) => ({ value: String(n), label: `${n}%` }))} /></div>
+      <//>
+      <${Field} label="Safety">
+        <p class="hint">Each device checks the download's SHA-256 and that it's for its board. If new firmware can't reach this server on its first run, the device goes back to the version it had.</p>
+      <//>
+    <//>
+    </div>
+
+    <${BuildsCard} data=${data} reload=${reload} flash=${flash} />
+    ${sources && html`<${Sources} data=${data} reload=${reload} flash=${flash} onClose=${() => setSources(false)} getLatest=${getLatest} busy=${busy} />`}
+    </div>`;
 }
 
 // The Remotes page's summary of over-the-air updates, with the next step as

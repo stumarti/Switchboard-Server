@@ -6,7 +6,7 @@
 //   WaitingDisplays    approve every display waiting to pair in one go, each
 //                      with its name and layout
 
-import { html, useState, useEffect, api, go, Icon, Card, Field, Select, Toggle, Button, Badge, useFlash } from './lib.js';
+import { html, useState, useEffect, api, go, Icon, Card, Field, Select, Toggle, Button, Badge, useFlash, Empty } from './lib.js';
 
 const EXAMPLE = `Boardroom, https://outlook.office365.com/owa/calendar/…/calendar.ics, a0:b1:c2:00:01:01
 Focus room, webcal://p01-caldav.icloud.com/published/2/…
@@ -29,8 +29,8 @@ const DISPLAY_TEXT = {
   revoked: 'revoked'
 };
 
-export function MeetingRoomsBulk({ reloadDashboards, reloadClients }) {
-  const [open, setOpen] = useState(false);
+export function MeetingRoomsBulk({ reloadDashboards, reloadClients, page }) {
+  const [open, setOpen] = useState(Boolean(page));
   const [text, setText] = useState('');
   const [rows, setRows] = useState([]);
   const [finder, setFinder] = useState(true);
@@ -76,7 +76,7 @@ export function MeetingRoomsBulk({ reloadDashboards, reloadClients }) {
   return html`<div style="grid-column:1/-1">
     <${Card} icon="table-large-plus" title="Add many meeting rooms"
       subtitle="One room per line: its name, its calendar (a calendar link or a Home Assistant calendar) and, if you like, an occupancy sensor and the display's MAC address. Paste columns straight from a spreadsheet."
-      actions=${html`<${Button} small kind="ghost" icon="close" title="Close" onClick=${() => { setOpen(false); setDone(null); }} />`}>
+      actions=${page ? null : html`<${Button} small kind="ghost" icon="close" title="Close" onClick=${() => { setOpen(false); setDone(null); }} />`}>
       <textarea class="bulk-text" rows="7" spellcheck="false" placeholder=${EXAMPLE} value=${text} onInput=${(e) => { setText(e.target.value); setDone(null); }} style="width:100%"></textarea>
       ${rows.length > 0 &&
       html`<div class="table-wrap"><table class="table">
@@ -112,12 +112,15 @@ export function MeetingRoomsBulk({ reloadDashboards, reloadClients }) {
   </div>`;
 }
 
-export function WaitingDisplays({ clients, dashboards, reloadClients }) {
+export function WaitingDisplays({ clients, dashboards, reloadClients, page }) {
   const waiting = (clients || []).filter((c) => c.status === 'pending' && c.lastSeenAt);
   const [rows, setRows] = useState({});
   const [busy, setBusy] = useState(false);
   const [msg, flash] = useFlash();
-  if (waiting.length < 2) return null;
+  if (page && !waiting.length) {
+    return html`<${Empty} icon="check-all" title="No displays waiting">Turn displays on: each asks to pair and is listed here, to name, give a layout and approve together.<//>`;
+  }
+  if (waiting.length < (page ? 1 : 2)) return null;
   const row = (c) => rows[c.mac] || { on: true, name: c.name === c.mac ? '' : c.name, dashboard: c.dashboard || '' };
   const set = (c, k, v) => setRows({ ...rows, [c.mac]: { ...row(c), [k]: v } });
   const chosen = waiting.filter((c) => row(c).on);
@@ -139,7 +142,7 @@ export function WaitingDisplays({ clients, dashboards, reloadClients }) {
   };
   const layouts = [{ value: '', label: 'No layout yet' }, ...(dashboards || []).map((d) => ({ value: d.slug, label: d.name }))];
   return html`<div style="grid-column:1/-1">
-    <${Card} icon="check-all" title=${`${waiting.length} displays waiting to pair`} subtitle="Approve them together. Each shows its address on its screen while it waits, so you can tell which is which.">
+    <${Card} icon="check-all" title=${`${waiting.length} display${waiting.length === 1 ? '' : 's'} waiting to pair`} subtitle="Approve them together. Each shows its address on its screen while it waits, so you can tell which is which.">
       <div class="table-wrap"><table class="table">
         <thead><tr><th></th><th>Address</th><th>Name</th><th>Layout</th></tr></thead>
         <tbody>

@@ -1,13 +1,15 @@
-// A viewport's dashboard builder.
+// A viewport layout's builder.
 //
-//   Carousel     how it moves between screens: stay put (buttons only), auto-
-//                advance, or return to the first screen, every N minutes
-//   Screens      the pages, as cards: drag to reorder, switch off, duplicate,
+//   Screens      the pages, as a list: drag to reorder, switch off, duplicate,
 //                add (a sections screen, a meeting room, or a room finder —
 //                the other rooms that are free)
-//   The screen   its template (sidebar | two | three columns | single) and, per
-//                column, its sections — any type, any order, each fully
-//                configured — with a live preview beside it
+//   Timing       between presses (stay, advance, back to the first), how
+//                often it refreshes, quiet hours and weekends
+//   The screen   its name, icon and template (sidebar | two | three columns |
+//                single) in one row above the live preview, then each
+//                column's sections as a list; a section opens in a drawer
+//   Parts        thresholds and colours, and starting from or importing a
+//                layout, are parts of their own (the side column's links)
 //
 // Everything here edits the layout lib/dashboard.js normalizes; the device
 // page (clients.js) saves it.
@@ -122,10 +124,10 @@ export const SECTION_META = {
 };
 
 const TEMPLATES = [
-  { value: 'sidebar', label: 'Sidebar + main', icon: 'page-layout-sidebar-left', columns: ['Sidebar', 'Main'] },
-  { value: 'columns', label: 'Two columns', icon: 'view-column-outline', columns: ['Left', 'Right'] },
-  { value: 'single', label: 'Single column', icon: 'view-agenda-outline', columns: ['Screen'] },
-  { value: 'triple', label: 'Three columns', icon: 'view-parallel-outline', columns: ['Left', 'Middle', 'Right'] }
+  { value: 'sidebar', label: 'Sidebar + main', short: 'Sidebar', icon: 'page-layout-sidebar-left', columns: ['Sidebar', 'Main'] },
+  { value: 'columns', label: 'Two columns', short: 'Two', icon: 'view-column-outline', columns: ['Left', 'Right'] },
+  { value: 'triple', label: 'Three columns', short: 'Three', icon: 'view-parallel-outline', columns: ['Left', 'Middle', 'Right'] },
+  { value: 'single', label: 'Single column', short: 'Single', icon: 'view-agenda-outline', columns: ['Screen'] }
 ];
 const GRID_COLUMNS = { sidebar: '1fr 1.6fr', columns: '1fr 1fr', single: '1fr', triple: '1fr 1fr 1fr' };
 
@@ -801,38 +803,56 @@ function ShowWhenEditor({ s, set }) {
 
 // --- A section, as a collapsible card ---------------------------------------------------------------
 
-function SectionCard({ s, set, remove, duplicate, move, moveColumn, columnLabels, colIndex, open, onToggle, ctx }) {
+// A section's settings, in the drawer beside the screen.
+function SectionDrawer({ s, set, onClose, ctx, actions }) {
   const meta = SECTION_META[s.type];
   const Editor = EDITORS[s.type];
-  return html`<section class=${`card section-card ${open ? 'open' : ''}`}>
-    <header class="card-head" onClick=${onToggle} style="cursor:pointer;padding-bottom:12px">
-      <div class="card-icon"><${Icon} name=${meta.icon} size=${20} /></div>
-      <div class="card-titles"><h2>${s.title || meta.label}${s.showWhen && s.showWhen.mode !== 'always' && html` <${Badge} kind="accent" icon="eye-outline">${s.showWhen.mode === 'playing' ? 'While playing' : 'Conditional'}<//>`}</h2><p class="hint">${s.title ? meta.label : meta.about}</p></div>
-      <div class="card-actions" onClick=${(e) => e.stopPropagation()}>
-        <${Button} kind="ghost" small icon="chevron-up" title="Move up" disabled=${!move.up} onClick=${move.up} />
-        <${Button} kind="ghost" small icon="chevron-down" title="Move down" disabled=${!move.down} onClick=${move.down} />
-        ${columnLabels.length > 1 &&
-        html`<${Button} kind="ghost" small icon=${colIndex < columnLabels.length - 1 ? 'arrow-right' : 'arrow-left'} title=${`Move to ${columnLabels[(colIndex + 1) % columnLabels.length]}`} onClick=${moveColumn} />`}
-        <${Button} kind="ghost" small icon="content-copy" title="Duplicate" onClick=${duplicate} />
-        <${Button} kind="ghost" small icon="trash-can-outline" title="Remove" onClick=${remove} />
-      </div>
-      <${Icon} name=${open ? 'chevron-up' : 'chevron-down'} size=${20} />
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && !e.target.closest('.modal') && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return html`<aside class="drawer" aria-label=${`${meta.label} settings`}>
+    <header class="drawer-head">
+      <span class="pl-icon"><${Icon} name=${meta.icon} size=${18} /></span>
+      <div class="card-titles"><h2>${s.title || meta.label}</h2><p class="hint">${meta.about}</p></div>
+      ${actions}
+      <${Button} kind="ghost" icon="close" title="Close (Esc)" onClick=${onClose} />
     </header>
-    ${open &&
-    html`<div class="card-body">
+    <div class="drawer-body">
       ${WAKE_ONLY[s.type] && !(s.showWhen && s.showWhen.mode !== 'always' && s.showWhen.liveMin) &&
       html`<p class="hint wake-note"><${Icon} name="battery-clock-outline" size=${16} /> ${WAKE_ONLY[s.type]} It updates when the display wakes (every ${ctx.refreshMin} min${s.type === 'transport' ? ', or sooner when a departure turns imminent' : ''}), never in between — battery comes first.</p>`}
       ${s.type !== 'spacer' && html`<${Field} label="Heading (optional)"><${TextInput} value=${s.title} placeholder=${meta.label} onInput=${(v) => set({ ...s, title: v })} /><//>`}
       <${Editor} s=${s} set=${set} ctx=${ctx} presets=${ctx.presets} />
       <${ShowWhenEditor} s=${s} set=${set} />
+    </div>
+  </aside>`;
+}
+
+// A small menu of a row's less common actions.
+function RowMenu({ items }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const off = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    document.addEventListener('mousedown', off);
+    return () => document.removeEventListener('mousedown', off);
+  }, [open]);
+  return html`<span class="row-menu" ref=${ref} onClick=${(e) => e.stopPropagation()}>
+    <${Button} kind="ghost" small icon="dots-horizontal" title="More" onClick=${() => setOpen(!open)} />
+    ${open && html`<div class="menu">
+      ${items.filter(Boolean).map((it) => html`<button type="button" class=${`menu-item ${it.danger ? 'menu-danger' : ''}`} disabled=${it.disabled} onClick=${() => { setOpen(false); it.onClick(); }}>
+        <${Icon} name=${it.icon} size=${16} />${it.label}
+      </button>`)}
     </div>`}
-  </section>`;
+  </span>`;
 }
 
 function AddSection({ onAdd }) {
   const [open, setOpen] = useState(false);
-  return html`<div>
-    <${Button} small icon=${open ? 'close' : 'plus'} onClick=${() => setOpen(!open)}>${open ? 'Close' : 'Add section'}<//>
+  return html`<div class="add-row">
+    <button type="button" class="add-link" onClick=${() => setOpen(!open)}><${Icon} name=${open ? 'close' : 'plus'} size=${16} />${open ? 'Close' : 'Add a section'}</button>
     ${open &&
     html`<div class="section-palette">
       ${Object.entries(SECTION_META).map(
@@ -840,7 +860,7 @@ function AddSection({ onAdd }) {
           onAdd(type);
           setOpen(false);
         }}>
-          <${Icon} name=${m.icon} size=${22} />
+          <${Icon} name=${m.icon} size=${20} />
           <span><b>${m.label}</b><br /><span class="hint">${m.about}</span></span>
         </button>`
       )}
@@ -850,59 +870,72 @@ function AddSection({ onAdd }) {
 
 // --- Screens --------------------------------------------------------------------------------------------
 
-function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId }) {
+// Each column's width on the 800-pixel panel, for its heading.
+const COLUMN_PX = { sidebar: [250, 550], columns: [400, 400], single: [800], triple: [267, 266, 267] };
+
+function sectionSummary(s) {
+  const n = (k) => (Array.isArray(s[k]) ? s[k].length : 0);
+  const count = n('items') || n('rooms') || n('entities') || n('people') || n('players') || n('departures') || n('sensors') || n('cameras') || n('zones');
+  return s.title ? SECTION_META[s.type].label : count ? `${count} item${count === 1 ? '' : 's'}` : SECTION_META[s.type].about;
+}
+
+function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId, useDragOrder }) {
   const tpl = TEMPLATES.find((t) => t.value === screen.template) || TEMPLATES[0];
   const setColumns = (columns) => setScreen({ ...screen, columns });
-  const setTemplate = (value) => {
-    const n = TEMPLATES.find((t) => t.value === value).columns.length;
-    const cols = screen.columns.slice(0, n);
-    while (cols.length < n) cols.push([]);
-    // Going down to one column keeps every section.
-    if (n < screen.columns.length) cols[n - 1] = [...cols[n - 1], ...screen.columns.slice(n).flat()];
-    setScreen({ ...screen, template: value, columns: cols });
-  };
-  return html`<div class="stack">
-    <div class="row" style="align-items:center">
-      <span class="hint">Arrangement</span>
-      <div class="chips">
-        ${TEMPLATES.map((t) => html`<button type="button" class=${`chip ${t.value === screen.template ? 'on' : ''}`} onClick=${() => setTemplate(t.value)}><${Icon} name=${t.icon} size=${16} />${t.label}</button>`)}
-      </div>
-    </div>
-    <div class="section-columns" style=${{ gridTemplateColumns: GRID_COLUMNS[screen.template] || '1fr' }}>
-      ${screen.columns.map((col, ci) => {
-        const setCol = (next) => setColumns(screen.columns.map((c, j) => (j === ci ? next : c)));
-        return html`<div class="stack">
-          <div class="sublist-group" style="padding-left:0">${tpl.columns[ci]}</div>
-          ${col.map((s, si) => html`<${SectionCard}
-            key=${s.id}
-            s=${s}
-            ctx=${ctx}
-            colIndex=${ci}
-            columnLabels=${tpl.columns}
-            open=${openId === s.id}
-            onToggle=${() => setOpenId(openId === s.id ? null : s.id)}
-            set=${(next) => setCol(col.map((x) => (x.id === s.id ? next : x)))}
-            remove=${() => confirm(`Remove “${s.title || SECTION_META[s.type].label}”?`) && setCol(col.filter((x) => x.id !== s.id))}
-            duplicate=${() => {
-              const copy = reId(s);
-              setCol([...col.slice(0, si + 1), copy, ...col.slice(si + 1)]);
-              setOpenId(copy.id);
-            }}
-            move=${{ up: si > 0 ? () => setCol(moveItem(col, si, si - 1)) : null, down: si < col.length - 1 ? () => setCol(moveItem(col, si, si + 1)) : null }}
-            moveColumn=${() => {
-              const other = (ci + 1) % screen.columns.length;
-              setColumns(screen.columns.map((c, j) => (j === ci ? c.filter((x) => x.id !== s.id) : j === other ? [...c, s] : c)));
-            }}
-          />`)}
-          ${col.length === 0 && html`<p class="hint">Nothing here yet.</p>`}
-          <${AddSection} onAdd=${(type) => {
-            const s = newSection(type);
-            setCol([...col, s]);
-            setOpenId(s.id);
-          }} />
-        </div>`;
-      })}
-    </div>
+  const px = COLUMN_PX[screen.template] || [];
+  let open = null;
+  screen.columns.forEach((col, ci) => col.forEach((x, si) => { if (x.id === openId) open = { s: x, ci, si }; }));
+  const setCol = (ci, next) => setColumns(screen.columns.map((c, j) => (j === ci ? next : c)));
+  const label = (x) => x.title || SECTION_META[x.type].label;
+  const moveTo = (ci, s, to) => setColumns(screen.columns.map((c, j) => (j === ci ? c.filter((x) => x.id !== s.id) : j === to ? [...c, s] : c)));
+  const menu = (ci, s, si, col) => [
+    { icon: 'chevron-up', label: 'Move up', disabled: si === 0, onClick: () => setCol(ci, moveItem(col, si, si - 1)) },
+    { icon: 'chevron-down', label: 'Move down', disabled: si === col.length - 1, onClick: () => setCol(ci, moveItem(col, si, si + 1)) },
+    ...tpl.columns.map((name, to) => to !== ci && { icon: to > ci ? 'arrow-right' : 'arrow-left', label: `Move to ${name}`, onClick: () => moveTo(ci, s, to) }),
+    { icon: 'content-copy', label: 'Duplicate', onClick: () => {
+      const copy = reId(s);
+      setCol(ci, [...col.slice(0, si + 1), copy, ...col.slice(si + 1)]);
+      setOpenId(copy.id);
+    } },
+    { icon: 'trash-can-outline', label: 'Remove', danger: true, onClick: () => {
+      if (!confirm(`Remove “${label(s)}”?`)) return;
+      setCol(ci, col.filter((x) => x.id !== s.id));
+      if (openId === s.id) setOpenId(null);
+    } }
+  ];
+  return html`<div class="section-columns" style=${{ gridTemplateColumns: GRID_COLUMNS[screen.template] || '1fr' }}>
+    ${screen.columns.map((col, ci) => html`<${SectionColumn} key=${ci} col=${col} ci=${ci} name=${tpl.columns[ci]} px=${px[ci]}
+      openId=${openId} setOpenId=${setOpenId} setCol=${(next) => setCol(ci, next)} menu=${menu} useDragOrder=${useDragOrder} />`)}
+    ${open &&
+    html`<${SectionDrawer} key=${open.s.id} s=${open.s} ctx=${ctx} onClose=${() => setOpenId(null)}
+      set=${(next) => setCol(open.ci, screen.columns[open.ci].map((x) => (x.id === open.s.id ? next : x)))}
+      actions=${html`<${RowMenu} items=${menu(open.ci, open.s, open.si, screen.columns[open.ci])} />`} />`}
+  </div>`;
+}
+
+function SectionColumn({ col, ci, name, px, openId, setOpenId, setCol, menu, useDragOrder }) {
+  const { props, cls } = useDragOrder(col, setCol, { vertical: true });
+  return html`<div class="card card-flush section-list">
+    <div class="section-list-head">${name}${px ? html` <span>· ${px} px</span>` : ''}</div>
+    ${col.map((s, si) => {
+      const meta = SECTION_META[s.type];
+      const cond = s.showWhen && s.showWhen.mode !== 'always';
+      return html`<div class=${`pl-row selectable ${openId === s.id ? 'selected' : ''} ${cls(si)}`} key=${s.id} ...${props(si)} onClick=${() => setOpenId(openId === s.id ? null : s.id)}>
+        <span class="pl-grip" title="Drag to move"><${Icon} name="drag-vertical" size=${16} /></span>
+        <span class="pl-icon"><${Icon} name=${meta.icon} size=${17} /></span>
+        <span class="pl-text"><b>${s.title || meta.label}</b><span class="pl-sub">${sectionSummary(s)}</span></span>
+        <span class="pl-tools">
+          ${cond && html`<${Badge} kind="accent" icon="eye-outline">${s.showWhen.mode === 'playing' ? 'While playing' : 'Sometimes'}<//>`}
+          <${RowMenu} items=${menu(ci, s, si, col)} />
+        </span>
+      </div>`;
+    })}
+    ${col.length === 0 && html`<p class="hint" style="padding:10px 14px">Nothing here yet.</p>`}
+    <${AddSection} onAdd=${(type) => {
+      const s = newSection(type);
+      setCol([...col, s]);
+      setOpenId(s.id);
+    }} />
   </div>`;
 }
 
@@ -1047,8 +1080,17 @@ function FinderEditor({ screen, setScreen, layout }) {
   </div>`;
 }
 
-function ScreensCard({ screens, selected, onSelect, onChange, useDragOrder }) {
-  const { props, cls } = useDragOrder(screens, onChange);
+function screenSummary(s) {
+  if (s.kind === 'roomFinder') return `Room finder · ${s.finder.rooms.length} room${s.finder.rooms.length === 1 ? '' : 's'}`;
+  if (SCREEN_KIND_META[s.kind]) return SCREEN_KIND_META[s.kind].label;
+  const count = s.columns.flat().length;
+  const tpl = TEMPLATES.find((t) => t.value === s.template) || TEMPLATES[0];
+  return `${tpl.label} · ${count} section${count === 1 ? '' : 's'}`;
+}
+const screenIcon = (s) => s.icon || (SCREEN_KIND_META[s.kind] ? SCREEN_KIND_META[s.kind].icon : (TEMPLATES.find((t) => t.value === s.template) || TEMPLATES[0]).icon);
+
+function ScreensList({ screens, selected, onSelect, onChange, useDragOrder }) {
+  const { props, cls } = useDragOrder(screens, onChange, { vertical: true });
   const [adding, setAdding] = useState(false);
   let n = 0;
   const add = (kind) => {
@@ -1057,43 +1099,43 @@ function ScreensCard({ screens, selected, onSelect, onChange, useDragOrder }) {
     onSelect(s.id);
     setAdding(false);
   };
-  return html`<${Card} icon="view-carousel-outline" title="Screens" subtitle="The display's buttons step through these: left previous, middle next, the green one back to the first. Drag to reorder; click one to edit it."
-    actions=${html`<${Button} small icon="plus" disabled=${screens.length >= 12} onClick=${() => setAdding(!adding)}>Add screen<//>`}>
-    ${adding &&
-    html`<div class="section-palette" style="grid-template-columns:1fr 1fr 1fr">
-      <button type="button" class="palette-item" onClick=${() => add('sections')}><${Icon} name="view-dashboard-edit-outline" size=${26} /><span><b>Sections</b><br /><span class="hint">Pick an arrangement and fill it with any sections</span></span></button>
-      <button type="button" class="palette-item" onClick=${() => add('meetingRoom')}><${Icon} name="calendar-account-outline" size=${26} /><span><b>Meeting room</b><br /><span class="hint">Free / in use, a timeline, current and next meetings</span></span></button>
-      <button type="button" class="palette-item" onClick=${() => add('roomFinder')}><${Icon} name="door-sliding-open" size=${26} /><span><b>Room finder</b><br /><span class="hint">Which other rooms are free now</span></span></button>
-    </div>`}
-    <div class="carousel">
+  return html`<${Card} title="Screens" subtitle="Its buttons step through these: left previous, middle next, green back to the first." class="card-flush">
+    <div class="page-list">
       ${screens.map((s, i) => {
         if (s.enabled) n += 1;
-        const count = s.kind === 'sections' ? s.columns.flat().length : 0;
-        return html`<div class=${`page-card ${s.enabled ? '' : 'off'} ${selected === s.id ? 'selected' : ''} ${cls(i)}`} key=${s.id} ...${props(i)} onClick=${() => onSelect(s.id)}>
-          <div class="pc-top" onClick=${(e) => e.stopPropagation()}>
-            <span class="pc-num">${s.enabled ? n : '–'}</span>
-            <span class="spacer"></span>
+        return html`<div class=${`pl-row selectable ${s.enabled ? '' : 'off'} ${selected === s.id ? 'selected' : ''} ${cls(i)}`} key=${s.id} ...${props(i)} onClick=${() => onSelect(s.id)}>
+          <span class="pl-grip" title="Drag to move"><${Icon} name="drag-vertical" size=${16} /></span>
+          <span class="pl-num">${s.enabled ? n : ''}</span>
+          <span class="pl-icon"><${Icon} name=${screenIcon(s)} size=${18} /></span>
+          <span class="pl-text"><b>${s.title || 'Untitled'}</b><span class="pl-sub">${s.enabled ? screenSummary(s) : 'Off: the display skips it'}</span></span>
+          <span class="pl-tools" onClick=${(e) => e.stopPropagation()}>
+            <${RowMenu} items=${[
+              { icon: 'chevron-up', label: 'Move up', disabled: i === 0, onClick: () => onChange(moveItem(screens, i, i - 1)) },
+              { icon: 'chevron-down', label: 'Move down', disabled: i === screens.length - 1, onClick: () => onChange(moveItem(screens, i, i + 1)) },
+              { icon: 'content-copy', label: 'Duplicate', disabled: screens.length >= 12, onClick: () => {
+                const copy = { ...reId(s), title: `${s.title} copy` };
+                onChange([...screens.slice(0, i + 1), copy, ...screens.slice(i + 1)]);
+                onSelect(copy.id);
+              } },
+              { icon: 'trash-can-outline', label: 'Delete', danger: true, disabled: screens.length <= 1, onClick: () => {
+                if (!confirm(`Delete the screen “${s.title}”?`)) return;
+                onChange(screens.filter((x) => x.id !== s.id));
+                if (selected === s.id) onSelect(screens[i === 0 ? 1 : 0].id);
+              } }
+            ]} />
             <${Toggle} checked=${s.enabled} onChange=${(v) => onChange(screens.map((x, j) => (j === i ? { ...x, enabled: v } : x)))} />
-          </div>
-          <div class="pc-screen"><${Icon} name=${SCREEN_KIND_META[s.kind] ? SCREEN_KIND_META[s.kind].icon : (TEMPLATES.find((t) => t.value === s.template) || TEMPLATES[0]).icon} size=${36} /></div>
-          <div class="pc-title">${s.title || 'Untitled'}</div>
-          <div class="pc-sub">${s.kind === 'roomFinder' ? `${s.finder.rooms.length} room${s.finder.rooms.length === 1 ? '' : 's'}` : SCREEN_KIND_META[s.kind] ? SCREEN_KIND_META[s.kind].label : `${count} section${count === 1 ? '' : 's'}`}</div>
-          <div class="pc-move" onClick=${(e) => e.stopPropagation()}>
-            <${Button} kind="ghost" small icon="chevron-left" title="Move left" disabled=${i === 0} onClick=${() => onChange(moveItem(screens, i, i - 1))} />
-            <${Button} kind="ghost" small icon="content-copy" title="Duplicate" disabled=${screens.length >= 12} onClick=${() => {
-              const copy = { ...reId(s), title: `${s.title} copy` };
-              onChange([...screens.slice(0, i + 1), copy, ...screens.slice(i + 1)]);
-              onSelect(copy.id);
-            }} />
-            <${Button} kind="ghost" small icon="trash-can-outline" title="Delete" disabled=${screens.length <= 1} onClick=${() => {
-              if (!confirm(`Delete the screen “${s.title}”?`)) return;
-              onChange(screens.filter((x) => x.id !== s.id));
-              if (selected === s.id) onSelect(screens[i === 0 ? 1 : 0].id);
-            }} />
-            <${Button} kind="ghost" small icon="chevron-right" title="Move right" disabled=${i === screens.length - 1} onClick=${() => onChange(moveItem(screens, i, i + 1))} />
-          </div>
+          </span>
         </div>`;
       })}
+      <div class="add-row">
+        <button type="button" class="add-link" disabled=${screens.length >= 12} onClick=${() => setAdding(!adding)}><${Icon} name=${adding ? 'close' : 'plus'} size=${16} />${adding ? 'Close' : 'Add a screen'}</button>
+        ${adding &&
+        html`<div class="section-palette section-palette-1">
+          <button type="button" class="palette-item" onClick=${() => add('sections')}><${Icon} name="view-dashboard-edit-outline" size=${22} /><span><b>Sections</b><br /><span class="hint">An arrangement filled with any sections</span></span></button>
+          <button type="button" class="palette-item" onClick=${() => add('meetingRoom')}><${Icon} name="calendar-account-outline" size=${22} /><span><b>Meeting room</b><br /><span class="hint">Free or in use, a timeline, the next meetings</span></span></button>
+          <button type="button" class="palette-item" onClick=${() => add('roomFinder')}><${Icon} name="door-sliding-open" size=${22} /><span><b>Room finder</b><br /><span class="hint">Which other rooms are free now</span></span></button>
+        </div>`}
+      </div>
     </div>
   <//>`;
 }
@@ -1110,13 +1152,13 @@ const THRESHOLDS = [
   ['climateTolerance', 'Climate tolerance °', 'How far from target still counts as “at target”.']
 ];
 
-function CarouselCard({ layout, onChange }) {
+function TimingCard({ layout, onChange }) {
   const c = layout.carousel;
   const set = (k, v) => onChange({ ...layout, carousel: { ...c, [k]: v } });
   const q = layout.quietHours || { enabled: false, start: 23, end: 6, intervalMin: 60 };
   const setQ = (k, v) => onChange({ ...layout, quietHours: { ...q, [k]: v } });
-  return html`<${Card} icon="rotate-right" title="Carousel" subtitle="What the display does between button presses, and how often it refreshes.">
-    <div class="row" style="align-items:flex-end">
+  return html`<${Card} title="Timing" subtitle="Between presses, refreshing and sleeping.">
+    <div class="stack-tight">
       <${Field} label="Between presses">
         <${Select} value=${c.mode} onChange=${(v) => set('mode', v)} options=${[
           { value: 'stay', label: 'Stay on the current screen (refresh it)' },
@@ -1124,11 +1166,11 @@ function CarouselCard({ layout, onChange }) {
           { value: 'returnFirst', label: 'Go back to the first screen' }
         ]} />
       <//>
-      ${c.mode !== 'stay' && html`<div style="width:150px"><${Field} label="Every (minutes)"><${NumberInput} min="5" max="240" value=${c.everyMin} onChange=${(v) => set('everyMin', v)} /><//></div>`}
-      <div style="width:200px"><${Field} label="Refresh data every">
+      ${c.mode !== 'stay' && html`<${Field} label="Every (minutes)"><${NumberInput} min="5" max="240" value=${c.everyMin} onChange=${(v) => set('everyMin', v)} /><//>`}
+      <${Field} label="Refresh">
         <${Select} value=${String(layout.refreshIntervalMin)} onChange=${(v) => onChange({ ...layout, refreshIntervalMin: Number(v) })}
-          options=${[5, 10, 15, 30, 60].map((n) => ({ value: String(n), label: n === 60 ? 'Hour' : `${n} minutes` }))} />
-      <//></div>
+          options=${[5, 10, 15, 30, 60].map((n) => ({ value: String(n), label: n === 60 ? 'Every hour' : `Every ${n} minutes` }))} />
+      <//>
     </div>
     <p class="hint">${c.mode === 'stay'
       ? 'The screen only changes when someone presses a button.'
@@ -1137,20 +1179,21 @@ function CarouselCard({ layout, onChange }) {
     <p class="hint">${layout.refreshAligned
       ? `Refreshes at ${CLOCK_MARKS[layout.refreshIntervalMin] || 'the marks'} (server time; in quiet hours, at its own interval's marks), not ${layout.refreshIntervalMin} minutes after it last slept. Each display is 7 seconds after the one before, after the remotes, so they don't all ask the server at once.`
       : `Refreshes ${layout.refreshIntervalMin} minutes after it last went to sleep.`}</p>
-    <div class="row" style="align-items:flex-end">
-      <${Toggle} checked=${q.enabled} onChange=${(v) => setQ('enabled', v)} label="Quiet hours" />
-      ${q.enabled &&
-      html`<div style="width:110px"><${Field} label="From"><${Select} value=${String(q.start)} onChange=${(v) => setQ('start', Number(v))} options=${HOURS} /><//></div>
-        <div style="width:110px"><${Field} label="Until"><${Select} value=${String(q.end)} onChange=${(v) => setQ('end', Number(v))} options=${HOURS} /><//></div>
-        <div style="width:200px"><${Field} label="Refresh every"><${Select} value=${String(q.intervalMin)} onChange=${(v) => setQ('intervalMin', Number(v))}
-          options=${[30, 60, 120, 240].map((n) => ({ value: String(n), label: n < 60 ? `${n} minutes` : n === 60 ? 'Hour' : `${n / 60} hours` }))} /><//></div>`}
-    </div>
+    <div class="divider"></div>
+    <${Toggle} checked=${q.enabled} onChange=${(v) => setQ('enabled', v)} label="Quiet hours" />
+    ${q.enabled &&
+    html`<div class="row">
+        <${Field} label="From"><${Select} value=${String(q.start)} onChange=${(v) => setQ('start', Number(v))} options=${HOURS} /><//>
+        <${Field} label="Until"><${Select} value=${String(q.end)} onChange=${(v) => setQ('end', Number(v))} options=${HOURS} /><//>
+      </div>
+      <${Field} label="Refresh then"><${Select} value=${String(q.intervalMin)} onChange=${(v) => setQ('intervalMin', Number(v))}
+        options=${[30, 60, 120, 240].map((n) => ({ value: String(n), label: n < 60 ? `Every ${n} minutes` : n === 60 ? 'Every hour' : `Every ${n / 60} hours` }))} /><//>`}
     ${q.enabled && html`<${Toggle} checked=${Boolean(q.weekends)} onChange=${(v) => setQ('weekends', v)} label="All weekend too (an office)" />
       <p class="hint">${q.weekends ? 'Overnight, and all Saturday and Sunday,' : 'Overnight'} the display wakes less often, and shows a small bed-and-clock icon by the time. A meeting-room sign still wakes for a meeting.</p>`}
   <//>`;
 }
 
-function SettingsCard({ layout, onChange }) {
+function SettingsParts({ layout, onChange, part }) {
   const [ip, setIp] = useState('');
   const [json, setJson] = useState('');
   const [msg, flash] = useFlash();
@@ -1181,11 +1224,17 @@ function SettingsCard({ layout, onChange }) {
     onChange((await api(`/api/viewports/defaults${kind ? `?kind=${kind}` : ''}`)).layout);
     flash('Loaded — Save to keep it.', 6000);
   };
-  return html`<div class="grid">
-    <${Card} icon="tune-variant" title="Thresholds" subtitle="Shared by every screen's sections.">
-      ${THRESHOLDS.map(([k, label, hint]) => html`<${Field} label=${label} hint=${hint}><${NumberInput} step="0.5" value=${layout.thresholds[k]} onChange=${(v) => setT(k, v)} /><//>`)}
-    <//>
-    <${Card} icon="import" title="Start from…" subtitle="Replace the whole layout, then adjust it.">
+  if (part === 'settings') {
+    return html`<div class="settings-cols">
+      <${Card} title="Thresholds" subtitle="When values change colour. Shared by every screen's sections.">
+        <div class="label-grid">
+          ${THRESHOLDS.map(([k, label, hint]) => html`<${Field} label=${label} hint=${hint}><${NumberInput} step="0.5" value=${layout.thresholds[k]} onChange=${(v) => setT(k, v)} /><//>`)}
+        </div>
+      <//>
+    </div>`;
+  }
+  return html`<div class="settings-cols">
+    <${Card} title="Start from…" subtitle="Replace the whole layout, then adjust it and save.">
       <div class="row">
         <${Button} icon="home-outline" onClick=${() => load('')}>Kitchen dashboard<//>
         <${Button} icon="calendar-account-outline" onClick=${() => load('meetingRoom')}>Meeting room sign<//>
@@ -1233,7 +1282,9 @@ function usePreview(layout) {
   return { state, error, loading };
 }
 
-export function DashboardBuilder({ layout, onChange, rooms, useDragOrder }) {
+// `part`: the side column's link. '' is the screens; 'settings' the
+// thresholds; 'start' starting from, or importing, a layout.
+export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }) {
   const [selected, setSelected] = useState(layout.screens[0] && layout.screens[0].id);
   const [openId, setOpenId] = useState(null);
   const [presets, setPresets] = useState(null);
@@ -1241,37 +1292,54 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder }) {
   useEffect(() => {
     api('/api/clients/schema').then((s) => setPresets(s.dashboard && s.dashboard.iconPresets)).catch(() => {});
   }, []);
+  if (part === 'settings' || part === 'start') return html`<${SettingsParts} layout=${layout} onChange=${onChange} part=${part} />`;
   const screen = layout.screens.find((s) => s.id === selected) || layout.screens[0];
   const setScreens = (screens) => onChange({ ...layout, screens });
   const setScreen = (next) => setScreens(layout.screens.map((s) => (s.id === next.id ? next : s)));
   const allSections = layout.screens.flatMap((s) => (s.kind === 'sections' ? s.columns.flat() : []));
   const ctx = { rooms, allSections, presets, refreshMin: layout.refreshIntervalMin };
   const errors = preview.state && preview.state.errors ? Object.entries(preview.state.errors) : [];
-  return html`<div class="stack">
-    <${CarouselCard} layout=${layout} onChange=${onChange} />
-    <${ScreensCard} screens=${layout.screens} selected=${screen && screen.id} onSelect=${(id) => {
-      setSelected(id);
-      setOpenId(null);
-    }} onChange=${setScreens} useDragOrder=${useDragOrder} />
+  const setTemplate = (value) => {
+    const n = TEMPLATES.find((t) => t.value === value).columns.length;
+    const cols = screen.columns.slice(0, n);
+    while (cols.length < n) cols.push([]);
+    // Going down to fewer columns keeps every section, in the last one.
+    if (n < screen.columns.length) cols[n - 1] = [...cols[n - 1], ...screen.columns.slice(n).flat()];
+    setScreen({ ...screen, template: value, columns: cols });
+  };
+  return html`<div class="vp-builder">
+    <div class="vp-builder-side">
+      <${ScreensList} screens=${layout.screens} selected=${screen && screen.id} onSelect=${(id) => {
+        setSelected(id);
+        setOpenId(null);
+      }} onChange=${setScreens} useDragOrder=${useDragOrder} />
+      <${TimingCard} layout=${layout} onChange=${onChange} />
+    </div>
     ${screen &&
-    html`<${Card} icon=${SCREEN_KIND_META[screen.kind] ? SCREEN_KIND_META[screen.kind].icon : 'view-dashboard-edit-outline'}
-        title=${html`<input type="text" class="inline-title" value=${screen.title} onInput=${(e) => setScreen({ ...screen, title: e.target.value })} />`}
-        subtitle="Live preview from Home Assistant, including unsaved changes."
-        actions=${html`${preview.loading && html`<${Badge} icon="refresh">Updating<//>`}${errors.length > 0 && html`<${Badge} kind="warn" icon="alert-outline">${errors.length} couldn't load<//>`}`}>
-        <div class="row" style="align-items:center;margin-bottom:8px">
+    html`<div class="vp-builder-main">
+      <${Card} class="screen-card">
+        <div class="screen-bar">
+          <input type="text" class="screen-name" aria-label="Screen name" value=${screen.title} onInput=${(e) => setScreen({ ...screen, title: e.target.value })} />
           <${IconPicker} value=${screen.icon} title="This screen's icon in the footer" onChange=${(icon) => setScreen({ ...screen, icon })} />
-          <span class="hint">Its mark in the display's footer, beside the other screens' (the one showing is underlined).</span>
+          ${screen.kind === 'sections'
+            ? html`<div class="seg seg-icons">
+                ${TEMPLATES.map((t) => html`<button type="button" class=${t.value === screen.template ? 'on' : ''} title=${t.label} onClick=${() => setTemplate(t.value)}><${Icon} name=${t.icon} size=${16} />${t.short}</button>`)}
+              </div>`
+            : html`<${Badge} icon=${SCREEN_KIND_META[screen.kind].icon}>${SCREEN_KIND_META[screen.kind].label}<//>`}
+          <span class="pagebar-sp"></span>
+          ${preview.loading && html`<${Badge} icon="refresh">Updating<//>`}
+          ${errors.length > 0 && html`<span title=${errors.map(([k, v]) => `${k}: ${v}`).join('\n')}><${Badge} kind="warn" icon="alert-outline">${errors.length} couldn't load<//></span>`}
+          ${!screen.enabled && html`<${Badge} icon="eye-off-outline">Off<//>`}
         </div>
         <${ViewportPreview} screen=${screen.id} state=${preview.state} error=${preview.error} loading=${preview.loading} highlight=${openId}
           carousel=${layout.screens.filter((s) => s.enabled).map((s) => ({ id: s.id, icon: s.icon }))} />
-        ${errors.length > 0 && html`<p class="hint">${errors.map(([k, v]) => `${k}: ${v}`).join(' · ')}</p>`}
-        ${!screen.enabled && html`<p class="hint"><${Icon} name="eye-off-outline" size=${14} /> This screen is switched off, so the display skips it.</p>`}
+        <p class="hint">Live from Home Assistant, with your unsaved changes. The icon is this screen's mark in the display's footer.</p>
       <//>
       ${screen.kind === 'meetingRoom'
         ? html`<${MeetingEditor} screen=${screen} setScreen=${setScreen} />`
         : screen.kind === 'roomFinder'
         ? html`<${FinderEditor} screen=${screen} setScreen=${setScreen} layout=${layout} />`
-        : html`<${SectionsScreenEditor} screen=${screen} setScreen=${setScreen} ctx=${ctx} openId=${openId} setOpenId=${setOpenId} />`}`}
-    <${SettingsCard} layout=${layout} onChange=${onChange} />
+        : html`<${SectionsScreenEditor} screen=${screen} setScreen=${setScreen} ctx=${ctx} openId=${openId} setOpenId=${setOpenId} useDragOrder=${useDragOrder} />`}
+    </div>`}
   </div>`;
 }

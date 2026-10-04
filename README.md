@@ -4,7 +4,7 @@
 
 <p>
   <img src="screenshots/viewport-preview.png" width="420" alt="A viewport's Status screen, previewed live from Home Assistant">
-  <img src="screenshots/remote-layout.png" width="300" alt="A room's remote layout">
+  <img src="screenshots/remote-layout.png" width="420" alt="A room's remote layout: its pages, the picked page's settings, and that page as the remote shows it">
 </p>
 
 **[⚡ Flash a remote or a viewport](https://stumarti.github.io/Switchboard/)** · **[Read the manual](https://stumarti.github.io/Switchboard/manual/)** · **[Try the demo](#try-it-without-hardware)**
@@ -31,8 +31,8 @@ The server learns how fast each battery drains, so you know **how many days each
 
 <table>
 <tr>
-  <td><img src="screenshots/viewport-layout.png" width="380" alt="A viewport layout"><br><sub>A viewport layout: the carousel, quiet hours and its screens</sub></td>
-  <td><img src="screenshots/settings.png" width="380" alt="Settings"><br><sub>Settings: Home Assistant, Wi-Fi, clock, theme, updates</sub></td>
+  <td><img src="screenshots/viewport-layout.png" width="380" alt="A viewport layout"><br><sub>A viewport layout: its screens and timing, and the picked screen above its sections</sub></td>
+  <td><img src="screenshots/settings.png" width="380" alt="Settings"><br><sub>Settings: firmware updates, rolled out by board, pilots first</sub></td>
 </tr>
 </table>
 
@@ -63,7 +63,7 @@ Then:
 
 1. Open `http://<your-server-ip>:45678` and set an admin password.
 2. **Settings → Home Assistant:** enter its address and a long-lived access token, save, then press **Test**.
-3. **Settings → Wi-Fi:** the network remotes should join.
+3. **Settings → Wi-Fi networks:** the network remotes should join.
 4. **Layouts:** create a room (for a remote) or a viewport layout, and fill in its Home Assistant entities. **Start from… → Kitchen dashboard** gives you a whole kitchen dashboard to adapt.
 5. [Flash a remote or a viewport](https://stumarti.github.io/Switchboard/) and approve it on the **Remotes** page, choosing its room or layout.
 

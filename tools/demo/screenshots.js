@@ -70,24 +70,25 @@ async function main() {
     await page.waitForTimeout(800);
   }
 
+  // A list row (a remote layout's page, a viewport layout's screen) by its name.
+  const row = (scope, label) => page.locator(`${scope} .pl-row`, { has: page.locator('.pl-text b', { hasText: new RegExp(`^${label}$`) }) });
+  // The window without the scrolled-off part: what you see on opening a page.
+  const top = { x: 0, y: 0, width: 1360, height: 900 };
+
   // Home, Layouts, a room's remote layout.
   await go('#/home', 2500);
   await shot('admin/home');
   await go('#/layouts');
   await shot('admin/layouts');
   await go('#/remote-layouts/living-room', 3500);
-  await shot('admin/remote-layout-carousel', card('Carousel'));
-  // A page's card shows once it's picked in the carousel.
-  const pick = async (label) => {
-    await page.locator('.page-card', { has: page.locator('.pc-title', { hasText: new RegExp(`^${label}$`) }) }).locator('.pc-screen').click();
-    await page.waitForTimeout(800);
-    await fit();
-  };
-  await pick('Lighting');
-  await shot('admin/remote-layout-lighting', card('Lighting'));
-  await pick('Quick Access');
-  await shot('admin/remote-layout-quick-access', card('Quick Access'));
-  await shot('admin/remote-layout-previews', card('Screen previews'));
+  await shot('admin/remote-layout', null, top);
+  await row('.room-pages', 'Lighting').click();
+  await page.waitForTimeout(2000);
+  await shot('admin/remote-layout-lighting', null, top);
+  await go('#/remote-layouts/living-room/quick', 3000);
+  await shot('admin/remote-layout-quick-access', null, top);
+  await go('#/remote-layouts/living-room/settings', 2000);
+  await shot('admin/remote-layout-settings');
 
   // Remotes: the list with the updates summary, one remote, one to approve.
   await go('#/remotes', 2000);
@@ -97,16 +98,21 @@ async function main() {
   await go(`#/remotes/${encodeURIComponent(PENDING)}`, 2000);
   await shot('admin/approve');
 
-  // Viewports: a display, and its layout in the builder.
+  // Viewports: a display, and its layout in the builder, with a section open.
   await go(`#/viewports/${encodeURIComponent(VIEWPORT)}`, 2500);
   await shot('admin/viewport');
   await go('#/viewport-layouts/kitchen-panel', 4000);
-  await shot('admin/viewport-layout', null, { x: 0, y: 0, width: 1360, height: 900 });
+  await shot('admin/viewport-layout', null, top);
+  await page.locator('.section-list .pl-row', { has: page.locator('.pl-text b', { hasText: /^Energy totals$/ }) }).click();
+  await page.waitForTimeout(2000);
+  await shot('admin/viewport-layout-section', null, top);
+  await page.keyboard.press('Escape');
+  await go('#/viewport-layouts/kitchen-panel/settings', 1500);
+  await shot('admin/viewport-layout-thresholds', null, top);
 
   // An office: a room list pasted in (read, not yet set up), and a room
   // finder whose Quiet room is on a calendar link.
-  await go('#/layouts', 1500);
-  await page.click('text=Add many meeting rooms');
+  await go('#/layouts/meeting-rooms', 1500);
   await page.fill('textarea.bulk-text', [
     'Room, Calendar, Occupancy, Display',
     'Atlas, https://outlook.office365.com/owa/calendar/0f3c…/calendar.ics, binary_sensor.huddle_occupied, a0:b1:c2:00:02:01',
@@ -115,28 +121,43 @@ async function main() {
     'Dorado, the big one by the lifts'
   ].join('\n'));
   await page.waitForTimeout(1500);
+  await fit();
   await shot('admin/meeting-rooms-bulk', card('Add many meeting rooms'));
-  await go('#/viewport-layouts/boardroom', 3000);
-  await page.locator('.page-card', { has: page.locator('.pc-title', { hasText: /^Other rooms$/ }) }).locator('.pc-screen').click();
+  await go('#/viewport-layouts/boardroom', 3000, 1800);
+  await row('.vp-builder-side', 'Other rooms').click();
   await page.waitForTimeout(1500);
   await fit();
   await shot('admin/calendar-link', card('Rooms'));
 
-  // Settings, tab by tab.
-  for (const tab of ['home-assistant', 'wifi', 'clock', 'theme', 'updates', 'security', 'account']) {
+  // Settings, page by page, and the firmware sources popup.
+  for (const tab of ['home-assistant', 'wifi', 'clock', 'theme', 'updates', 'pairing', 'security', 'account', 'about']) {
     await go(`#/settings/${tab}`, 2000);
     await shot(`admin/settings-${tab}`);
   }
+  await go('#/settings/updates', 2000);
+  await page.click('button:has-text("Sources")');
+  await page.waitForTimeout(600);
+  await shot('admin/settings-updates-sources', page.locator('.modal'));
+  await page.keyboard.press('Escape');
+
+  // Search, from anywhere.
+  await go('#/home', 2000);
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.keyboard.press('/');
+  await page.keyboard.type('liv');
+  await page.waitForTimeout(400);
+  await shot('admin/search', null, top);
+  await page.keyboard.press('Escape');
 
   // Every viewport screen, at the panel's own 800x480: a window wide
   // enough that the builder's preview isn't scaled down.
   for (const [slug, prefix] of [['kitchen-panel', 'kitchen'], ['boardroom', 'boardroom'], ['reception', 'reception']]) {
     await go(`#/viewport-layouts/${slug}`, 4000, 2600);
-    const cards = page.locator('.page-card');
-    const n = await cards.count();
+    const rows = page.locator('.vp-builder-side .pl-row');
+    const n = await rows.count();
     for (let i = 0; i < n; i++) {
-      const title = (await cards.nth(i).locator('.pc-title').first().textContent().catch(() => '')) || `screen-${i + 1}`;
-      await cards.nth(i).locator('.pc-screen').click();
+      const title = (await rows.nth(i).locator('.pl-text b').first().textContent().catch(() => '')) || `screen-${i + 1}`;
+      await rows.nth(i).click();
       await page.waitForTimeout(3500);
       await shot(`viewport/${prefix}-${title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, page.locator('.vp-panel'));
     }
