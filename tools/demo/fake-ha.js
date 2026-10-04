@@ -183,6 +183,16 @@ const states = [
   S('calendar.holidays', 'off', { friendly_name: 'Holidays' }),
   S('calendar.quiet', 'off', { friendly_name: 'Quiet room' }),
   S('calendar.huddle', 'off', { friendly_name: 'Huddle' }),
+  // Bin collection, the air in the office and the hall, and pollen.
+  S('calendar.bins', 'off', { friendly_name: 'Bin collection' }),
+  S('sensor.garden_waste_days', '5', { friendly_name: 'Garden waste', unit_of_measurement: 'days' }),
+  S('sensor.office_co2', '1240', { friendly_name: 'Office CO2', unit_of_measurement: 'ppm', device_class: 'carbon_dioxide' }),
+  S('sensor.office_pm25', '7.6', { friendly_name: 'Office PM2.5', unit_of_measurement: 'µg/m³', device_class: 'pm25' }),
+  S('sensor.hall_co2', '640', { friendly_name: 'Hall CO2', unit_of_measurement: 'ppm', device_class: 'carbon_dioxide' }),
+  S('sensor.hall_humidity', '64', { friendly_name: 'Hall humidity', unit_of_measurement: '%', device_class: 'humidity' }),
+  S('sensor.grass_pollen', 'high', { friendly_name: 'Grass pollen' }),
+  S('sensor.tree_pollen', 'low', { friendly_name: 'Tree pollen' }),
+  S('input_text.visitor', 'Acme Robotics', { friendly_name: 'Visitor' }),
   S('binary_sensor.huddle_occupied', 'on', { friendly_name: 'Huddle occupancy', device_class: 'occupancy' }, 5)
 ].reduce((list, st) => {
   // One state per entity, as in a real Home Assistant: an entity listed
@@ -251,6 +261,10 @@ function calendar(id) {
       return [ev(60, 120, 'Focus time')];
     case 'calendar.huddle':
       return [ev(-15, 45, 'Stand-up')];
+    case 'calendar.bins': {
+      const all = (d, summary) => ({ start: { date: day(d) }, end: { date: day(d + 1) }, summary });
+      return [all(1, 'Recycling collection'), all(3, 'General waste'), all(8, 'Recycling collection'), all(10, 'Food waste')];
+    }
     default:
       return [];
   }

@@ -294,7 +294,51 @@ async function seed() {
     [{ type: 'weather', entity: 'weather.home' }, { type: 'calendar', entities: ['calendar.boardroom'], days: 1, lines: 4 }],
     [{ type: 'announcements', title: 'Company news', url: `http://127.0.0.1:${HA_PORT}/feed.xml`, count: 3 }]
   ];
+  // A second screen for visitors: the guest Wi-Fi, a welcome, the office's air.
+  o.layout.screens.push({
+    id: 'reception-visitors', kind: 'sections', title: 'Visitors', icon: 'account-group-outline', enabled: true, template: 'columns',
+    columns: [
+      [{ type: 'guestWifi', title: 'Guest Wi-Fi', network: 'Home-Guest', caption: 'Scan to join our guest Wi-Fi' }],
+      [
+        { type: 'message', text: 'Welcome, {input_text.visitor}\nPlease sign in at the desk.', size: 'large', icon: 'hand-wave', color: 5 },
+        { type: 'airQuality', title: 'Air in the office', items: [{ entity: 'sensor.office_co2', name: 'CO2' }, { entity: 'sensor.office_pm25', name: 'PM2.5' }, { entity: 'sensor.grass_pollen', name: 'Grass pollen' }] }
+      ]
+    ]
+  });
   await api('PUT', `/api/dashboards/${office.slug}`, { name: 'Reception', layout: o.layout });
+
+  // A hall panel: the bins, a reminder, the air and the pollen.
+  const hall = await api('POST', '/api/dashboards', { name: 'Hall', template: 'blank' });
+  const hl = await api('GET', `/api/dashboards/${hall.slug}`);
+  hl.layout.screens[0].title = 'Hall';
+  hl.layout.screens[0].template = 'sidebar';
+  hl.layout.screens[0].columns = [
+    [
+      { type: 'weather', entity: 'weather.home' },
+      { type: 'message', text: 'Keys, wallet, phone?', size: 'bold', align: 'center', icon: 'key-variant' }
+    ],
+    [
+      {
+        type: 'bins', title: 'Bins', calendar: 'calendar.bins', count: 4, tonightFrom: 0,
+        bins: [
+          { name: 'Recycling', match: 'recycling', icon: 'recycle', color: 5 },
+          { name: 'General waste', match: 'general', color: 1 },
+          { name: 'Food waste', match: 'food', icon: 'food-apple-outline', color: 4 },
+          { name: 'Garden waste', entity: 'sensor.garden_waste_days', icon: 'leaf', color: 4 }
+        ]
+      },
+      {
+        type: 'airQuality', title: 'Air and pollen',
+        items: [
+          { entity: 'sensor.hall_co2', name: 'CO2' },
+          { entity: 'sensor.hall_humidity', name: 'Humidity' },
+          { entity: 'sensor.grass_pollen', name: 'Grass pollen' },
+          { entity: 'sensor.tree_pollen', name: 'Tree pollen' }
+        ]
+      }
+    ]
+  ];
+  await api('PUT', `/api/dashboards/${hall.slug}`, { name: 'Hall', layout: hl.layout });
 
   // Pair every device, and have each check in once with its health.
   const tokens = {};

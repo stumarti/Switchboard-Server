@@ -315,6 +315,57 @@ const Announcements = ({ d }) =>
       )}</div>`
     : html`<${Missing} what=${d.empty} />`;
 
+// A join QR code from the server's rows of modules, with a 4-module margin.
+function Qr({ rows, scale = 5 }) {
+  const n = rows.length;
+  const side = (n + 8) * scale;
+  const path = rows.map((r, y) => [...r].map((b, x) => (b === '1' ? `M${x + 4} ${y + 4}h1v1h-1z` : '')).join('')).join('');
+  return html`<svg class="vp-qr" width=${side} height=${side} viewBox=${`0 0 ${n + 8} ${n + 8}`} shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff" /><path d=${path} fill="#111" /></svg>`;
+}
+
+const GuestWifi = ({ d }) =>
+  !d.qr.length
+    ? html`<${Missing} what=${d.empty} />`
+    : html`<div class="vp-wifi">
+        <${Qr} rows=${d.qr} />
+        <div class="vp-wifi-text">
+          ${d.caption && html`<div class="vp-med">${d.caption}</div>`}
+          <div class="vp-tiny">Network</div><div class="vp-med">${d.ssid}</div>
+          ${d.password && html`<div class="vp-tiny">Password</div><div class="vp-med">${d.password}</div>`}
+        </div>
+      </div>`;
+
+const MESSAGE_FONT = { normal: { fontSize: '18px', fontWeight: 400 }, bold: { fontSize: '18px', fontWeight: 700 }, large: { fontSize: '24px', fontWeight: 700 } };
+const Message = ({ d }) =>
+  d.lines.length
+    ? html`<div class="vp-row" style=${{ alignItems: 'flex-start', justifyContent: d.align === 'center' ? 'center' : 'flex-start', color: c(d.color) }}>
+        ${d.icon && html`<${Icon} name=${d.icon} size=${d.size === 'large' ? 32 : 24} />`}
+        <div style=${{ ...MESSAGE_FONT[d.size], textAlign: d.align, lineHeight: 1.25 }}>${d.lines.map((l) => html`<div>${l || ' '}</div>`)}</div>
+      </div>`
+    : null;
+
+const Bins = ({ d }) =>
+  html`<div>
+    ${d.note && html`<div class="vp-med" style=${{ color: c(2) }}>${d.note}</div>`}
+    ${d.lines.length
+      ? d.lines.map((b) => html`<div class="vp-row vp-rowline">
+          <span style=${{ color: c(b.color) }}><${Icon} name=${b.icon} size=${24} /></span>
+          <span class="vp-med" style="flex:1">${b.name}</span>
+          <span class="vp-med" style=${{ color: b.soon ? c(2) : undefined }}>${b.when}</span>
+        </div>`)
+      : html`<${Missing} what=${d.empty} />`}
+  </div>`;
+
+const AirQuality = ({ d }) =>
+  d.items.length
+    ? html`<div>${d.items.map((it) => html`<div class="vp-row vp-rowline">
+        <span class="vp-dot" style=${{ background: c(it.color) }}></span>
+        <span class="vp-small" style="flex:1">${it.name}</span>
+        <span class="vp-med" style=${{ color: c(it.color) }}>${it.value}</span>
+        ${it.level && html`<span class="vp-tiny" style="width:40px;text-align:right">${it.level}</span>`}
+      </div>`)}</div>`
+    : html`<${Missing} what=${d.empty} />`;
+
 const SECTIONS = {
   weather: Weather,
   energy: Energy,
@@ -333,7 +384,11 @@ const SECTIONS = {
   openings: Openings,
   motion: Motion,
   cameras: Cameras,
-  announcements: Announcements
+  announcements: Announcements,
+  guestWifi: GuestWifi,
+  message: Message,
+  bins: Bins,
+  airQuality: AirQuality
 };
 
 // The panel's columns: a 250 px sidebar and the main column (a dotted
@@ -346,6 +401,7 @@ function SectionsScreen({ d, highlight }) {
     ${d.columns.map(
       (col) => html`<div class="vp-col kd-col">
         ${col.map((s) => {
+          if (s.type === 'message' && !(s.data && s.data.lines.length)) return null;
           if (s.type === 'spacer') return html`<div class=${highlight === s.id ? 'vp-hl' : ''} style=${{ height: `${s.data?.height ?? 0}px` }}></div>`;
           const Dash = DASH_SECTIONS[s.type];
           const drawn = Dash && s.data != null ? Dash({ d: s.data, title: s.title, siblings: all }) : null;
