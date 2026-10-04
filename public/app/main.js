@@ -179,7 +179,7 @@ function App() {
   const clientType = section === 'remotes' ? 'remote' : section === 'viewports' ? 'viewport' : null;
   // Devices still waiting to be approved are listed under Remotes: every
   // device registers as a remote until it says otherwise.
-  const pendingCount = (data.clients || []).filter((c) => c.status === 'pending').length;
+  const pendingCount = (data.clients || []).filter((c) => c.status === 'pending' && c.lastSeenAt).length;
 
   let main;
   if (section === 'home') {

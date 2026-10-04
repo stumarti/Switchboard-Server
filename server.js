@@ -67,6 +67,8 @@ const haMonitor = require('./lib/ha-monitor');
 const overview = require('./lib/overview');
 const enigma2 = require('./lib/enigma2');
 const feeds = require('./lib/feeds');
+const ical = require('./lib/ical');
+const meetingRooms = require('./lib/meeting-rooms');
 const firmware = require('./lib/firmware');
 const batteryHistory = require('./lib/battery-history');
 const haPublish = require('./lib/ha-publish');
@@ -424,7 +426,7 @@ app.get('/api/viewports/:mac/bundle', auth.requireAdminOrDevice, (req, res) => {
     dashboard: dash ? { slug: dash.slug, name: dash.name } : null,
     name: device.name,
     mac: device.mac,
-    layout,
+    layout: dashboardState.deviceLayout(layout),
     // Every icon the screens can show, to fetch (and cache) up front from
     // /api/icons/mdi/:name.
     icons: dashboardState.iconsUsed(layout),
@@ -597,6 +599,61 @@ app.delete('/api/dashboards/:slug', auth.requireAdminSession, (req, res) => {
   }
   if (changed) store.saveDevices(devices);
   res.status(204).end();
+});
+
+// --- Meeting rooms, many at once (lib/meeting-rooms.js) ------------------------
+
+// A pasted room list, read: each line's room, and anything wrong with it;
+// which rooms already have a layout (they'd be updated); what each listed
+// display is now.
+app.post('/api/meeting-rooms/parse', auth.requireAdminSession, (req, res) => {
+  const rooms = meetingRooms.parseRoomList(req.body && req.body.text);
+  const names = new Set(store.listDashboards().map((d) => d.name.trim().toLowerCase()));
+  const devices = store.getDevices();
+  res.json({
+    rooms: rooms.map((r) => {
+      const d = r.mac ? devices[store.normalizeMac(r.mac)] : null;
+      return { ...r, exists: names.has(r.name.toLowerCase()), display: d ? (d.lastSeenAt ? d.status : 'expected') : r.mac ? 'new' : '' };
+    })
+  });
+});
+
+// {text | rooms, finder, approve, settings} -> a layout per room (made, or
+// updated by name), and its display set up: {results: [{name, slug, layout, display}]}.
+app.post('/api/meeting-rooms', auth.requireAdminSession, (req, res) => {
+  const b = req.body || {};
+  const rooms = Array.isArray(b.rooms)
+    ? b.rooms.map((r) => ({ name: String(r.name || '').trim(), calendar: String(r.calendar || '').trim(), occupancy: String(r.occupancy || '').trim(), mac: String(r.mac || '').trim(), problems: r.name && r.calendar ? [] : ['a name and a calendar are needed'] }))
+    : meetingRooms.parseRoomList(b.text);
+  if (!rooms.some((r) => !r.problems.length)) return res.status(400).json({ error: 'no rooms to set up: each needs a name and a calendar' });
+  const results = meetingRooms.apply(rooms, { finder: b.finder !== false, approve: b.approve === true, settings: b.settings }, pairing);
+  res.status(201).json({ results, skipped: rooms.filter((r) => r.problems.length).map((r) => ({ line: r.line, name: r.name, problems: r.problems })) });
+});
+
+// Test a calendar link (or a Home Assistant calendar is left to HA): its
+// name, and its next few events. The link itself is never logged.
+app.post('/api/calendars/check', auth.requireAdminSession, async (req, res) => {
+  const link = String((req.body && req.body.calendar) || '').trim();
+  if (!ical.isCalendarUrl(link)) return res.status(400).json({ error: 'not a calendar link (https://, http:// or webcal://)' });
+  await ical.refresh(link);
+  const now = new Date();
+  const r = await ical.eventsFor(link, { start: now, end: new Date(now.getTime() + 14 * 86400000) }, Intl.DateTimeFormat().resolvedOptions().timeZone);
+  if (r.error && !r.events.length) return res.status(502).json({ error: r.error });
+  res.json({ name: r.name, count: r.events.length, next: r.events.slice(0, 3).map((e) => ({ title: e.summary, start: e.start.dateTime || e.start.date })) });
+});
+
+// Approve several waiting displays at once: [{mac, name, dashboard}].
+app.post('/api/pairing/approve-many', auth.requireAdminSession, (req, res) => {
+  const list = Array.isArray(req.body && req.body.devices) ? req.body.devices : [];
+  const results = list.slice(0, 200).map((x) => {
+    const mac = store.normalizeMac(x && x.mac);
+    if (!store.getDevices()[mac]) return { mac, error: 'no such device' };
+    const a = pairing.approve(mac, '');
+    if (a.error) return { mac, error: a.error };
+    pairing.update(mac, { type: 'viewport', ...(x.name ? { name: String(x.name) } : {}), dashboard: String(x.dashboard || '') });
+    return { mac, ok: true };
+  });
+  res.json({ results });
 });
 
 // The admin UI's live preview of an unsaved dashboard layout.
@@ -1247,6 +1304,8 @@ app.get('/api/overview', auth.requireAdminSession, (req, res) => {
       layouts,
       ha: haMonitor.snapshot(),
       haConfigured: Boolean(haCfg.host && haCfg.token),
+      // Remotes always need it; viewport layouts only if they use entities.
+      haNeeded: store.listProfiles().length > 0 || dashes.some((d) => dashboardState.usesHomeAssistant(dashboard.normalizeLayout(d.layout))),
       updates: firmware.overview(store.getDevices()).settings.enabled ? firmware.status(store.getDevices()) : [],
       updateSummary: firmware.summary(store.getDevices()),
       server: {

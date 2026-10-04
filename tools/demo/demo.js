@@ -280,7 +280,8 @@ async function seed() {
   const finder = b.layout.screens.find((s) => s.kind === 'roomFinder');
   finder.finder.rooms = [
     { calendar: 'calendar.focus', name: 'Focus room' },
-    { calendar: 'calendar.quiet', name: 'Quiet room' },
+    // A calendar link rather than a Home Assistant calendar.
+    { calendar: `http://127.0.0.1:${HA_PORT}/ical/quiet-room.ics`, name: 'Quiet room' },
     { calendar: 'calendar.huddle', name: 'Huddle', occupancy: 'binary_sensor.huddle_occupied' }
   ];
   await api('PUT', `/api/dashboards/${board.slug}`, { name: 'Boardroom', layout: b.layout });

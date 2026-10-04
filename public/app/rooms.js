@@ -14,6 +14,7 @@ import {
 import { EntityPicker, IconPicker, useHaStatus, useEntity } from './pickers.js';
 import { CarouselBuilder, HubBuilder, ClockAlign, DeveloperMenu } from './clients.js';
 import { RemotePreviews } from './remote-preview.js';
+import { MeetingRoomsBulk, WaitingDisplays } from './office.js';
 
 // --- A reorderable list of items (lights, scenes, blinds, sensors, games) ---
 
@@ -537,7 +538,7 @@ function screensFromCarousel(carousel, screens) {
 
 // --- Overview ------------------------------------------------------------------------
 
-function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboards }) {
+function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboards, reloadClients }) {
   const [name, setName] = useState('');
   const [dashName, setDashName] = useState('');
   const [template, setTemplate] = useState('kitchen');
@@ -673,12 +674,14 @@ function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboar
           </div>
         </div>
       </form>
+      <${MeetingRoomsBulk} reloadDashboards=${reloadDashboards} reloadClients=${reloadClients} />
+      <${WaitingDisplays} clients=${clients} dashboards=${dashboards} reloadClients=${reloadClients} />
     </div>
   </div>`;
 }
 
-export function RoomsPage({ slug, rooms, clients, dashboards, reloadRooms, reloadDashboards }) {
+export function RoomsPage({ slug, rooms, clients, dashboards, reloadRooms, reloadDashboards, reloadClients }) {
   return slug
     ? html`<${RoomEditor} key=${slug} slug=${slug} clients=${clients} reloadRooms=${reloadRooms} />`
-    : html`<${RoomsOverview} rooms=${rooms} clients=${clients} dashboards=${dashboards} reloadRooms=${reloadRooms} reloadDashboards=${reloadDashboards} />`;
+    : html`<${RoomsOverview} rooms=${rooms} clients=${clients} dashboards=${dashboards} reloadRooms=${reloadRooms} reloadDashboards=${reloadDashboards} reloadClients=${reloadClients} />`;
 }
