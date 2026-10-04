@@ -157,7 +157,7 @@ export function SideNav({ route, data, overview }) {
     return html`<${SideColumn} title=${d ? d.name : id} back=${{ href: '#/layouts', label: 'All layouts' }} server=${server}>
       <${SideGroup} label="Viewport layout">
         <${SideLink} href=${base} icon="view-carousel-outline" label="Screens" active=${!sub} />
-        <${SideLink} href=${`${base}/settings`} icon="tune-variant" label="Thresholds and colours" active=${sub === 'settings'} />
+        <${SideLink} href=${`${base}/settings`} icon="tune-variant" label="Thresholds" active=${sub === 'settings'} />
         <${SideLink} href=${`${base}/start`} icon="file-replace-outline" label="Start from or import" active=${sub === 'start'} />
       <//>
       <${SideGroup} label="Displays">
@@ -199,7 +199,7 @@ const SECTION_NAMES = {
 const HOME_VIEWS = { attention: 'Needs attention', devices: 'Devices', batteries: 'Batteries', 'home-assistant': 'Home Assistant' };
 const LAYOUT_TOOLS = { 'meeting-rooms': 'Add many meeting rooms', waiting: 'Displays waiting', 'new-remote': 'New remote layout', 'new-viewport': 'New viewport layout' };
 const REMOTE_SUBS = { quick: 'Quick Access', settings: 'On the remote' };
-const VIEWPORT_SUBS = { settings: 'Thresholds and colours', start: 'Start from or import' };
+const VIEWPORT_SUBS = { settings: 'Thresholds', start: 'Start from or import' };
 
 function crumbs({ section, id, sub }, data) {
   const first = { label: SECTION_NAMES[section] || section, href: `#/${section.endsWith('layouts') ? 'layouts' : section}` };

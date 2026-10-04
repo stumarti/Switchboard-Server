@@ -2,11 +2,11 @@
 // UI, defined here before (or without) any hardware, then assigned to any
 // number of displays on their Viewports page. The builder is viewport.js.
 
-import { html, useState, useEffect, api, go, Icon, Button, Badge, Empty, useFlash, timeAgo } from './lib.js';
+import { html, useState, useEffect, api, go, Button, Empty, useFlash, timeAgo } from './lib.js';
 import { DashboardBuilder } from './viewport.js';
 import { useDragOrder } from './clients.js';
 
-export function DashboardPage({ slug, rooms, reloadDashboards, reloadClients }) {
+export function DashboardPage({ slug, part, rooms, reloadDashboards, reloadClients }) {
   const [dash, setDash] = useState(null);
   const [error, setError] = useState(null);
   const [dirty, setDirty] = useState(false);
@@ -61,26 +61,26 @@ export function DashboardPage({ slug, rooms, reloadDashboards, reloadClients }) 
     go('layouts');
   };
 
-  return html`<div class="page">
+  const discard = () => {
+    if (!confirm('Discard your changes?')) return;
+    setDirty(false);
+    api(`/api/dashboards/${encodeURIComponent(slug)}`).then(setDash).catch(setError);
+  };
+
+  return html`<div class="page page-wide">
     <div class="page-head">
-      <${Button} kind="ghost" icon="arrow-left" title="All layouts" onClick=${() => go('layouts')} />
-      <div class="ph-icon"><${Icon} name="view-dashboard-outline" size=${26} /></div>
       <div class="ph-text">
-        <input type="text" value=${dash.name} onInput=${(e) => update({ ...dash, name: e.target.value })} style="font-size:20px;font-weight:600;border-color:transparent;padding:4px 6px;background:transparent" />
-        <div class="chips" style="padding-left:6px">
-          <${Badge} icon="clock-outline">Updated ${timeAgo(dash.updatedAt)}<//>
-          ${dash.devices.length
-            ? dash.devices.map((d) => html`<a class="badge badge-accent" href=${`#/viewports/${encodeURIComponent(d.mac)}`}><${Icon} name="tablet-dashboard" size=${13} />${d.name}</a>`)
-            : html`<${Badge} icon="link-variant-off">No display assigned yet<//>`}
-        </div>
+        <input type="text" class="title-input" aria-label="Layout name" value=${dash.name} onInput=${(e) => update({ ...dash, name: e.target.value })} />
+        <p class="hint">Viewport layout · ${dash.devices.length ? `${dash.devices.length} display${dash.devices.length === 1 ? '' : 's'}` : 'no display yet'} · updated ${timeAgo(dash.updatedAt)}</p>
       </div>
       <div class="page-actions">
         <span class=${`flash ${msg.startsWith('Save failed') ? 'flash-bad' : ''}`}>${msg}</span>
         <${Button} kind="ghost" icon="content-copy" title="Duplicate" onClick=${duplicate} />
         <${Button} kind="ghost" icon="trash-can-outline" title="Delete layout" onClick=${remove} />
+        ${dirty && html`<${Button} onClick=${discard}>Discard<//>`}
         <${Button} kind="primary" icon="content-save-outline" disabled=${!dirty || saving} onClick=${save}>${saving ? 'Saving…' : 'Save'}<//>
       </div>
     </div>
-    <${DashboardBuilder} layout=${dash.layout} onChange=${(layout) => update({ ...dash, layout })} rooms=${rooms} useDragOrder=${useDragOrder} />
+    <${DashboardBuilder} layout=${dash.layout} part=${part} onChange=${(layout) => update({ ...dash, layout })} rooms=${rooms} useDragOrder=${useDragOrder} />
   </div>`;
 }
