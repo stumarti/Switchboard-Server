@@ -103,6 +103,25 @@ async function main() {
   await go('#/viewport-layouts/kitchen-panel', 4000);
   await shot('admin/viewport-layout', null, { x: 0, y: 0, width: 1360, height: 900 });
 
+  // An office: a room list pasted in (read, not yet set up), and a room
+  // finder whose Quiet room is on a calendar link.
+  await go('#/layouts', 1500);
+  await page.click('text=Add many meeting rooms');
+  await page.fill('textarea.bulk-text', [
+    'Room, Calendar, Occupancy, Display',
+    'Atlas, https://outlook.office365.com/owa/calendar/0f3c…/calendar.ics, binary_sensor.huddle_occupied, a0:b1:c2:00:02:01',
+    'Borealis, webcal://p01-caldav.icloud.com/published/2/MTk…, , a0:b1:c2:00:02:02',
+    'Cosmos, calendar.focus',
+    'Dorado, the big one by the lifts'
+  ].join('\n'));
+  await page.waitForTimeout(1500);
+  await shot('admin/meeting-rooms-bulk', card('Add many meeting rooms'));
+  await go('#/viewport-layouts/boardroom', 3000);
+  await page.locator('.page-card', { has: page.locator('.pc-title', { hasText: /^Other rooms$/ }) }).locator('.pc-screen').click();
+  await page.waitForTimeout(1500);
+  await fit();
+  await shot('admin/calendar-link', card('Rooms'));
+
   // Settings, tab by tab.
   for (const tab of ['home-assistant', 'wifi', 'clock', 'theme', 'updates', 'security', 'account']) {
     await go(`#/settings/${tab}`, 2000);

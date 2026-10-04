@@ -100,7 +100,7 @@ test('the kitchen dashboard: Status, Heating and Security, returning to Status, 
   assert.deepEqual(l.screens.map((s) => s.id), ['status', 'heating', 'security']);
   assert.deepEqual(l.carousel, { mode: 'returnFirst', everyMin: 30 });
   assert.equal(l.refreshIntervalMin, 30);
-  assert.deepEqual(l.quietHours, { enabled: true, start: 23, end: 6, intervalMin: 60 });
+  assert.deepEqual(l.quietHours, { enabled: true, start: 23, end: 6, intervalMin: 60, weekends: false });
   assert.equal(l.screens[2].template, 'triple');
   assert.equal(l.screens[2].columns.length, 3);
   // 23:30 BST is quiet: an hour; 05:30 BST wakes at 06:00, when it ends.

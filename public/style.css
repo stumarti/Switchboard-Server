@@ -230,7 +230,7 @@ code { font-size: 12px; background: var(--panel-2); padding: 1px 5px; border-rad
 .row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
 .row > .icon-picker { margin-top: 21px; }
 .row > .field { flex: 1; min-width: 140px; }
-input[type='text'], input[type='password'], input[type='number'], input:not([type]), select, textarea {
+input[type='text'], input[type='password'], input[type='number'], input[type='url'], input:not([type]), select, textarea {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -735,6 +735,9 @@ a.att-item:hover { background: var(--panel-2); }
 .all-good { display: flex; gap: 12px; align-items: center; color: var(--ok); }
 .all-good b { color: var(--text); }
 .table-wrap { overflow-x: auto; margin-bottom: 8px; }
+.bulk-text { font-family: ui-monospace, monospace; font-size: 12.5px; padding: 8px 10px; margin-bottom: 8px; }
+.card-button { text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.card-button:hover { border-color: var(--accent); }
 .table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .table th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .table td { padding: 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }

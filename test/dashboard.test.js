@@ -204,7 +204,7 @@ function layout() {
           load: { entity: 'sensor.load_energy', kind: 'energy' },
           forecast: { entity: 'sensor.solar_expected', attribute: 'detailedForecast', unit: 'auto' } }]]
       },
-      { id: 'room', kind: 'meetingRoom', meeting: { calendar: 'calendar.boardroom', name: 'Boardroom', occupancy: 'binary_sensor.boardroom_occupied', soonMin: 10, emptyMin: 10 } }
+      { id: 'room', kind: 'meetingRoom', meeting: { calendar: 'calendar.boardroom', name: 'Boardroom', occupancy: 'binary_sensor.boardroom_occupied', soonMin: 10, emptyMin: 10, aheadMin: 0 } }
     ]
   });
 }
@@ -486,7 +486,7 @@ test('meeting room: status icon, a timeline snapped to the quarter hour, and the
 
 test('room finder: free rooms first, longest free first, and when to wake', () => {
   const lay = dashboard.normalizeLayout({
-    screens: [{ id: 'rooms', kind: 'roomFinder', finder: { rooms: [
+    screens: [{ id: 'rooms', kind: 'roomFinder', finder: { aheadMin: 0, rooms: [
       { name: 'Boardroom', calendar: 'calendar.boardroom' },
       { name: 'Focus', calendar: 'calendar.focus' },
       { name: 'Quiet', calendar: 'calendar.quiet' },
@@ -705,4 +705,25 @@ test('a spacer keeps its height (0-400 px, 20 by default) and sends it to the di
   assert.deepEqual(l.screens[0].columns[0].map((s) => s.height), [36, 400, 20]);
   const screens = buildScreens(l, { states: [], now: new Date('2026-10-03T12:00:00Z') });
   assert.deepEqual(screens.s1.columns[0].map((s) => s.data), [{ height: 36 }, { height: 400 }, { height: 20 }]);
+});
+
+test('meeting room: it changes ahead of time, so the panel is redrawn when the meeting starts', () => {
+  const lay = dashboard.normalizeLayout({ screens: [{ id: 'room', kind: 'meetingRoom', meeting: { calendar: 'calendar.boardroom' } }] });
+  assert.equal(lay.screens[0].meeting.aheadMin, 2); // the default
+  const run = (now) => buildScreens(lay, { states: states(), calendars: BOARDROOM, now: new Date(now), timeZone: TZ }).room;
+  // 12:40 local, the review at 13:00 (and "starting soon" from 12:50): it
+  // wakes at 12:48, two minutes before the change.
+  assert.equal(run('2026-09-28T11:40:00Z').nextChangeInSec, 8 * 60);
+  // Woken at 12:58: the screen is already "In use", counting down from now.
+  const at = run('2026-09-28T11:58:00Z');
+  assert.equal(at.data.status, 'busy');
+  assert.equal(at.data.current.endsInMin, 62);
+  // Woken a little early (12:57:30), it's still "starting soon", and wakes
+  // again in 30 s (the display makes that a minute) for the change.
+  const early = run('2026-09-28T11:57:30Z');
+  assert.equal(early.data.status, 'soon');
+  assert.equal(early.nextChangeInSec, 30);
+  // Off: the change is at the minute itself.
+  lay.screens[0].meeting.aheadMin = 0;
+  assert.equal(run('2026-09-28T11:58:00Z').data.status, 'soon');
 });

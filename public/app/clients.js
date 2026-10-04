@@ -44,11 +44,15 @@ export function ClientList({ type, selected, clients, rooms, dashboards }) {
   const all = clients || [];
   // A device still waiting for approval is shown under Remotes whatever it
   // registered as, so it can't be missed; approving sets its type.
-  const pending = type === 'remote' ? all.filter((c) => c.status === 'pending') : [];
-  const mine = all.filter((c) => c.type === type && c.status !== 'pending');
+  // A display listed ahead of time (a room list with its MAC) that hasn't
+  // connected yet is neither waiting nor paired: its own group.
+  const notYet = (c) => c.expected && !c.lastSeenAt;
+  const pending = type === 'remote' ? all.filter((c) => c.status === 'pending' && !notYet(c)) : [];
+  const mine = all.filter((c) => c.type === type && c.status !== 'pending' && !notYet(c));
   const groups = [
     { label: 'Waiting for approval', items: pending },
     { label: 'Paired', items: mine.filter((c) => c.status === 'approved') },
+    { label: 'Listed, not connected yet', items: all.filter((c) => c.type === type && notYet(c)) },
     { label: 'Revoked', items: mine.filter((c) => c.status !== 'approved') }
   ].filter((g) => g.items.length);
 
@@ -83,7 +87,8 @@ function ApproveCard({ client, rooms, dashboards, reloadClients }) {
   const [name, setName] = useState(client.name === client.mac ? '' : client.name);
   const [type, setType] = useState(client.type || 'remote');
   const [room, setRoom] = useState((rooms && rooms[0] && rooms[0].slug) || '');
-  const [dash, setDash] = useState((dashboards && dashboards[0] && dashboards[0].slug) || '');
+  // A display listed in a room list already has its layout.
+  const [dash, setDash] = useState(client.dashboard || (dashboards && dashboards[0] && dashboards[0].slug) || '');
   const [msg, flash] = useFlash();
   const approve = async () => {
     try {
@@ -108,7 +113,7 @@ function ApproveCard({ client, rooms, dashboards, reloadClients }) {
     <div class="page-head">
       <div class="ph-icon" style="background:var(--warn)"><${Icon} name="shield-key-outline" size=${26} /></div>
       <div class="ph-text">
-        <h1>New device wants to pair</h1>
+        <h1>${client.lastSeenAt ? 'New device wants to pair' : 'Listed, not connected yet'}</h1>
         <p class="hint"><code>${client.mac}</code> · ${client.lastIp || 'unknown IP'} · first seen ${timeAgo(client.firstSeenAt)}</p>
       </div>
     </div>

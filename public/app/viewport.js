@@ -21,6 +21,49 @@ import { ViewportPreview, PALETTE } from './viewport-preview.js';
 
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `id-${Math.random().toString(36).slice(2)}`);
 const clone = (x) => structuredClone(x);
+const isLink = (v) => /^(webcal|webcals|https?):\/\//i.test(String(v || '').trim());
+
+// A calendar: one of Home Assistant's, or a calendar link (an iCal address
+// from Google, Outlook / Microsoft 365, iCloud...), which the server reads
+// itself. `onName`: the calendar's own name, when it has one.
+export function CalendarField({ value, onChange, onName }) {
+  const [mode, setMode] = useState(isLink(value) ? 'link' : 'ha');
+  const [check, setCheck] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const test = async () => {
+    setBusy(true);
+    setCheck(null);
+    try {
+      const r = await api('/api/calendars/check', { method: 'POST', body: { calendar: value } });
+      setCheck({ ok: true, ...r });
+      if (r.name && onName) onName(r.name);
+    } catch (e) {
+      setCheck({ ok: false, error: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const when = (iso) => new Date(iso).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  return html`<div class="calendar-field">
+    <div class="chips" style="margin-bottom:6px">
+      <button type="button" class=${`chip ${mode === 'ha' ? 'on' : ''}`} onClick=${() => { setMode('ha'); if (isLink(value)) onChange(''); }}><${Icon} name="home-assistant" size=${15} />Home Assistant<//>
+      <button type="button" class=${`chip ${mode === 'link' ? 'on' : ''}`} onClick=${() => { setMode('link'); if (!isLink(value)) onChange(''); }}><${Icon} name="link-variant" size=${15} />Calendar link<//>
+    </div>
+    ${mode === 'ha'
+      ? html`<${EntityPicker} domains=${['calendar']} value=${value} onChange=${(id, e) => { onChange(id); if (onName && e && e.name) onName(e.name); }} />`
+      : html`<div class="input-with-button">
+          <input type="url" autocomplete="off" spellcheck="false" placeholder="https://… .ics or webcal://…" value=${value} onInput=${(e) => { onChange(e.target.value.trim()); setCheck(null); }} />
+          <${Button} small icon="calendar-check-outline" disabled=${!isLink(value) || busy} onClick=${test}>${busy ? 'Reading…' : 'Test'}<//>
+        </div>
+        ${check && (check.ok
+          ? html`<p class="hint" style="color:var(--ok)">${check.name ? `“${check.name}”: ` : ''}${check.count} event${check.count === 1 ? '' : 's'} in the next two weeks${check.next.length ? ` · next ${check.next[0].title || 'Busy'}, ${when(check.next[0].start)}` : ''}</p>`
+          : html`<p class="hint" style="color:var(--bad)">${check.error}</p>`)}
+        <p class="hint">Google Calendar, Outlook / Microsoft 365, iCloud or any app’s iCal (.ics) link. It’s a secret: it stays on this server, and never goes to a display.</p>`}
+  </div>`;
+}
+
+// Change a meeting's status this many minutes ahead.
+const AHEAD_CHOICES = [0, 1, 2, 3, 5].map((n) => ({ value: String(n), label: n === 0 ? 'At the minute itself' : `${n} minute${n === 1 ? '' : 's'} before` }));
 
 const CONDITIONS = [
   { value: 'eq', label: 'is' },
@@ -468,7 +511,7 @@ function CalendarEditor({ s, set }) {
       addLabel="Add calendar"
       newItem=${() => ({ id: newId(), entity: '', color: 1 })}
       render=${(it, upd) => html`<div class="row" style="align-items:center">
-        <div style="flex:1"><${EntityPicker} domains=${['calendar']} value=${it.entity} onChange=${(id) => upd({ ...it, entity: id })} /></div>
+        <div style="flex:1"><${CalendarField} value=${it.entity} onChange=${(id) => upd({ ...it, entity: id })} /></div>
         <${ColorPicker} value=${it.color} onChange=${(v) => upd({ ...it, color: v })} />
       </div>`}
     />
@@ -910,9 +953,14 @@ function MeetingEditor({ screen, setScreen }) {
   const setCl = (k, v) => set('climate', { ...cl, [k]: v });
   return html`<div class="grid">
     <${Card} icon="calendar-account-outline" title="Room" subtitle="A whole screen for one room's bookings — for a display by a conference room door.">
-      <${Field} label="Room calendar" hint="Any Home Assistant calendar: Google, Outlook/Exchange, CalDAV…"><${EntityPicker} domains=${['calendar']} value=${m.calendar} onChange=${(id, e) => setScreen({ ...screen, meeting: { ...m, calendar: id, name: m.name || (e && e.name) || '' } })} /><//>
+      <${Field} label="Room calendar">
+        <${CalendarField} value=${m.calendar} onChange=${(v) => set('calendar', v)} onName=${(n) => !m.name && set('name', n)} />
+      <//>
       <${Field} label="Room name"><${TextInput} value=${m.name} placeholder="Boardroom" onInput=${(v) => set('name', v)} /><//>
       <${Toggle} checked=${m.hideTitles} onChange=${(v) => set('hideTitles', v)} label="Hide meeting titles (show “Booked”)" />
+      <${Field} label="Change the sign" hint="The display wakes this much before a meeting starts or ends, so it has finished redrawing (about 30 s) when it does.">
+        <${Select} value=${String(m.aheadMin ?? 2)} onChange=${(v) => set('aheadMin', Number(v))} options=${AHEAD_CHOICES} />
+      <//>
     <//>
     <${Card} icon="account-eye-outline" title="Occupancy (optional)" subtitle="With a presence/motion sensor it can tell a booked-but-empty room, or one in use without a booking.">
       <${Field} label="Occupancy sensor"><${EntityPicker} domains=${['binary_sensor']} value=${m.occupancy} onChange=${(id) => set('occupancy', id)} /><//>
@@ -979,7 +1027,7 @@ function FinderEditor({ screen, setScreen, layout }) {
         empty="No rooms yet. Add them one by one, or from the other meeting-room signs."
         newItem=${() => ({ id: newId(), calendar: '', name: '', occupancy: '' })}
         render=${(it, upd) => html`<div class="row">
-          <${Field} label="Calendar"><${EntityPicker} domains=${['calendar']} value=${it.calendar} onChange=${(id, e) => upd({ ...it, calendar: id, name: it.name || (e && e.name) || '' })} /><//>
+          <${Field} label="Calendar"><${CalendarField} value=${it.calendar} onChange=${(v) => upd({ ...it, calendar: v })} onName=${(n) => !it.name && upd({ ...it, name: n })} /><//>
           <${Field} label="Name"><${TextInput} value=${it.name} placeholder="Boardroom" onInput=${(v) => upd({ ...it, name: v })} /><//>
           <${Field} label="Occupancy (optional)"><${EntityPicker} domains=${['binary_sensor']} value=${it.occupancy} onChange=${(id) => upd({ ...it, occupancy: id })} /><//>
         </div>`}
@@ -987,6 +1035,9 @@ function FinderEditor({ screen, setScreen, layout }) {
     <//>
     <${Card} icon="tune-variant" title="Options" subtitle="Meeting titles are never shown here.">
       <${Toggle} checked=${f.showBusy} onChange=${(v) => set('showBusy', v)} label="List busy rooms too (after the free ones)" />
+      <${Field} label="Change the list" hint="Ahead of meetings starting and ending, as a room's own sign does.">
+        <${Select} value=${String(f.aheadMin ?? 2)} onChange=${(v) => set('aheadMin', Number(v))} options=${AHEAD_CHOICES} />
+      <//>
       <${StatusIconsFields} m=${f} set=${set} kind="finder" />
       <div class="row">
         <${Field} label="“Starting soon” (min before)"><${NumberInput} min="0" max="60" value=${f.soonMin} onChange=${(v) => set('soonMin', v)} /><//>
@@ -1094,7 +1145,8 @@ function CarouselCard({ layout, onChange }) {
         <div style="width:200px"><${Field} label="Refresh every"><${Select} value=${String(q.intervalMin)} onChange=${(v) => setQ('intervalMin', Number(v))}
           options=${[30, 60, 120, 240].map((n) => ({ value: String(n), label: n < 60 ? `${n} minutes` : n === 60 ? 'Hour' : `${n / 60} hours` }))} /><//></div>`}
     </div>
-    ${q.enabled && html`<p class="hint">Overnight the display wakes less often, and shows a small bed-and-clock icon by the time.</p>`}
+    ${q.enabled && html`<${Toggle} checked=${Boolean(q.weekends)} onChange=${(v) => setQ('weekends', v)} label="All weekend too (an office)" />
+      <p class="hint">${q.weekends ? 'Overnight, and all Saturday and Sunday,' : 'Overnight'} the display wakes less often, and shows a small bed-and-clock icon by the time. A meeting-room sign still wakes for a meeting.</p>`}
   <//>`;
 }
 

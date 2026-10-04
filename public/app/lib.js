@@ -130,8 +130,8 @@ export function SecretInput({ value, onInput, placeholder }) {
   </div>`;
 }
 
-export function Select({ value, onChange, options }) {
-  return html`<select value=${value} onChange=${(e) => onChange(e.target.value)}>
+export function Select({ value, onChange, options, disabled }) {
+  return html`<select value=${value} disabled=${disabled} onChange=${(e) => onChange(e.target.value)}>
     ${options.map((o) =>
       typeof o === 'object'
         ? html`<option value=${o.value}>${o.label}</option>`

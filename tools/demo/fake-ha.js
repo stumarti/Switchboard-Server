@@ -269,6 +269,21 @@ http.createServer((req, res) => {
       item(70, 'Fire drill this Friday at 11:00', 'Leave by the nearest exit and meet at the car park.')
     ].join('')}</channel></rss>`);
   }
+  // A calendar link, as Google, Outlook or iCloud publish one (no token: the
+  // address is the secret): the Quiet room's bookings, including a daily
+  // stand-up that repeats.
+  if (url.pathname === '/ical/quiet-room.ics') {
+    const stamp = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+    const t0 = Math.floor(now / 1800000) * 1800000;
+    const ev = (uid, from, to, summary, extra = []) => ['BEGIN:VEVENT', `UID:${uid}@demo`, `DTSTART:${stamp(t0 + from * 60000)}`, `DTEND:${stamp(t0 + to * 60000)}`, `SUMMARY:${summary}`, ...extra, 'END:VEVENT'];
+    res.writeHead(200, { 'content-type': 'text/calendar' });
+    return res.end([
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Demo//EN', 'X-WR-CALNAME:Quiet room',
+      ...ev('standup', -24 * 60 * 7 + 90, -24 * 60 * 7 + 105, 'Daily stand-up', ['RRULE:FREQ=DAILY']),
+      ...ev('1on1', 150, 180, '1:1'),
+      'END:VCALENDAR'
+    ].join('\r\n'));
+  }
   if (url.pathname.startsWith('/art/')) return picture(url.pathname.slice(5).replace(/\.png$/, '')).then(png);
   if (req.headers.authorization !== `Bearer ${TOKEN}`) { res.writeHead(401); return res.end(); }
   if (url.pathname.startsWith('/api/media_player_proxy/')) return picture(url.searchParams.get('cache') || 'sea').then(png);
