@@ -9,15 +9,7 @@ import { ItemList } from './rooms.js';
 import { RemoteUpdatesTab } from './firmware.js';
 import { builtInArt } from './viewport-art.js';
 
-const TABS = [
-  { id: 'home-assistant', label: 'Home Assistant', icon: 'home-assistant' },
-  { id: 'wifi', label: 'Wi-Fi', icon: 'wifi' },
-  { id: 'clock', label: 'Clock', icon: 'clock-outline' },
-  { id: 'theme', label: 'Theme', icon: 'palette-outline' },
-  { id: 'updates', label: 'Updates', icon: 'update' },
-  { id: 'security', label: 'Security', icon: 'shield-lock-outline' },
-  { id: 'account', label: 'Account', icon: 'account-circle-outline' }
-];
+import { SETTINGS_PAGES } from './nav.js';
 
 // Globals (/api/globals) are edited as one object and always saved whole:
 // the server treats a missing list as empty.
@@ -170,18 +162,6 @@ const fmtClock = (ms, timeZone) =>
 const fmtDate = (ms, timeZone) => new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone }).format(new Date(ms));
 // Within 5 s counts as in step (a page's own timers aren't more exact).
 const driftOf = (t) => (t && !t.error ? Math.round(t.offsetMs / 1000) : null);
-
-// A compact "Server time" chip for the Settings header, on every tab.
-function ServerTimeChip() {
-  const t = useServerTime();
-  if (!t) return null;
-  if (t.error) return html`<${Badge} kind="bad" icon="clock-alert-outline">Server time unavailable<//>`;
-  const drift = driftOf(t);
-  const ok = Math.abs(drift) <= 5;
-  return html`<a href="#/settings/clock" class="time-chip" title=${ok ? 'The server’s clock matches this browser’s' : `The server’s clock is ${Math.abs(drift)} s ${drift > 0 ? 'ahead of' : 'behind'} this browser’s`}>
-    <${Badge} kind=${ok ? 'ok' : 'warn'} icon=${ok ? 'clock-check-outline' : 'clock-alert-outline'}>Server time ${fmtClock(Date.now() + t.offsetMs, t.timeZone)}<//>
-  </a>`;
-}
 
 function ServerTimeCard() {
   const t = useServerTime();
@@ -492,12 +472,6 @@ function SecuritySettings({ data, take }) {
         <${Button} small icon="logout-variant" disabled=${others < 1} onClick=${() => confirm(`Sign out the other ${others} browser${others === 1 ? '' : 's'}?`) && put('/api/security/sign-out-others', null, 'Signed out the others')}>Sign out everywhere else<//>
       </div>
       ${msg && html`<p class=${`hint ${msg.startsWith('Failed') ? 'text-bad' : ''}`}>${msg}</p>`}
-    <//>
-    <${Card} icon="devices" title="New devices" subtitle="Who may ask to pair.">
-      <${Toggle} checked=${st.acceptNewDevices} onChange=${(v) => put('/api/security/settings', { acceptNewDevices: v })} label="Accept new devices" />
-      <p class="hint">${st.acceptNewDevices
-        ? 'A device the server has never seen can ask to pair, and waits on the Remotes page for you to approve it.'
-        : 'Off: a device the server has never seen is turned away, so nothing new appears on the Remotes page. Devices it already knows still work, and can get a new token after a reset. Switch this on while you add a device.'}</p>
     <//>`;
 }
 
@@ -565,50 +539,109 @@ function SecurityTab() {
   </div>`;
 }
 
-function AccountTab({ onSignOut }) {
+// Pairing: whether new devices may ask to pair, and how they find the server.
+function PairingTab() {
+  const [data, setData] = useState(null);
   const [health] = useApi('/api/health');
+  const [msg, flash] = useFlash();
+  useEffect(() => {
+    api('/api/security').then(setData).catch((e) => flash(e.message, 0));
+  }, []);
+  if (!data) return html`<p class="hint">${msg || 'Loading…'}</p>`;
+  const st = data.settings;
+  const set = async (v) => {
+    try {
+      setData(await api('/api/security/settings', { method: 'PUT', body: { acceptNewDevices: v } }));
+      flash('Saved');
+    } catch (e) {
+      flash(`Failed: ${e.message}`, 8000);
+    }
+  };
+  return html`<div class="settings-cols">
+    <${Card} title="New devices" subtitle="Who may ask to pair." actions=${html`<${Toggle} checked=${st.acceptNewDevices} onChange=${set} />`}>
+      <p class="hint">${st.acceptNewDevices
+        ? 'On: a device the server has never seen can ask to pair, and waits under Remotes for you to approve it as a remote or a viewport.'
+        : 'Off: a device the server has never seen is turned away, so nothing new appears under Remotes. Devices it already knows still work, and can get a new token after a reset. Displays listed with their address in a room list still connect. Switch this on while you add a device.'}</p>
+      <div class="row"><a class="btn btn-small" href="#/remotes"><${Icon} name="account-clock-outline" size=${16} /><span>Devices waiting</span></a>
+        <a class="btn btn-small" href="#/layouts/waiting"><${Icon} name="check-all" size=${16} /><span>Approve displays together</span></a></div>
+      ${msg && html`<p class=${`hint ${msg.startsWith('Failed') ? 'text-bad' : ''}`}>${msg}</p>`}
+    <//>
+    <${Card} title="How devices find this server">
+      <p class="hint">Devices look for the server on the local network by itself (mDNS), so there's no address to type. Where multicast doesn't reach, such as another VLAN, type this address on the device's setup page instead.</p>
+      ${health && html`<dl class="kv">
+        <dt>Address</dt><dd><code>${String(health.mdnsHostname).replace(/\.local$/, '')}.local:${health.port}</code></dd>
+        <dt>Service</dt><dd><code>${health.mdnsServiceType}</code></dd>
+      </dl>`}
+    <//>
+  </div>`;
+}
+
+function AboutTab() {
+  const [health] = useApi('/api/health');
+  const MANUAL = 'https://stumarti.github.io/Switchboard/manual/';
+  return html`<div class="settings-cols">
+    <${Card} title="This server">
+      ${health
+        ? html`<dl class="kv">
+          <dt>Version</dt><dd>Switchboard Server ${health.version}</dd>
+          <dt>mDNS name</dt><dd><code>${String(health.mdnsHostname).replace(/\.local$/, '')}.local:${health.port}</code></dd>
+          <dt>Service</dt><dd><code>${health.mdnsServiceType}</code></dd>
+          <dt>Data folder</dt><dd><code>${health.dataDir}</code></dd>
+        </dl>`
+        : html`<p class="hint">Loading…</p>`}
+    <//>
+    <${Card} title="Help">
+      <div class="link-list">
+        <a href=${MANUAL} target="_blank" rel="noopener"><${Icon} name="book-open-page-variant-outline" size=${18} />The Switchboard manual</a>
+        <a href=${`${MANUAL}server/configuration.html`} target="_blank" rel="noopener"><${Icon} name="file-cog-outline" size=${18} />Configuring the server</a>
+        <a href="https://stumarti.github.io/Switchboard/" target="_blank" rel="noopener"><${Icon} name="usb-flash-drive-outline" size=${18} />The browser flasher</a>
+        <a href="https://github.com/stumarti/Switchboard-Server" target="_blank" rel="noopener"><${Icon} name="github" size=${18} />Switchboard Server on GitHub</a>
+      </div>
+    <//>
+  </div>`;
+}
+
+function AccountTab({ onSignOut }) {
   const signOut = async () => {
     await api('/api/auth/logout', { method: 'POST' });
     onSignOut();
   };
-  return html`<div class="grid">
-    <${Card} icon="server-network" title="This server">
-      ${health &&
-      html`<dl class="kv">
-        <dt>Version</dt><dd>${health.version}</dd>
-        <dt>mDNS name</dt><dd>${String(health.mdnsHostname).replace(/\.local$/, '')}.local:${health.port}</dd>
-        <dt>Service</dt><dd>${health.mdnsServiceType}</dd>
-        <dt>Data folder</dt><dd>${health.dataDir}</dd>
-      </dl>`}
-    <//>
+  return html`<div class="settings-cols">
     <${PasswordCard} />
-    <${Card} icon="account-circle-outline" title="Admin session">
+    <${Card} title="This browser" subtitle="You're signed in as the admin.">
       <div><${Button} icon="logout" onClick=${signOut}>Sign out<//></div>
     <//>
   </div>`;
 }
 
+// Each page's heading.
+const PAGE_HINTS = {
+  'home-assistant': 'The Home Assistant every remote and viewport reads from.',
+  wifi: 'Networks the devices may join, besides the one they were set up on.',
+  clock: 'The server’s time, the time zone every device shows times in, and where devices set their clocks from.',
+  updates: 'Send new firmware to remotes and displays over Wi-Fi.',
+  pairing: 'New devices asking to pair, and how they find this server.',
+  theme: 'Icons and fonts, for the remotes and for the viewports.',
+  security: 'Who can reach this server, and how long sign-ins last.',
+  account: 'The admin password, and signing out.',
+  about: 'This server, and where to get help.'
+};
+
 export function SettingsPage({ tab, onSignOut }) {
-  const active = TABS.find((t) => t.id === tab) || TABS[0];
+  const active = SETTINGS_PAGES.find((t) => t.id === tab) || SETTINGS_PAGES[0];
+  const head = (actions) => html`<div class="page-head">
+    <div class="ph-text"><h1>${active.label}</h1><p class="hint">${PAGE_HINTS[active.id]}</p></div>
+    ${actions && html`<div class="page-actions">${actions}</div>`}
+  </div>`;
+  if (active.id === 'updates') return html`<div class="page"><${RemoteUpdatesTab} head=${head} /></div>`;
   let body;
   if (active.id === 'home-assistant') body = html`<${HomeAssistantTab} />`;
   else if (active.id === 'wifi') body = html`<${WifiTab} />`;
   else if (active.id === 'clock') body = html`<${ClockTab} />`;
   else if (active.id === 'theme') body = html`<${ThemeTab} />`;
-  else if (active.id === 'updates') body = html`<${RemoteUpdatesTab} />`;
+  else if (active.id === 'pairing') body = html`<${PairingTab} />`;
   else if (active.id === 'security') body = html`<${SecurityTab} />`;
+  else if (active.id === 'about') body = html`<${AboutTab} />`;
   else body = html`<${AccountTab} onSignOut=${onSignOut} />`;
-  return html`<div class="page">
-    <div class="page-head">
-      <div class="ph-icon"><${Icon} name="cog-outline" size=${26} /></div>
-      <div class="ph-text"><h1>Settings</h1><p class="hint">Shared by every room and device.</p></div>
-      <div class="page-actions"><${ServerTimeChip} /></div>
-    </div>
-    <nav class="tabs">
-      ${TABS.map(
-        (t) => html`<a class=${`tab ${t.id === active.id ? 'active' : ''}`} href=${`#/settings/${t.id}`}><${Icon} name=${t.icon} size=${18} />${t.label}</a>`
-      )}
-    </nav>
-    ${body}
-  </div>`;
+  return html`<div class="page">${head()}${body}</div>`;
 }

@@ -238,3 +238,23 @@ export function timeAgo(iso) {
   if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
   return new Date(iso).toLocaleDateString();
 }
+
+// A dialog over the page: Escape or a click outside closes it.
+export function Modal({ title, icon, onClose, children, footer, wide }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return html`<div class="modal-back" onMouseDown=${(e) => e.target === e.currentTarget && onClose()}>
+    <div class=${`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-label=${title}>
+      <div class="modal-head">
+        ${icon && html`<${Icon} name=${icon} size=${20} />`}
+        <h2>${title}</h2>
+        <button type="button" class="btn btn-ghost btn-icon" title="Close" onClick=${onClose}><${Icon} name="close" size=${18} /></button>
+      </div>
+      <div class="modal-body">${children}</div>
+      ${footer && html`<div class="modal-foot">${footer}</div>`}
+    </div>
+  </div>`;
+}
