@@ -225,7 +225,7 @@ export function batteryLifeText(life) {
 }
 
 // A board (the kind of device a firmware build is for) as people call it.
-const BOARD_NAMES = { x4pro: 'X4 Pro' };
+const BOARD_NAMES = { x4pro: 'X4 Pro', sticky: 'Sticky', e1002: 'reTerminal E1002' };
 export function boardLabel(board) {
   return BOARD_NAMES[board] || board || '';
 }

@@ -1,17 +1,18 @@
-// Switchboard (the home page, the rail's logo): how the whole setup is doing
-// (GET /api/overview).
+// Home: how the whole setup is doing (GET /api/overview).
 //
-//   Tiles           remotes and viewports online, devices waiting for
-//                   approval, low batteries, Home Assistant
-//   Needs attention everything worth acting on, worst first, each linking to
-//                   where it's fixed
-//   Devices         every paired device: battery, signal, firmware, last seen;
-//                   "Update now" when remotes are due a new release
-//   Home Assistant  how the server's requests to HA are going, recent errors
+//   KPIs              remotes and viewports online, devices waiting for
+//                     approval, low batteries, firmware still to install
+//   Needs attention   everything worth acting on, worst first, each with the
+//                     button that fixes it
+//   Firmware rollout  each board's release, its stage and how far it's got
+//   Devices           every device: status, battery and days left, Wi-Fi,
+//                     firmware; filtered by kind, by trouble or by name
+//   Home Assistant    how the server's requests to HA are going
 //
-// Polled every 10 s while the tab is visible.
+// The side column's links (#/home/<view>) scroll to a part. Polled every
+// 10 s while the tab is visible.
 
-import { html, useState, useEffect, api, Icon, Card, Badge, Button, Empty, timeAgo, batteryLifeText, boardLabel } from './lib.js';
+import { html, useState, useEffect, useRef, api, go, Icon, Card, Badge, Button, Empty, timeAgo, batteryLifeText, boardLabel } from './lib.js';
 
 const LEVEL = {
   critical: { icon: 'alert-octagon', cls: 'bad', label: 'Critical' },
@@ -27,7 +28,9 @@ const KIND_ICON = {
   unassigned: 'link-variant-off',
   ha: 'home-assistant',
   entities: 'help-rhombus-outline',
-  firmware: 'chip'
+  firmware: 'chip',
+  timezone: 'earth',
+  expected: 'timer-sand'
 };
 
 function useOverview() {
@@ -110,28 +113,23 @@ function UpdateNowRow({ b, named, reload }) {
   </div>`;
 }
 
-function Tile({ icon, label, value, sub, kind = '', href }) {
-  const body = html`<div class=${`home-tile ${kind ? `ht-${kind}` : ''}`}>
-    <div class="ht-icon"><${Icon} name=${icon} size=${22} /></div>
-    <div class="ht-text">
-      <div class="ht-value">${value}</div>
-      <div class="ht-label">${label}</div>
-      ${sub && html`<div class="hint">${sub}</div>`}
-    </div>
+function Kpi({ icon, label, value, of, sub, kind, href, bar }) {
+  const body = html`<div class=${`card kpi ${kind ? `kpi-${kind}` : ''}`}>
+    <div class="kpi-label"><${Icon} name=${icon} size=${15} />${label}</div>
+    <div class="kpi-value">${value}${of != null && html`<small> ${of}</small>`}</div>
+    ${bar != null ? html`<div class="meter"><i style=${{ width: `${Math.max(2, Math.min(100, bar))}%` }}></i></div>` : html`<div class="kpi-sub">${sub || ' '}</div>`}
   </div>`;
-  return href ? html`<a class="ht-link" href=${href}>${body}</a>` : body;
+  return href ? html`<a class="kpi-link" href=${href}>${body}</a>` : body;
 }
 
 function BatteryBar({ pct, level, life }) {
   if (pct == null) return html`<span class="hint">—</span>`;
   const est = batteryLifeText(life);
   const cls = level === 'critical' ? 'bad' : level === 'low' ? 'warn' : 'ok';
-  const icon = pct >= 95 ? 'battery' : `battery-${Math.max(10, Math.round(pct / 10) * 10)}`;
   return html`<span class=${`battery battery-${cls}`} title=${`${pct}%`}>
-    <${Icon} name=${pct <= 10 ? 'battery-alert-variant-outline' : icon} size=${18} />
-    <span class="battery-bar"><span style=${{ width: `${pct}%` }}></span></span>
-    <span>${pct}%</span>
-    ${est.short && html`<span class="battery-days hint" title=${est.tip}>${est.short}</span>`}
+    <span class="meter"><i style=${{ width: `${pct}%` }}></i></span>
+    <span class="battery-pct">${pct}%</span>
+    ${est.short && html`<span class=${`battery-days ${cls !== 'ok' ? 'battery-days-low' : ''}`} title=${est.tip}>${est.short}</span>`}
   </span>`;
 }
 
@@ -139,9 +137,12 @@ function Signal({ rssi }) {
   if (rssi == null) return html`<span class="hint">—</span>`;
   const bars = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
   return html`<span class=${`signal ${bars <= 1 ? 'signal-weak' : ''}`} title=${`${rssi} dBm`}>
-    <${Icon} name=${`wifi-strength-${bars}`} size=${18} /> ${rssi} dBm
+    <span class="bars">${[1, 2, 3, 4].map((n) => html`<b class=${n <= bars ? 'on' : ''} style=${{ height: `${n * 3}px` }}></b>`)}</span>${rssi} dBm
   </span>`;
 }
+
+// The button that fixes each kind of problem (it goes where the link does).
+const ACTION = { expected: 'View', pending: 'Approve', battery: 'View', offline: 'View', wifi: 'View', unassigned: 'Assign', ha: 'Fix', entities: 'Fix', firmware: 'Review', timezone: 'Set' };
 
 function Attention({ items }) {
   if (!items.length) {
@@ -150,11 +151,37 @@ function Attention({ items }) {
   return html`<div class="attention">
     ${items.map((a) => {
       const lv = LEVEL[a.level];
-      const inner = html`<span class=${`att-icon att-${lv.cls}`}><${Icon} name=${KIND_ICON[a.kind] || lv.icon} size=${20} /></span>
+      return html`<div class="att-item">
+        <span class=${`att-icon att-${lv.cls}`}><${Icon} name=${KIND_ICON[a.kind] || lv.icon} size=${17} /></span>
         <span class="att-text"><b>${a.title}</b><span class="hint">${a.detail}</span></span>
-        ${a.link && html`<${Icon} name="chevron-right" size=${20} class="att-go" />`}`;
-      return a.link ? html`<a class="att-item" href=${a.link}>${inner}</a>` : html`<div class="att-item">${inner}</div>`;
+        ${a.link && html`<a class=${`btn btn-small ${a.kind === 'pending' ? 'btn-primary' : ''}`} href=${a.link}>${ACTION[a.kind] || 'Open'}</a>`}
+      </div>`;
     })}
+  </div>`;
+}
+
+// Each board's release: its stage and how many of its devices run it.
+const STAGE = { pilot: ['Pilots', 'accent'], everyone: ['Everyone', 'ok'] };
+function Rollout({ u, devices, reload }) {
+  if (!u || !u.enabled) {
+    return html`<p class="hint">Firmware updates are off. <a href="#/settings/updates">Turn them on</a> to roll releases out to remotes and viewports over Wi-Fi.</p>`;
+  }
+  if (!u.boards.length) return html`<p class="hint">No release chosen yet. <a href="#/settings/updates">Pick one</a> for each kind of device.</p>`;
+  return html`<div class="rollout">
+    ${u.boards.map((b) => {
+      const mine = devices.filter((d) => d.update && d.update.board === b.board);
+      const done = mine.filter((d) => d.update.state === 'current').length;
+      const [stage, kind] = STAGE[b.stage] || [b.stage, ''];
+      const pct = mine.length ? (done / mine.length) * 100 : 0;
+      return html`<div class="rollout-row">
+        <div class="rollout-top">
+          <b>${boardLabel(b.board)}</b><code>${b.release}</code><${Badge} kind=${kind}>${stage}<//>
+          <span class="pagebar-sp"></span><span class="hint">${done} of ${mine.length} updated</span>
+        </div>
+        <div class="meter"><i style=${{ width: `${Math.max(3, pct)}%`, background: pct >= 100 ? 'var(--ok)' : 'var(--accent)' }}></i></div>
+      </div>`;
+    })}
+    <${UpdateNow} u=${u} reload=${reload} />
   </div>`;
 }
 
@@ -172,33 +199,64 @@ function UpdateIcon({ u }) {
   return html`<span class=${`fw-state fw-${look.cls}`}><${Icon} name=${look.icon} size=${18} title=${look.text(u)} /></span>`;
 }
 
-function Devices({ devices }) {
+const trouble = (d) => d.status === 'pending' || (d.status === 'approved' && !d.online) || (d.batteryLevel && d.batteryLevel !== 'ok') || (d.update && d.update.state === 'failed');
+const FILTERS = [
+  { id: 'all', label: 'All', test: () => true },
+  { id: 'remote', label: 'Remotes', test: (d) => d.type !== 'viewport' },
+  { id: 'viewport', label: 'Viewports', test: (d) => d.type === 'viewport' },
+  { id: 'battery', label: 'Low battery', test: (d) => d.batteryLevel && d.batteryLevel !== 'ok' },
+  { id: 'attention', label: 'Attention', test: trouble }
+];
+
+function statusOf(d) {
+  if (d.status === 'pending') return ['warn', 'Waiting'];
+  if (d.expected) return ['', 'Not connected yet'];
+  if (d.status !== 'approved') return ['', 'Revoked'];
+  return d.online ? ['ok', 'Online'] : ['bad', 'Offline'];
+}
+
+function Devices({ devices, filter, setFilter }) {
+  const [q, setQ] = useState('');
   const shown = devices.filter((d) => d.status !== 'revoked');
   if (!shown.length) {
     return html`<${Empty} icon="devices" title="No devices yet">Turn a remote or a viewport on: it asks to pair, and shows up here to approve.<//>`;
   }
+  const f = FILTERS.find((x) => x.id === filter) || FILTERS[0];
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   const order = { pending: 0, approved: 1 };
-  const sorted = [...shown].sort((a, b) => (order[a.status] ?? 2) - (order[b.status] ?? 2) || a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
-  return html`<div class="table-wrap"><table class="table">
-    <thead><tr><th>Device</th><th>Room / layout</th><th>Battery</th><th>Wi-Fi</th><th>Firmware</th><th>Last seen</th></tr></thead>
+  const rows = shown
+    .filter(f.test)
+    .filter((d) => words.every((w) => `${d.name} ${d.mac} ${d.assignedTo} ${d.firmware}`.toLowerCase().includes(w)))
+    .sort((a, b) => (filter === 'battery' ? (a.battery ?? 101) - (b.battery ?? 101) : 0) || (order[a.status] ?? 2) - (order[b.status] ?? 2) || a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+  return html`<div class="table-tools">
+      <div class="seg">
+        ${FILTERS.map((x) => html`<button type="button" class=${x.id === f.id ? 'on' : ''} onClick=${() => setFilter(x.id)}>${x.label}<em>${shown.filter(x.test).length}</em></button>`)}
+      </div>
+      <span class="pagebar-sp"></span>
+      <label class="filter-box"><${Icon} name="magnify" size=${15} /><input type="text" placeholder="Filter devices" value=${q} onInput=${(e) => setQ(e.target.value)} /></label>
+    </div>
+    <div class="table-wrap"><table class="table table-links">
+    <thead><tr><th>Device</th><th>Status</th><th>Room / layout</th><th>Battery</th><th>Wi-Fi</th><th>Firmware</th><th>Last seen</th></tr></thead>
     <tbody>
-      ${sorted.map(
-        (d) => html`<tr>
+      ${rows.map((d) => {
+        const [kind, label] = statusOf(d);
+        return html`<tr onClick=${() => (location.hash = d.link)}>
           <td><a class="dev-name" href=${d.link}>
-            <span class=${`dot ${d.status === 'pending' ? 'dot-warn' : d.online ? 'dot-ok' : ''}`}></span>
-            <${Icon} name=${d.type === 'viewport' ? 'tablet-dashboard' : 'remote'} size=${18} />
-            <span>${d.name}</span>
+            <span class="dev-tile"><${Icon} name=${d.status === 'pending' ? 'help-circle-outline' : d.type === 'viewport' ? 'tablet-dashboard' : 'remote'} size=${17} /></span>
+            <span class="dev-text"><b>${d.name}</b>${d.name !== d.mac && html`<code class="dev-mac">${d.mac}</code>`}</span>
           </a></td>
-          <td>${d.status === 'pending' ? html`<${Badge} kind="warn" icon="account-clock-outline">Waiting for approval<//>` : d.assignedTo || html`<span class="hint">None</span>`}</td>
+          <td><span class="status"><span class=${`dot ${kind ? `dot-${kind}` : ''}`}></span>${label}</span></td>
+          <td>${d.assignedTo || html`<span class="hint">None</span>`}</td>
           <td><${BatteryBar} pct=${d.battery} level=${d.batteryLevel} life=${d.batteryLife} /></td>
           <td><${Signal} rssi=${d.rssi} /></td>
           <td>${d.firmware ? html`<span class="fw-cell"><code>${d.firmware}</code><${UpdateIcon} u=${d.update} /></span>` : html`<span class="hint">—</span>`}</td>
-          <td>${timeAgo(d.lastSeenAt)}</td>
-        </tr>`
-      )}
+          <td class="hint">${timeAgo(d.lastSeenAt)}</td>
+        </tr>`;
+      })}
     </tbody>
   </table></div>
-  <p class="hint">Battery, Wi-Fi and firmware come from the device itself on each check-in; older firmware doesn't send them.</p>`;
+  ${!rows.length && html`<p class="hint" style="padding:14px 16px">No device matches.</p>`}
+  <div class="table-foot">Showing ${rows.length} of ${shown.length}<span class="pagebar-sp"></span>Battery, Wi-Fi and firmware come from each device on its check-ins; days left are learned from its own discharge.</div>`;
 }
 
 function HomeAssistantCard({ ha, server }) {
@@ -234,47 +292,75 @@ function ServerCard({ server }) {
   <//>`;
 }
 
-export function HomePage() {
+// #/home/<view>: scroll to that part (and, for batteries, filter to them).
+const VIEW_TARGET = { attention: 'home-attention', devices: 'home-devices', batteries: 'home-devices', 'home-assistant': 'home-ha' };
+
+export function HomePage({ view }) {
   const { data, error, reload } = useOverview();
+  const [filter, setFilter] = useState('all');
+  const ready = Boolean(data);
+  useEffect(() => {
+    if (view === 'batteries') setFilter('battery');
+    else if (view === 'devices') setFilter('all');
+    const el = ready && document.getElementById(VIEW_TARGET[view] || '');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    else if (ready && !view) document.querySelector('.main').scrollTo({ top: 0 });
+  }, [view, ready]);
   if (!data) {
     return html`<div class="page"><p class="hint">${error || 'Loading…'}</p></div>`;
   }
   const c = data.counts;
-  const ha = data.ha;
-  const haKind = !ha.configured || ha.reachable === false ? 'bad' : ha.lastHour && ha.lastHour.errors ? 'warn' : ha.reachable ? 'ok' : '';
+  const pending = data.devices.filter((d) => d.status === 'pending' && !d.expected);
+  const low = data.devices.filter((d) => d.status === 'approved' && d.batteryLevel && d.batteryLevel !== 'ok').sort((a, b) => a.battery - b.battery);
+  const u = data.updates;
+  const toUpdate = u && u.enabled ? data.devices.filter((d) => d.update && (d.update.state === 'pending' || d.update.state === 'failed')).length : null;
+  const lowLife = low[0] && batteryLifeText(low[0].batteryLife).short;
   return html`<div class="page">
     <div class="page-head">
-      <div class="ph-icon"><${Icon} name="remote-tv" size=${26} /></div>
       <div class="ph-text">
-        <h1>Switchboard</h1>
+        <h1>Dashboard</h1>
         <p class="hint">How every remote, viewport and the link to Home Assistant is doing.</p>
       </div>
-      ${error && html`<div class="page-actions"><span class="flash flash-bad">${error}</span></div>`}
+      <div class="page-actions">
+        ${error && html`<span class="flash flash-bad">${error}</span>`}
+        ${pending.length > 0 && html`<a class="btn btn-primary" href=${pending.length === 1 ? pending[0].link : '#/remotes'}><${Icon} name="check-decagram-outline" size=${18} /><span>Approve ${pending.length} device${pending.length === 1 ? '' : 's'}</span></a>`}
+      </div>
     </div>
 
     <div class="stack">
-    <div class="home-tiles">
-      <${Tile} icon="remote" label="Remotes online" value=${`${c.remotesOnline} / ${c.remotes}`} kind=${c.remotes && c.remotesOnline < c.remotes ? 'warn' : ''} href="#/remotes" />
-      <${Tile} icon="tablet-dashboard" label="Viewports online" value=${`${c.viewportsOnline} / ${c.viewports}`} kind=${c.viewports && c.viewportsOnline < c.viewports ? 'warn' : ''} href="#/viewports" />
-      <${Tile} icon="account-clock-outline" label="Waiting for approval" value=${c.pending} kind=${c.pending ? 'warn' : ''} href="#/remotes" />
-      <${Tile} icon="battery-alert-variant-outline" label="Low batteries" value=${c.lowBattery} kind=${c.lowBattery ? 'bad' : ''} />
-      <${Tile} icon="home-assistant" label="Home Assistant"
-        value=${!ha.configured ? 'Not set up' : ha.reachable === false ? 'Down' : ha.lastHour && ha.lastHour.avgMs != null ? `${ha.lastHour.avgMs} ms` : 'OK'}
-        sub=${ha.lastHour && ha.lastHour.errors ? `${ha.lastHour.errors} failed in the last hour` : ''} kind=${haKind} href="#/settings/home-assistant" />
+    <div class="kpis">
+      <${Kpi} icon="remote" label="Remotes online" value=${c.remotesOnline} of=${`/ ${c.remotes}`} href="#/remotes"
+        bar=${c.remotes ? (c.remotesOnline / c.remotes) * 100 : 0} kind=${c.remotes && c.remotesOnline < c.remotes ? 'warn' : ''} />
+      <${Kpi} icon="tablet-dashboard" label="Viewports online" value=${c.viewportsOnline} of=${`/ ${c.viewports}`} href="#/viewports"
+        bar=${c.viewports ? (c.viewportsOnline / c.viewports) * 100 : 0} kind=${c.viewports && c.viewportsOnline < c.viewports ? 'warn' : ''} />
+      <${Kpi} icon="shield-key-outline" label="Waiting for approval" value=${c.pending} kind=${c.pending ? 'warn' : ''} href="#/remotes"
+        sub=${pending[0] ? `${pending[0].name} · ${timeAgo(pending[0].lastSeenAt)}` : 'None waiting'} />
+      <${Kpi} icon="battery-alert-variant-outline" label="Low batteries" value=${c.lowBattery} kind=${c.lowBattery ? 'warn' : ''} href="#/home/batteries"
+        sub=${low[0] ? `${low[0].name}${lowLife ? ` · ${lowLife} left` : ''}` : 'All charged'} />
+      <${Kpi} icon="update" label="Firmware" value=${toUpdate == null ? 'Off' : toUpdate} of=${toUpdate ? 'to update' : null} href="#/settings/updates"
+        sub=${toUpdate == null ? 'Updates are off' : u.boards.length ? u.boards.map((b) => `${boardLabel(b.board)} ${b.release}`).join(' · ') : 'No release chosen'} />
     </div>
 
-    <${Card} icon="bell-outline" title="Needs attention"
-      actions=${html`${c.critical > 0 && html`<${Badge} kind="bad">${c.critical} critical<//>`}${c.warn > 0 && html`<${Badge} kind="warn">${c.warn} warning${c.warn === 1 ? '' : 's'}<//>`}`}>
-      <${Attention} items=${data.attention} />
-    <//>
+    <div class="home-row">
+      <div id="home-attention">
+      <${Card} title="Needs attention" class="card-flush"
+        actions=${html`${c.critical > 0 && html`<${Badge} kind="bad">${c.critical} critical<//>`}${c.warn > 0 && html`<${Badge} kind="warn">${c.warn} warning${c.warn === 1 ? '' : 's'}<//>`}${data.attention.length - c.critical - c.warn > 0 && html`<${Badge}>${data.attention.length - c.critical - c.warn} tip${data.attention.length - c.critical - c.warn === 1 ? '' : 's'}<//>`}`}>
+        <${Attention} items=${data.attention} />
+      <//>
+      </div>
+      <${Card} title="Firmware rollout" actions=${html`<a class="hint" href="#/settings/updates">Settings → Firmware updates</a>`}>
+        <${Rollout} u=${u} devices=${data.devices} reload=${reload} />
+      <//>
+    </div>
 
-    <${Card} icon="devices" title="Devices" subtitle=${`${c.rooms} room${c.rooms === 1 ? '' : 's'} · ${c.layouts} viewport layout${c.layouts === 1 ? '' : 's'}`}
-      actions=${html`<${UpdateNow} u=${data.updates} reload=${reload} />`}>
-      <${Devices} devices=${data.devices} />
+    <div id="home-devices">
+    <${Card} title="Devices" subtitle=${`${data.devices.filter((d) => d.status !== 'revoked').length} devices · ${c.rooms} room${c.rooms === 1 ? '' : 's'} · ${c.layouts} viewport layout${c.layouts === 1 ? '' : 's'}`} class="card-flush">
+      <${Devices} devices=${data.devices} filter=${filter} setFilter=${setFilter} />
     <//>
+    </div>
 
-    <div class="grid">
-      <${HomeAssistantCard} ha=${ha} server=${data.server} />
+    <div class="grid" id="home-ha">
+      <${HomeAssistantCard} ha=${data.ha} server=${data.server} />
       <${ServerCard} server=${data.server} />
     </div>
     </div>

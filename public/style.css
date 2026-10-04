@@ -960,3 +960,57 @@ pre.mono { font-family: ui-monospace, monospace; font-size: 12.5px; background: 
 .dev-name { font-weight: 600; }
 a.btn, a.badge, a.dev-name { text-decoration: none; }
 a.badge:hover { text-decoration: underline; }
+
+/* --- Home ------------------------------------------------------------------ */
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.kpi-link { color: inherit; text-decoration: none; }
+.kpi-link:hover .kpi { border-color: #c9d3e3; }
+.kpi { padding: 14px 16px; display: grid; gap: 4px; height: 100%; }
+.kpi-label { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 500; }
+.kpi-value { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+.kpi-value small { font-size: 14px; color: var(--faint); font-weight: 500; letter-spacing: 0; }
+.kpi-warn .kpi-value { color: var(--warn); }
+.kpi-bad .kpi-value { color: var(--bad); }
+.kpi-sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meter { height: 4px; border-radius: 2px; background: var(--line-2); overflow: hidden; align-self: center; }
+.meter i { display: block; height: 100%; border-radius: 2px; background: var(--ok); }
+.kpi-warn .meter i { background: var(--warn); }
+.home-row { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.attention { display: flex; flex-direction: column; }
+.att-item { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 16px; border-bottom: 1px solid var(--line-2); color: inherit; text-decoration: none; }
+.att-item:last-child { border-bottom: 0; }
+.att-icon { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; }
+.att-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.att-text b { font-weight: 600; }
+.att-text .hint { font-size: 12px; }
+.card-flush .all-good { padding: 16px; }
+.rollout { display: flex; flex-direction: column; gap: 14px; }
+.rollout-row { display: grid; gap: 7px; }
+.rollout-top { display: flex; align-items: center; gap: 8px; }
+.rollout-top b { font-weight: 600; }
+.rollout .update-now-list { align-items: flex-start; }
+.table-tools { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line-2); flex-wrap: wrap; }
+.filter-box { display: flex; align-items: center; gap: 6px; height: 30px; width: 220px; border: 1px solid var(--border); border-radius: 8px; padding: 0 9px; color: var(--faint); background: var(--panel); }
+.filter-box input { border: 0; padding: 0; min-height: 0; font-size: 12.5px; background: transparent; }
+.filter-box input:focus { outline: 0; }
+.table-foot { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line-2); color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+.dev-name { display: inline-flex; align-items: center; gap: 10px; color: inherit; }
+.dev-text { display: flex; flex-direction: column; line-height: 1.3; }
+.dev-text b { font-weight: 600; }
+code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); font-size: 11px; }
+.status { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; }
+.battery { display: inline-flex; align-items: center; gap: 8px; }
+.battery .meter { width: 56px; }
+.battery-ok .meter i { background: var(--ok); }
+.battery-warn .meter i { background: var(--warn); }
+.battery-bad .meter i { background: var(--bad); }
+.battery-pct { width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.battery-days { color: var(--muted); font-size: 12px; margin-left: 0; }
+.battery-days-low { color: var(--warn); font-weight: 600; }
+.signal { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.bars b { width: 3px; border-radius: 1px; background: #d6dae0; }
+.bars b.on { background: var(--text-2); }
+.signal-weak .bars b.on { background: var(--warn); }
+@media (max-width: 1200px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .home-row { grid-template-columns: 1fr; } }
+@media (max-width: 820px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
