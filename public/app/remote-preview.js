@@ -1,12 +1,12 @@
-// Previews of a remote's screens, for the bottom of the room editor: every
-// page the carousel shows, in its order, then Quick Access. Each is a mock of
+// A preview of a remote's screen, beside the page being edited in the room
+// editor (a carousel page, or Quick Access). It's a mock of
 // the remote's 480×800 black-and-white e-ink screen, drawn from the room as
 // it stands in the editor (saved or not) and the state the remote would get
 // for it (POST /api/devices/:slug/state/preview). Close to the firmware's own
 // drawing (the screen_*.h headers), not pixel-exact: it's for checking what
 // each page shows and what's missing before a remote picks the room up.
 
-import { html, useState, useEffect, api, useApi, Icon, Card, Button } from './lib.js';
+import { html, useState, useEffect, api, useApi, Icon } from './lib.js';
 
 const W = 480;
 const H = 800;
@@ -397,10 +397,12 @@ function usePreviewState(slug, room) {
   return state;
 }
 
-export function RemotePreviews({ slug, room, carousel, selected, onSelect }) {
+// One page, as a remote in this room would show it now: the remote layout
+// editor's preview beside the page being edited. `page` is a carousel page
+// or 'quick' (Quick Access); a page that's switched off still previews.
+export function RemotePreview({ slug, room, carousel, page, scale = 0.56 }) {
   const { data, error, loading } = usePreviewState(slug, room);
   const [globals] = useApi('/api/globals');
-  const [scale, setScale] = useState(0.5);
   const now = new Date();
   const s = {
     time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
@@ -409,26 +411,13 @@ export function RemotePreviews({ slug, room, carousel, selected, onSelect }) {
     receiver: data && data.receiver
   };
   const pages = carousel.filter((c) => c.enabled).map((c) => c.page);
-  const props = { room, s, carousel, globals };
-  return html`<${Card} icon="cellphone-screenshot" title="Screen previews"
-    subtitle="What a remote in this room would show, page by page, with the room as it is here (saved or not) and Home Assistant's current state. Click one to set it up."
-    actions=${html`<span class="hint">${loading ? 'Updating…' : error ? '' : 'Live'}</span>
-      <${Button} kind="ghost" small icon="magnify-minus-outline" title="Smaller" disabled=${scale <= 0.35} onClick=${() => setScale(Math.round((scale - 0.1) * 10) / 10)} />
-      <${Button} kind="ghost" small icon="magnify-plus-outline" title="Larger" disabled=${scale >= 1} onClick=${() => setScale(Math.round((scale + 0.1) * 10) / 10)} />`}>
-    ${error &&
-    html`<p class="hint"><${Icon} name="home-alert-outline" size=${16} /> ${error.includes('not configured') ? "Home Assistant isn't set up" : `Home Assistant: ${error}`}, so the previews show the layout without live state.</p>`}
-    <div class="rp-strip">
-      ${[...pages, 'quick'].map(
-        (p, i) => html`<button type="button" class=${`rp-frame ${selected === p ? 'selected' : ''}`} key=${p} onClick=${() => onSelect && onSelect(p)}
-          title=${`Set up ${PAGE_LABELS[p] || p}`}>
-          <div class="rp-scale" style=${{ width: `${W * scale}px`, height: `${H * scale}px` }}>
-            <div style=${{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-              <${Screen} page=${p} index=${i} count=${pages.length} ...${props} />
-            </div>
-          </div>
-          <div class="rp-cap">${p === 'quick' ? '' : `${i + 1} · `}${PAGE_LABELS[p] || p}</div>
-        </button>`
-      )}
+  const index = page === 'quick' ? pages.length : Math.max(0, pages.indexOf(page));
+  return html`<div class="rp-single">
+    <div class="rp-scale" style=${{ width: `${W * scale}px`, height: `${H * scale}px` }}>
+      <div style=${{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+        <${Screen} page=${page} index=${index} count=${pages.length} room=${room} s=${s} carousel=${carousel} globals=${globals} />
+      </div>
     </div>
-  <//>`;
+    <div class="rp-cap">${loading ? 'Updating…' : error ? (error.includes('not configured') ? 'Home Assistant isn’t set up: no live state' : 'No live state from Home Assistant') : 'Live from Home Assistant'}</div>
+  </div>`;
 }

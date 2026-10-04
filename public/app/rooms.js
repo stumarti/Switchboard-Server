@@ -12,8 +12,8 @@ import {
   Empty, useFlash, setIn, getIn, moveItem, timeAgo
 } from './lib.js';
 import { EntityPicker, IconPicker, useHaStatus, useEntity } from './pickers.js';
-import { CarouselBuilder, HubBuilder, ClockAlign, DeveloperMenu } from './clients.js';
-import { RemotePreviews } from './remote-preview.js';
+import { CarouselList, HubBuilder, ClockAlign, DeveloperMenu } from './clients.js';
+import { RemotePreview } from './remote-preview.js';
 import { MeetingRoomsBulk, WaitingDisplays } from './office.js';
 
 // --- A reorderable list of items (lights, scenes, blinds, sensors, games) ---
@@ -396,8 +396,8 @@ function usePagePick(slug) {
   return [page, pick];
 }
 
-function RoomEditor({ slug, clients, reloadRooms }) {
-  const [page, selectPage] = usePagePick(slug);
+function RoomEditor({ slug, part, clients, reloadRooms }) {
+  const [pick, selectPage] = usePagePick(slug);
   const [room, setRoom] = useState(null);
   const [error, setError] = useState(null);
   const [dirty, setDirty] = useState(false);
@@ -463,31 +463,45 @@ function RoomEditor({ slug, clients, reloadRooms }) {
 
   const users = (clients || []).filter((c) => c.assignedSlug === slug && c.type !== 'viewport');
   const cardProps = { room, set };
-  const hubCount = ((room.hub && room.hub.items) || []).length;
-  const extras = [
-    { id: 'quick', label: 'Quick Access', icon: 'view-grid-plus-outline', sub: `${hubCount} button${hubCount === 1 ? '' : 's'}` },
-    { id: 'room', label: 'Refresh & settings', icon: 'tune-variant', sub: `Every ${getIn(room, ['standby', 'refreshIntervalMin'], 30)} min${room.developerMenu === false ? ' · no Developer menu' : ''}` }
-  ];
+  const carousel = carouselFromScreens(room.screens);
+  // The side column's parts: the pages (#/remote-layouts/<slug>), Quick
+  // Access (/quick) and the remote's own settings (/settings).
+  const page = part === 'quick' ? 'quick' : part === 'settings' ? 'room' : PAGE_FLAGS[pick] !== undefined ? pick : 'status';
+  const preview = page !== 'room' && html`<div class="room-preview">
+    <${RemotePreview} slug=${slug} room=${room} carousel=${carousel} page=${page} />
+  </div>`;
 
-  return html`<div class="page">
+  let body;
+  if (part === 'settings') {
+    body = pageEditor('room', cardProps, room, set);
+  } else if (part === 'quick') {
+    body = html`<div class="room-split">
+      <div class="room-editor">${pageEditor('quick', cardProps, room, set)}</div>
+      ${preview}
+    </div>`;
+  } else {
+    body = html`<div class="room-grid">
+      <${Card} icon="view-carousel-outline" title="Pages" subtitle="What every remote in this room swipes through, in order." class="card-flush room-pages">
+        <${CarouselList} carousel=${carousel} onChange=${(c) => set(['screens'], screensFromCarousel(c, room.screens))}
+          room=${room} roomSlug=${slug} selected=${page} onSelect=${selectPage}
+          footer=${html`<p class="hint pl-note">A remote can have its own pages instead, on its page under Remotes.</p>`} />
+      <//>
+      <div class="room-editor">${pageEditor(page, cardProps, room, set)}</div>
+      ${preview}
+    </div>`;
+  }
+
+  return html`<div class="page page-wide">
     <div class="page-head">
-      <${Button} kind="ghost" icon="arrow-left" title="All layouts" onClick=${() => go('layouts')} />
-      <div class="ph-icon"><${Icon} name="sofa-outline" size=${26} /></div>
       <div class="ph-text">
-        <input type="text" class="title-input" value=${room.name} onInput=${(e) => set(['name'], e.target.value)} style="font-size:20px;font-weight:600;border-color:transparent;padding:4px 6px;background:transparent" />
-        <div class="chips" style="padding-left:6px">
-          <code>${slug}</code>
-          ${users.map(
-            (c) => html`<a class="badge badge-accent" href=${`#/${c.type === 'viewport' ? 'viewports' : 'remotes'}/${encodeURIComponent(c.mac)}`}>
-              <${Icon} name=${c.type === 'viewport' ? 'tablet-dashboard' : 'remote'} size=${13} />${c.name}
-            </a>`
-          )}
-        </div>
+        <input type="text" class="title-input" aria-label="Room name" value=${room.name} onInput=${(e) => set(['name'], e.target.value)} />
+        <p class="hint">Remote layout · <code>${slug}</code> · ${users.length ? `${users.length} remote${users.length === 1 ? '' : 's'}` : 'no remotes yet'}</p>
       </div>
       <div class="page-actions">
         <span class=${`flash ${msg.startsWith('Save failed') ? 'flash-bad' : ''}`}>${msg}</span>
         <${Button} kind="ghost" icon="download-outline" title="Download JSON" onClick=${download} />
         <${Button} kind="ghost" icon="trash-can-outline" title="Delete room" onClick=${remove} />
+        ${dirty && html`<${Button} onClick=${() => { if (confirm('Discard your changes?')) { setDirty(false); setRoom(null); api(`/api/devices/${encodeURIComponent(slug)}/config`).then(setRoom).catch(setError); } }}>Discard<//>`}
         <${Button} kind="primary" icon="content-save-outline" disabled=${!dirty || saving} onClick=${save}>${saving ? 'Saving…' : 'Save'}<//>
       </div>
     </div>
@@ -495,25 +509,7 @@ function RoomEditor({ slug, clients, reloadRooms }) {
     html`<div class="banner"><${Icon} name="home-alert-outline" size=${20} />
       <span>Home Assistant isn't reachable (${ha.error}), so entity search is off — type entity ids by hand, or <a href="#/settings/home-assistant">fix the connection</a>.</span>
     </div>`}
-    <${CarouselBuilder}
-      carousel=${carouselFromScreens(room.screens)}
-      onChange=${(c) => set(['screens'], screensFromCarousel(c, room.screens))}
-      room=${room}
-      roomSlug=${slug}
-      selected=${page}
-      onSelect=${selectPage}
-      extras=${extras}
-      subtitle="What every remote in this room shows (a remote can be customised on its own page). Click a page to set it up; drag to reorder; switch pages off to skip them." />
-    <div class="page-editor">
-      ${pageEditor(page, cardProps, room, set)}
-    </div>
-    <div class="page-editor">
-      <${RemotePreviews} slug=${slug} room=${room} carousel=${carouselFromScreens(room.screens)} selected=${page}
-        onSelect=${(p) => {
-          selectPage(p);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }} />
-    </div>
+    ${body}
   </div>`;
 }
 
