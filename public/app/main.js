@@ -1,6 +1,7 @@
-// App shell: sign-in gate, hash routing, the icon rail (the Switchboard logo
-// is Home; then Layouts / Remotes / Viewports / Settings) and, for Remotes and Viewports, the list column of
-// devices beside it. Each page lives in its own module.
+// App shell: sign-in gate, hash routing, the icon rail (Home / Layouts /
+// Remotes / Viewports / Settings), the section's own column of links beside
+// it (nav.js; for Remotes and Viewports, the list of devices) and the page,
+// with its page bar on top. Each page lives in its own module.
 
 import { html, render, useState, useEffect, useCallback, api, setUnauthorizedHandler, Icon, Button } from './lib.js';
 import { RoomsPage } from './rooms.js';
@@ -8,10 +9,12 @@ import { DashboardPage } from './dashboards.js';
 import { ClientList, ClientPage } from './clients.js';
 import { SettingsPage } from './settings.js';
 import { HomePage } from './home.js';
+import { SideNav, PageBar } from './nav.js';
 
 // --- Routing ----------------------------------------------------------------
-// #/home, #/layouts, #/remote-layouts/<slug>, #/viewport-layouts/<slug>,
-// #/remotes/<mac>, #/viewports/<mac>, #/settings/<tab>
+// #/home[/<view>], #/layouts[/<tool>], #/remote-layouts/<slug>[/<part>],
+// #/viewport-layouts/<slug>[/<part>], #/remotes/<mac>, #/viewports/<mac>,
+// #/settings/<page>
 
 // Links from before the Layouts page (#/rooms/<slug>, #/dashboards/<slug>)
 // still work.
@@ -20,7 +23,7 @@ function parseHash() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   let section = ALIASES[parts[0]] || parts[0] || 'home';
   if (section === 'remote-layouts' && !parts[1]) section = 'layouts';
-  return { section, id: parts[1] || '' };
+  return { section, id: parts[1] || '', sub: parts[2] || '' };
 }
 
 function useRoute() {
@@ -41,8 +44,8 @@ function useAppData(signedIn) {
   const [rooms, setRooms] = useState(null);
   const [clients, setClients] = useState(null);
   const [dashboards, setDashboards] = useState(null);
-  const [alertCount, setAlertCount] = useState(0);
-  const reloadAlerts = useCallback(() => api('/api/overview').then((o) => setAlertCount(o.counts.critical)).catch(() => {}), []);
+  const [overview, setOverview] = useState(null);
+  const reloadAlerts = useCallback(() => api('/api/overview').then(setOverview).catch(() => {}), []);
   const reloadRooms = useCallback(() => api('/api/devices').then(setRooms).catch(() => {}), []);
   const reloadClients = useCallback(() => api('/api/clients').then(setClients).catch(() => {}), []);
   const reloadDashboards = useCallback(() => api('/api/dashboards').then(setDashboards).catch(() => {}), []);
@@ -63,7 +66,7 @@ function useAppData(signedIn) {
       clearInterval(t2);
     };
   }, [signedIn]);
-  return { rooms, clients, dashboards, alertCount, reloadRooms, reloadClients, reloadDashboards, setClients };
+  return { rooms, clients, dashboards, overview, reloadRooms, reloadClients, reloadDashboards, reloadOverview: reloadAlerts, setClients };
 }
 
 // --- Sign in ------------------------------------------------------------------
@@ -114,6 +117,7 @@ function AuthGate({ needsSetup, onDone }) {
 // --- Rail ---------------------------------------------------------------------
 
 const SECTIONS = [
+  { id: 'home', label: 'Home', icon: 'home-outline' },
   { id: 'layouts', label: 'Layouts', icon: 'view-dashboard-edit-outline' },
   { id: 'remotes', label: 'Remotes', icon: 'remote' },
   { id: 'viewports', label: 'Viewports', icon: 'tablet-dashboard' },
@@ -132,29 +136,26 @@ const MANUAL_PAGES = {
   viewports: 'server/viewports.html',
   settings: 'server/settings.html'
 };
-const MANUAL_SETTINGS = { theme: 'server/theme.html', updates: 'server/remote-updates.html' };
+const MANUAL_SETTINGS = { theme: 'server/theme.html', updates: 'server/remote-updates.html', security: 'server/security.html', pairing: 'server/pairing-and-auth.html' };
+const MANUAL_LAYOUTS = { 'meeting-rooms': 'viewport/office.html', waiting: 'viewport/office.html' };
 export function manualUrl({ section, id }) {
-  const page = (section === 'settings' && MANUAL_SETTINGS[id]) || MANUAL_PAGES[section] || '';
+  const page = (section === 'settings' && MANUAL_SETTINGS[id]) || (section === 'layouts' && MANUAL_LAYOUTS[id]) || MANUAL_PAGES[section] || '';
   return MANUAL + page;
 }
 
 function Rail({ section, route, pendingCount, alertCount }) {
   return html`<nav class="rail">
-    <a class=${`rail-logo ${section === 'home' ? 'active' : ''}`} href="#/home" title="Switchboard — how everything is doing">
-      <${Icon} name="remote-tv" size=${30} />
-      ${alertCount > 0 && html`<span class="rail-count rail-count-bad" title="Critical problems">${alertCount}</span>`}
-    </a>
+    <a class="rail-logo" href="#/home" title="Switchboard"><${Icon} name="remote-tv" size=${20} /></a>
     ${SECTIONS.map(
-      (s) => html`<a class=${`rail-item ${section === s.id ? 'active' : ''}`} href=${`#/${s.id}`}>
-        <${Icon} name=${s.icon} size=${24} />
-        <span>${s.label}</span>
+      (s) => html`<a class=${`rail-item ${section === s.id ? 'active' : ''}`} href=${`#/${s.id}`} title=${s.label} aria-label=${s.label}>
+        <${Icon} name=${s.icon} size=${21} />
         ${s.id === 'remotes' && pendingCount > 0 && html`<span class="rail-count" title="Waiting for approval">${pendingCount}</span>`}
+        ${s.id === 'home' && alertCount > 0 && html`<span class="rail-count rail-count-bad" title="Critical problems">${alertCount}</span>`}
       </a>`
     )}
     <div class="rail-spacer"></div>
-    <a class="rail-item" href=${manualUrl(route)} target="_blank" rel="noopener" title="The Switchboard manual, on this page">
-      <${Icon} name="book-open-page-variant-outline" size=${24} />
-      <span>Manual</span>
+    <a class="rail-item" href=${manualUrl(route)} target="_blank" rel="noopener" title="The Switchboard manual, on this page" aria-label="Manual">
+      <${Icon} name="book-open-page-variant-outline" size=${21} />
     </a>
   </nav>`;
 }
@@ -175,7 +176,7 @@ function App() {
   if (!auth) return null;
   if (!signedIn) return html`<${AuthGate} needsSetup=${Boolean(auth.setupRequired)} onDone=${checkAuth} />`;
 
-  const { section, id } = route;
+  const { section, id, sub } = route;
   const clientType = section === 'remotes' ? 'remote' : section === 'viewports' ? 'viewport' : null;
   // Devices still waiting to be approved are listed under Remotes: every
   // device registers as a remote until it says otherwise.
@@ -183,11 +184,11 @@ function App() {
 
   let main;
   if (section === 'home') {
-    main = html`<${HomePage} />`;
+    main = html`<${HomePage} view=${id} />`;
   } else if (section === 'layouts' || section === 'remote-layouts') {
-    main = html`<${RoomsPage} slug=${section === 'remote-layouts' ? id : ''} ...${data} />`;
+    main = html`<${RoomsPage} slug=${section === 'remote-layouts' ? id : ''} tool=${section === 'layouts' ? id : ''} part=${sub} ...${data} />`;
   } else if (section === 'viewport-layouts') {
-    main = html`<${DashboardPage} key=${id} slug=${id} ...${data} />`;
+    main = html`<${DashboardPage} key=${id} slug=${id} part=${sub} ...${data} />`;
   } else if (clientType) {
     main = html`<${ClientPage} type=${clientType} mac=${id} ...${data} />`;
   } else {
@@ -195,11 +196,15 @@ function App() {
   }
 
   return html`<div class="shell">
-    <${Rail} section=${section.endsWith('layouts') ? 'layouts' : section} route=${route} pendingCount=${pendingCount} alertCount=${data.alertCount} />
+    <${Rail} section=${section.endsWith('layouts') ? 'layouts' : section} route=${route} pendingCount=${pendingCount}
+      alertCount=${data.overview ? data.overview.counts.critical : 0} />
     ${clientType
-      ? html`<${ClientList} type=${clientType} selected=${id} clients=${data.clients} rooms=${data.rooms} dashboards=${data.dashboards} />`
-      : html`<div></div>`}
-    <main class="main">${main}</main>
+      ? html`<${ClientList} type=${clientType} selected=${id} clients=${data.clients} rooms=${data.rooms} dashboards=${data.dashboards} server=${data.overview && data.overview.server} />`
+      : html`<${SideNav} route=${route} data=${data} overview=${data.overview} />`}
+    <main class="main">
+      <${PageBar} route=${route} data=${data} overview=${data.overview} />
+      ${main}
+    </main>
   </div>`;
 }
 

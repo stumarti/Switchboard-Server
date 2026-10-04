@@ -11,6 +11,7 @@ import {
 import { EntityPicker, IconPicker } from './pickers.js';
 import { ItemList } from './rooms.js';
 import { UpdatesCard, DeviceUpdateBadge } from './firmware.js';
+import { SideColumn, SideGroup } from './nav.js';
 
 const TYPE_META = {
   remote: { section: 'remotes', icon: 'remote', title: 'Remotes', one: 'remote' },
@@ -39,7 +40,7 @@ function roomName(rooms, slug) {
 
 // --- List column --------------------------------------------------------------------
 
-export function ClientList({ type, selected, clients, rooms, dashboards }) {
+export function ClientList({ type, selected, clients, rooms, dashboards, server }) {
   const meta = TYPE_META[type];
   const all = clients || [];
   // A device still waiting for approval is shown under Remotes whatever it
@@ -56,29 +57,21 @@ export function ClientList({ type, selected, clients, rooms, dashboards }) {
     { label: 'Revoked', items: mine.filter((c) => c.status !== 'approved') }
   ].filter((g) => g.items.length);
 
-  return html`<aside class="sublist">
-    <div class="sublist-head">
-      <${Icon} name=${meta.icon} size=${22} />
-      <h2>${meta.title}</h2>
-    </div>
-    <div class="sublist-body">
-      ${clients === null && html`<p class="hint" style="padding:10px">Loading…</p>`}
-      ${clients && !groups.length && html`<p class="hint" style="padding:10px">No ${meta.one}s yet. Power one on and it will appear here to approve.</p>`}
-      ${groups.map(
-        (g) => html`<div class="sublist-group">${g.label}</div>
-          ${g.items.map(
-            (c) => html`<a class=${`list-item ${selected === c.mac ? 'active' : ''}`} href=${`#/${meta.section}/${encodeURIComponent(c.mac)}`}>
-              <div class="li-icon"><${Icon} name=${c.status === 'pending' ? 'help-circle-outline' : TYPE_META[c.type].icon} size=${20} /></div>
-              <div class="li-text">
-                <div class="li-title">${c.name}</div>
-                <div class="li-sub">${c.status === 'pending' ? c.mac : c.type === 'viewport' ? dashboardName(dashboards, c.dashboard) || 'No layout' : roomName(rooms, c.assignedSlug) || 'No room'} · ${timeAgo(c.lastSeenAt)}</div>
-              </div>
-              <span class=${`dot dot-${onlineKind(c)}`}></span>
-            </a>`
-          )}`
-      )}
-    </div>
-  </aside>`;
+  return html`<${SideColumn} title=${meta.title} server=${server}>
+    ${clients === null && html`<p class="side-note">Loading…</p>`}
+    ${clients && !groups.length && html`<p class="side-note">No ${meta.one}s yet. Power one on and it will appear here to approve.</p>`}
+    ${groups.map(
+      (g) => html`<${SideGroup} label=${g.label}>
+        ${g.items.map(
+          (c) => html`<a class=${`side-link side-link-2 ${selected === c.mac ? 'active' : ''}`} href=${`#/${meta.section}/${encodeURIComponent(c.mac)}`}>
+            <${Icon} name=${c.status === 'pending' ? 'help-circle-outline' : TYPE_META[c.type].icon} size=${17} />
+            <span class="side-text">${c.name}<span class="side-sub">${c.status === 'pending' ? c.mac : c.type === 'viewport' ? dashboardName(dashboards, c.dashboard) || 'No layout' : roomName(rooms, c.assignedSlug) || 'No room'} · ${timeAgo(c.lastSeenAt)}</span></span>
+            <span class=${`dot dot-${onlineKind(c)}`}></span>
+          </a>`
+        )}
+      <//>`
+    )}
+  <//>`;
 }
 
 // --- Approval ------------------------------------------------------------------------

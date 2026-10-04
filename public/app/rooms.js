@@ -538,7 +538,7 @@ function screensFromCarousel(carousel, screens) {
 
 // --- Overview ------------------------------------------------------------------------
 
-function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboards, reloadClients }) {
+function RoomsOverview({ rooms, clients, dashboards, focus, reloadRooms, reloadDashboards, reloadClients }) {
   const [name, setName] = useState('');
   const [dashName, setDashName] = useState('');
   const [template, setTemplate] = useState('kitchen');
@@ -590,98 +590,105 @@ function RoomsOverview({ rooms, clients, dashboards, reloadRooms, reloadDashboar
   };
 
   const remotesIn = (slug) => (clients || []).filter((c) => c.assignedSlug === slug && c.type !== 'viewport');
-  const deviceBadges = (list, icon, section) =>
+
+  const devicesCell = (list, icon, section) =>
     list.length
-      ? list.map((c) => html`<a class="badge badge-accent" href=${`#/${section}/${encodeURIComponent(c.mac)}`} onClick=${(e) => e.stopPropagation()}><${Icon} name=${icon} size=${13} />${c.name}</a>`)
-      : html`<${Badge} icon="link-variant-off">No devices yet<//>`;
+      ? html`<div class="chips">${list.map((c) => html`<a class="badge badge-accent" href=${`#/${section}/${encodeURIComponent(c.mac)}`}><${Icon} name=${icon} size=${13} />${c.name}</a>`)}</div>`
+      : html`<span class="hint">None yet</span>`;
+  const screensOf = (d) => d.screens.filter((sc) => sc.enabled).map((sc) => sc.title || 'Untitled').join(' · ');
+  const meetingRooms = (dashboards || []).filter((d) => d.screens.some((sc) => sc.kind === 'meetingRoom')).length;
 
   return html`<div class="page">
     <div class="page-head">
-      <div class="ph-icon"><${Icon} name="view-dashboard-edit-outline" size=${26} /></div>
       <div class="ph-text">
         <h1>Layouts</h1>
-        <p class="hint">Every UI lives here, ready before any hardware: remote layouts (one per room) above, viewport layouts below. Devices are just assigned to one.</p>
+        <p class="hint">Every UI lives here, ready before any hardware: remote layouts (one per room) and viewport layouts. Devices are just given one.</p>
       </div>
       <div class="page-actions">
         <span class="flash flash-bad">${msg}</span>
+        <a class="btn" href="#/layouts/meeting-rooms"><${Icon} name="calendar-multiple" size=${18} /><span>Add many meeting rooms</span></a>
       </div>
     </div>
 
-    <div class="section-heading">
-      <${Icon} name="remote" size=${22} /><h2>Remote layouts</h2>
-      <span class="hint">One per room: its entities and what its remotes show. Remotes in the room use it.</span>
-      <label class="btn btn-small" style="margin-left:auto" title="Import a room from a JSON file">
+    <div class="stack">
+    <${WaitingDisplays} clients=${clients} dashboards=${dashboards} reloadClients=${reloadClients} />
+
+    <${Card} icon="remote" title="Remote layouts" subtitle="One per room: its entities and what its remotes show. Remotes in the room use it." class="card-flush"
+      actions=${html`<label class="btn btn-small" title="Import a room from a JSON file">
         <${Icon} name="upload-outline" size=${16} /><span>Import</span>
         <input type="file" accept="application/json,.json" hidden onChange=${importJson} />
-      </label>
-    </div>
-    ${rooms === null && html`<p class="hint">Loading…</p>`}
-    <div class="grid">
-      ${(rooms || []).map(
-        (r) => html`<a class="card" href=${`#/remote-layouts/${encodeURIComponent(r.slug)}`} style="text-decoration:none;color:inherit">
-          <div class="card-head">
-            <div class="card-icon"><${Icon} name="sofa-outline" size=${22} /></div>
-            <div class="card-titles"><h2>${r.name}</h2><p class="hint">Updated ${timeAgo(r.updatedAt)}</p></div>
-            <${Icon} name="chevron-right" size=${22} />
-          </div>
-          <div class="card-body"><div class="chips">${deviceBadges(remotesIn(r.slug), 'remote', 'remotes')}</div></div>
-        </a>`
-      )}
-      <form class="card" onSubmit=${create}>
-        <div class="card-head">
-          <div class="card-icon"><${Icon} name="plus" size=${22} /></div>
-          <div class="card-titles"><h2>New remote layout</h2><p class="hint">For a room</p></div>
-        </div>
-        <div class="card-body">
-          <div class="input-with-button">
-            <input type="text" placeholder="e.g. Living room" value=${name} onInput=${(e) => setName(e.target.value)} />
-            <${Button} type="submit" kind="primary" icon="plus" disabled=${!name.trim()}>Create<//>
-          </div>
-        </div>
-      </form>
-    </div>
-
-    <div class="section-heading">
-      <${Icon} name="tablet-dashboard" size=${22} /><h2>Viewport layouts</h2>
-      <span class="hint">Whole wall-display UIs. Assign one to any number of displays.</span>
-    </div>
-    ${dashboards === null && html`<p class="hint">Loading…</p>`}
-    <div class="grid">
-      ${(dashboards || []).map(
-        (d) => html`<a class="card" href=${`#/viewport-layouts/${encodeURIComponent(d.slug)}`} style="text-decoration:none;color:inherit">
-          <div class="card-head">
-            <div class="card-icon"><${Icon} name=${d.screens.some((sc) => sc.kind === 'meetingRoom') ? 'calendar-account-outline' : 'view-dashboard-outline'} size=${22} /></div>
-            <div class="card-titles"><h2>${d.name}</h2><p class="hint">${d.screens.filter((sc) => sc.enabled).map((sc) => sc.title || 'Untitled').join(' · ')}</p></div>
-            <${Icon} name="chevron-right" size=${22} />
-          </div>
-          <div class="card-body"><div class="chips">${deviceBadges(d.devices, 'tablet-dashboard', 'viewports')}</div></div>
-        </a>`
-      )}
-      <form class="card" onSubmit=${createDashboard}>
-        <div class="card-head">
-          <div class="card-icon"><${Icon} name="plus" size=${22} /></div>
-          <div class="card-titles"><h2>New viewport layout</h2></div>
-        </div>
-        <div class="card-body">
-          <div class="chips">
-            ${[['kitchen', 'Home panel', 'home-outline'], ['meetingRoom', 'Meeting room', 'calendar-account-outline'], ['blank', 'Blank', 'file-outline']].map(
-              ([v, label, icon]) => html`<button type="button" class=${`chip ${template === v ? 'on' : ''}`} onClick=${() => setTemplate(v)}><${Icon} name=${icon} size=${15} />${label}</button>`
+      </label>`}>
+      ${rooms === null
+        ? html`<p class="hint" style="padding:14px 16px">Loading…</p>`
+        : html`<div class="table-wrap"><table class="table table-links">
+          <thead><tr><th>Room</th><th>Remotes</th><th>Updated</th><th></th></tr></thead>
+          <tbody>
+            ${rooms.map(
+              (r) => html`<tr onClick=${() => go('remote-layouts', r.slug)}>
+                <td><a class="dev-name" href=${`#/remote-layouts/${encodeURIComponent(r.slug)}`}><span class="dev-tile"><${Icon} name="sofa-outline" size=${17} /></span><span>${r.name}</span></a></td>
+                <td onClick=${(e) => e.stopPropagation()}>${devicesCell(remotesIn(r.slug), 'remote', 'remotes')}</td>
+                <td class="hint">${timeAgo(r.updatedAt)}</td>
+                <td class="td-go"><${Icon} name="chevron-right" size=${18} /></td>
+              </tr>`
             )}
-          </div>
-          <div class="input-with-button">
-            <input type="text" placeholder="e.g. Kitchen wall" value=${dashName} onInput=${(e) => setDashName(e.target.value)} />
-            <${Button} type="submit" kind="primary" icon="plus" disabled=${!dashName.trim()}>Create<//>
-          </div>
-        </div>
+          </tbody>
+        </table></div>`}
+      <form class="card-foot" onSubmit=${create}>
+        <input type="text" placeholder="New remote layout, e.g. Living room" value=${name} onInput=${(e) => setName(e.target.value)} autofocus=${focus === 'new-remote'} />
+        <${Button} type="submit" kind="primary" icon="plus" disabled=${!name.trim()}>Create<//>
       </form>
-      <${MeetingRoomsBulk} reloadDashboards=${reloadDashboards} reloadClients=${reloadClients} />
-      <${WaitingDisplays} clients=${clients} dashboards=${dashboards} reloadClients=${reloadClients} />
+    <//>
+
+    <${Card} icon="tablet-dashboard" title="Viewport layouts" subtitle=${`Whole wall-display UIs. Give one to any number of displays.${meetingRooms ? ` ${meetingRooms} meeting-room sign${meetingRooms === 1 ? '' : 's'}.` : ''}`} class="card-flush">
+      ${dashboards === null
+        ? html`<p class="hint" style="padding:14px 16px">Loading…</p>`
+        : html`<div class="table-wrap"><table class="table table-links">
+          <thead><tr><th>Layout</th><th>Screens</th><th>Displays</th><th>Updated</th><th></th></tr></thead>
+          <tbody>
+            ${dashboards.map(
+              (d) => html`<tr onClick=${() => go('viewport-layouts', d.slug)}>
+                <td><a class="dev-name" href=${`#/viewport-layouts/${encodeURIComponent(d.slug)}`}><span class="dev-tile"><${Icon} name=${d.screens.some((sc) => sc.kind === 'meetingRoom') ? 'calendar-account-outline' : 'view-dashboard-outline'} size=${17} /></span><span>${d.name}</span></a></td>
+                <td class="hint td-wrap">${screensOf(d)}</td>
+                <td onClick=${(e) => e.stopPropagation()}>${devicesCell(d.devices, 'tablet-dashboard', 'viewports')}</td>
+                <td class="hint">${timeAgo(d.updatedAt)}</td>
+                <td class="td-go"><${Icon} name="chevron-right" size=${18} /></td>
+              </tr>`
+            )}
+          </tbody>
+        </table></div>`}
+      <form class="card-foot" onSubmit=${createDashboard}>
+        <div class="seg">
+          ${[['kitchen', 'Home panel', 'home-outline'], ['meetingRoom', 'Meeting room', 'calendar-account-outline'], ['blank', 'Blank', 'file-outline']].map(
+            ([v, label, icon]) => html`<button type="button" class=${template === v ? 'on' : ''} onClick=${() => setTemplate(v)}><${Icon} name=${icon} size=${15} />${label}</button>`
+          )}
+        </div>
+        <input type="text" placeholder="New viewport layout, e.g. Kitchen wall" value=${dashName} onInput=${(e) => setDashName(e.target.value)} autofocus=${focus === 'new-viewport'} />
+        <${Button} type="submit" kind="primary" icon="plus" disabled=${!dashName.trim()}>Create<//>
+      </form>
+    <//>
     </div>
   </div>`;
 }
 
-export function RoomsPage({ slug, rooms, clients, dashboards, reloadRooms, reloadDashboards, reloadClients }) {
-  return slug
-    ? html`<${RoomEditor} key=${slug} slug=${slug} clients=${clients} reloadRooms=${reloadRooms} />`
-    : html`<${RoomsOverview} rooms=${rooms} clients=${clients} dashboards=${dashboards} reloadRooms=${reloadRooms} reloadDashboards=${reloadDashboards} reloadClients=${reloadClients} />`;
+// Layouts' own tools (#/layouts/<tool>), each a page of its own.
+function LayoutTool({ tool, clients, dashboards, reloadDashboards, reloadClients }) {
+  const head = (title, hint) => html`<div class="page-head"><div class="ph-text"><h1>${title}</h1><p class="hint">${hint}</p></div></div>`;
+  if (tool === 'meeting-rooms') {
+    return html`<div class="page">
+      ${head('Add many meeting rooms', 'A sign for every room on a floor, from one list.')}
+      <${MeetingRoomsBulk} page reloadDashboards=${reloadDashboards} reloadClients=${reloadClients} />
+    </div>`;
+  }
+  return html`<div class="page">
+    ${head('Displays waiting', 'Name the displays waiting to pair, give each a layout, and approve them together.')}
+    <${WaitingDisplays} page clients=${clients} dashboards=${dashboards} reloadClients=${reloadClients} />
+  </div>`;
+}
+
+export function RoomsPage({ slug, tool, part, rooms, clients, dashboards, reloadRooms, reloadDashboards, reloadClients }) {
+  if (slug) return html`<${RoomEditor} key=${slug} slug=${slug} part=${part} clients=${clients} reloadRooms=${reloadRooms} />`;
+  if (tool === 'meeting-rooms' || tool === 'waiting') {
+    return html`<${LayoutTool} tool=${tool} clients=${clients} dashboards=${dashboards} reloadDashboards=${reloadDashboards} reloadClients=${reloadClients} />`;
+  }
+  return html`<${RoomsOverview} rooms=${rooms} clients=${clients} dashboards=${dashboards} focus=${tool} reloadRooms=${reloadRooms} reloadDashboards=${reloadDashboards} reloadClients=${reloadClients} />`;
 }
