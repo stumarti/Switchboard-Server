@@ -68,6 +68,7 @@ const overview = require('./lib/overview');
 const enigma2 = require('./lib/enigma2');
 const feeds = require('./lib/feeds');
 const ical = require('./lib/ical');
+const houseTz = require('./lib/house-tz');
 const meetingRooms = require('./lib/meeting-rooms');
 const firmware = require('./lib/firmware');
 const batteryHistory = require('./lib/battery-history');
@@ -185,9 +186,13 @@ app.get('/api/auth/account', auth.requireAdminSession, (req, res) => {
 // The server's clock, to check it against yours: remotes set their clock from
 // its HTTP Date header, and it formats every time a viewport shows.
 app.get('/api/time', auth.requireAdminSession, (req, res) => {
+  const tz = houseTz.current();
   res.json({
     now: new Date().toISOString(),
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timeZone: tz.timeZone,
+    // Where it came from: env (TZ), setting, homeAssistant or default.
+    timeZoneSource: tz.source,
+    timeZoneSetting: store.getGlobals().timeZone || '',
     ntpServer: store.getGlobals().ntpServer || 'pool.ntp.org'
   });
 });
@@ -1097,11 +1102,14 @@ app.post('/api/globals', auth.requireAdminSession, (req, res) => {
     wifi: normalized.wifi,
     homeAssistant: normalized.homeAssistant,
     ntpServer: normalized.ntpServer,
+    timeZone: normalized.timeZone,
     wifiNetworks: normalized.wifiNetworks
   };
 
   store.saveGlobals(globals);
   haPublish.kick(); // publishing to Home Assistant may have been switched
+  // A new time zone (or Home Assistant connection) takes effect at once.
+  houseTz.apply(globals).catch(() => null);
   res.json(globals);
 });
 
@@ -1306,6 +1314,7 @@ app.get('/api/overview', auth.requireAdminSession, (req, res) => {
       haConfigured: Boolean(haCfg.host && haCfg.token),
       // Remotes always need it; viewport layouts only if they use entities.
       haNeeded: store.listProfiles().length > 0 || dashes.some((d) => dashboardState.usesHomeAssistant(dashboard.normalizeLayout(d.layout))),
+      timeZone: houseTz.current(),
       updates: firmware.overview(store.getDevices()).settings.enabled ? firmware.status(store.getDevices()) : [],
       updateSummary: firmware.summary(store.getDevices()),
       server: {
@@ -1376,7 +1385,7 @@ haPublish.start();
 app.listen(PORT, HOST, () => {
   console.log(`homeremote-server listening on http://${HOST}:${PORT}`);
   // The house's time zone from Home Assistant, unless TZ is set.
-  require('./lib/house-tz').start(() => store.getGlobals());
+  houseTz.start(() => store.getGlobals());
   console.log(`profiles stored under ${store.DATA_DIR}`);
 
   if (DISABLE_MDNS) {

@@ -149,7 +149,7 @@ function useServerTime() {
         .then((r) => {
           const got = Date.now();
           const server = Date.parse(r.now) + (got - sent) / 2;
-          if (alive) setT({ offsetMs: server - got, timeZone: r.timeZone, ntpServer: r.ntpServer });
+          if (alive) setT({ offsetMs: server - got, timeZone: r.timeZone, source: r.timeZoneSource, ntpServer: r.ntpServer });
         })
         .catch((e) => alive && setT({ error: e.message }));
     };
@@ -199,7 +199,31 @@ function ServerTimeCard() {
           ${Math.abs(drift) <= 5
             ? html`<p><${Badge} kind="ok" icon="check-circle-outline">In step<//> <span class="hint">${drift === 0 ? 'Same second.' : `${Math.abs(drift)} s apart.`}</span></p>`
             : html`<p><${Badge} kind="warn" icon="clock-alert-outline">${Math.abs(drift)} s ${drift > 0 ? 'ahead' : 'behind'}<//> <span class="hint">The server's clock is off. Check its host's time sync (NTP): remotes would show the same error.</span></p>`}
-          ${t.timeZone !== browserTz && html`<p class="hint"><${Icon} name="earth" size=${14} /> The server's time zone (${t.timeZone}) differs from this browser's (${browserTz}). Viewports show the server's; set TZ on the server (e.g. <code>TZ=Europe/London</code> in docker-compose) if that's wrong.</p>`}`}
+          ${t.timeZone !== browserTz && html`<p class="hint"><${Icon} name="earth" size=${14} /> The server's time zone (${t.timeZone}) differs from this browser's (${browserTz}). Every device shows the server's: choose the right one under <b>Time zone</b> if that's wrong.</p>`}`}
+  <//>`;
+}
+
+// Where the time zone in use came from (lib/house-tz.js).
+const TZ_SOURCE = {
+  env: 'set by TZ in the server’s environment, which wins over this setting',
+  setting: 'chosen here',
+  homeAssistant: 'Home Assistant’s',
+  default: 'nothing set it: the server’s own default'
+};
+
+function TimeZoneCard({ g }) {
+  const t = useServerTime();
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [browserTz];
+  const value = g.globals.timeZone || '';
+  const fromEnv = t && t.source === 'env';
+  return html`<${Card} icon="earth" title="Time zone" subtitle="Every time a remote or viewport shows — clocks, calendars, meetings, quiet hours — is in this zone.">
+    <${Field} label="Time zone" hint=${t && !t.error ? `In use: ${t.timeZone}, ${TZ_SOURCE[t.source] || ''}.` : ''}>
+      <${Select} value=${value} disabled=${fromEnv} onChange=${(v) => g.set(['timeZone'], v)}
+        options=${[{ value: '', label: 'Automatic: Home Assistant’s' }, ...zones.map((z) => ({ value: z, label: z.replace(/_/g, ' ') }))]} />
+    <//>
+    ${!value && !fromEnv && html`<p class="hint">Without Home Assistant (meeting-room signs on calendar links, say), choose it here. ${zones.includes(browserTz) ? html`<a href="#" onClick=${(e) => { e.preventDefault(); g.set(['timeZone'], browserTz); }}>Use this browser’s (${browserTz})</a>` : ''}</p>`}
+    <${SaveBar} g=${g} />
   <//>`;
 }
 
@@ -208,6 +232,7 @@ function ClockTab() {
   if (!g.globals) return html`<p class="hint">Loading…</p>`;
   return html`<div class="grid">
     <${ServerTimeCard} />
+    <${TimeZoneCard} g=${g} />
     <${Card} icon="clock-outline" title="Time server" subtitle="Devices set their clock from this NTP server.">
       <${Field} label="NTP server"><${TextInput} value=${g.globals.ntpServer} placeholder="pool.ntp.org" onInput=${(v) => g.set(['ntpServer'], v)} /><//>
       <${SaveBar} g=${g} />
