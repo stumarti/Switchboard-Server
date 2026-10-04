@@ -22,7 +22,7 @@ The server learns how fast each battery drains, so you know **how many days each
 
 ## What it does
 
-- **Every screen is built here.** A room's remote has its lights, blinds, music, TV, climate and Quick Access. A wall display gets screens made from twenty section types: weather, energy, the home battery, heating, security, calendar, departures and more. The devices are dumb hardware: change a layout and they follow.
+- **Every screen is built here.** A room's remote has its lights, blinds, music, TV, climate and Quick Access. A wall display gets screens made from twenty-five section types: weather, energy, the home battery, heating, security, calendar, departures, bins, air quality, a guest Wi-Fi code and more. The devices are dumb hardware: change a layout and they follow.
 - **Live previews** of each remote page and each viewport screen, drawn from your Home Assistant as you edit.
 - **Pair once.** Devices find the server by mDNS (`switchboard.local`), and you approve each from the admin UI.
 - **Keep an eye on them:** the Home page shows every device's battery and days left, Wi-Fi signal, firmware and last check-in, and anything that needs attention.
