@@ -633,7 +633,7 @@ export function SettingsPage({ tab, onSignOut }) {
     <div class="ph-text"><h1>${active.label}</h1><p class="hint">${PAGE_HINTS[active.id]}</p></div>
     ${actions && html`<div class="page-actions">${actions}</div>`}
   </div>`;
-  if (active.id === 'updates') return html`<div class="page"><${RemoteUpdatesTab} head=${head} /></div>`;
+  if (active.id === 'updates') return html`<div class="page settings-page"><${RemoteUpdatesTab} head=${head} /></div>`;
   let body;
   if (active.id === 'home-assistant') body = html`<${HomeAssistantTab} />`;
   else if (active.id === 'wifi') body = html`<${WifiTab} />`;
@@ -643,5 +643,5 @@ export function SettingsPage({ tab, onSignOut }) {
   else if (active.id === 'security') body = html`<${SecurityTab} />`;
   else if (active.id === 'about') body = html`<${AboutTab} />`;
   else body = html`<${AccountTab} onSignOut=${onSignOut} />`;
-  return html`<div class="page">${head()}${body}</div>`;
+  return html`<div class="page settings-page">${head()}${body}</div>`;
 }
