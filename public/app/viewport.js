@@ -15,7 +15,7 @@
 // page (clients.js) saves it.
 
 import {
-  html, useState, useEffect, useRef, api, Icon, Card, Field, TextInput, Select, Toggle, Button, Badge, useFlash, moveItem
+  html, useState, useEffect, useRef, api, Icon, Card, Field, TextInput, Select, Toggle, Button, Badge, useFlash, useApi, moveItem
 } from './lib.js';
 import { EntityPicker, IconPicker, useEntity } from './pickers.js';
 import { ItemList } from './rooms.js';
@@ -120,7 +120,11 @@ export const SECTION_META = {
   now: { label: 'Now', icon: 'lightning-bolt-outline', about: 'What’s happening: alarm, heating, doors, robots…' },
   heating: { label: 'Heating', icon: 'radiator', about: 'Zones against their setpoints, hot water' },
   announcements: { label: 'Announcements', icon: 'bullhorn-outline', about: 'The latest from a company RSS or Atom feed' },
-  spacer: { label: 'Spacer', icon: 'arrow-expand-vertical', about: 'A gap, to move the next section down' }
+  spacer: { label: 'Spacer', icon: 'arrow-expand-vertical', about: 'A gap, to move the next section down' },
+  guestWifi: { label: 'Guest Wi-Fi', icon: 'qrcode', about: 'A QR code that joins a guest network' },
+  message: { label: 'Message', icon: 'message-text-outline', about: 'Your own words, with live values filled in' },
+  bins: { label: 'Bin collection', icon: 'trash-can-outline', about: 'Which bin goes out next, and when' },
+  airQuality: { label: 'Air quality', icon: 'air-filter', about: 'CO2, particles, pollen: good, fair or poor' }
 };
 
 const TEMPLATES = [
@@ -176,6 +180,14 @@ function newSection(type) {
       return { ...base, title: 'Now', items: [] };
     case 'spacer':
       return { ...base, height: 20 };
+    case 'guestWifi':
+      return { ...base, title: 'Guest Wi-Fi', network: '', showPassword: true, caption: 'Scan to join the Wi-Fi' };
+    case 'message':
+      return { ...base, text: '', size: 'bold', align: 'left', color: 1, icon: '' };
+    case 'bins':
+      return { ...base, title: 'Bins', calendar: '', bins: [], days: 21, count: 3, tonightFrom: 16 };
+    case 'airQuality':
+      return { ...base, title: 'Air quality', items: [], showLevel: true };
     case 'heating':
       return { ...base, entity: '', zones: [], hotWater: '', callingDelta: 0.5 };
     default:
@@ -734,6 +746,104 @@ function HeatingEditor({ s, set }) {
     </div>`;
 }
 
+
+// --- Guest Wi-Fi, a message, bins, air quality -------------------------------------------------
+
+function GuestWifiEditor({ s, set }) {
+  const [g] = useApi('/api/globals');
+  const nets = ((g && g.wifiNetworks) || []).filter((n) => n.name);
+  return html`
+    ${g && !nets.length && html`<p class="banner-inline"><${Icon} name="wifi-off" size=${16} /><span>No networks yet. Add the guest network under <a href="#/settings/wifi">Settings → Wi-Fi networks</a>.</span></p>`}
+    <${Field} label="Network" hint="From Settings → Wi-Fi networks.">
+      <${Select} value=${s.network} onChange=${(v) => set({ ...s, network: v })}
+        options=${[{ value: '', label: nets[0] ? `The first: ${nets[0].name}` : 'The first network' }, ...nets.map((n) => ({ value: n.name, label: n.name }))]} />
+    <//>
+    <${Field} label="Words beside the code"><${TextInput} value=${s.caption} placeholder="Scan to join the Wi-Fi" onInput=${(v) => set({ ...s, caption: v })} /><//>
+    <${Toggle} checked=${s.showPassword} onChange=${(v) => set({ ...s, showPassword: v })} label="Show the password in words too" />
+    <p class="hint">Phones join by scanning the code with their camera. The code holds the password either way: put it only where guests should have it.</p>`;
+}
+
+function MessageEditor({ s, set }) {
+  return html`
+    <${Field} label="Text" hint="Put an entity in braces to show its state: {sensor.outside_temperature}, {input_text.visitor}. A message that comes out blank isn't shown.">
+      <textarea rows="4" value=${s.text} placeholder="Bins out tonight" onInput=${(e) => set({ ...s, text: e.target.value })}></textarea>
+    <//>
+    <div class="row" style="align-items:center">
+      <${IconPicker} value=${s.icon} title="An icon before the text" onChange=${(icon) => set({ ...s, icon })} />
+      <div class="seg">
+        ${[['normal', 'Normal'], ['bold', 'Bold'], ['large', 'Large']].map(([v, l]) => html`<button type="button" class=${s.size === v ? 'on' : ''} onClick=${() => set({ ...s, size: v })}>${l}</button>`)}
+      </div>
+      <div class="seg">
+        ${[['left', 'format-align-left'], ['center', 'format-align-center']].map(([v, ic]) => html`<button type="button" title=${v === 'left' ? 'Left' : 'Centred'} class=${s.align === v ? 'on' : ''} onClick=${() => set({ ...s, align: v })}><${Icon} name=${ic} size=${16} /></button>`)}
+      </div>
+      <${ColorPicker} value=${s.color} onChange=${(v) => set({ ...s, color: v })} />
+    </div>
+    <p class="hint">Show it only some of the time with <b>Show</b> below, e.g. while <code>input_boolean.bins_out</code> is on.</p>`;
+}
+
+function BinsEditor({ s, set }) {
+  return html`
+    <${Field} label="Collection calendar" hint="Your council's or your waste collector's calendar: a Home Assistant calendar, or a calendar link. Leave it empty if every bin has a sensor.">
+      <${CalendarField} value=${s.calendar} onChange=${(v) => set({ ...s, calendar: v })} />
+    <//>
+    <${ItemList}
+      items=${s.bins}
+      max=${8}
+      addLabel="Add bin"
+      onChange=${(l) => set({ ...s, bins: l })}
+      newItem=${() => ({ id: newId(), name: '', match: '', entity: '', icon: '', color: 1 })}
+      render=${(b, upd) => html`<div class="row" style="align-items:flex-end">
+        <${IconPicker} value=${b.icon} title="Its icon (a bin, unless you pick one)" onChange=${(icon) => upd({ ...b, icon })} />
+        <${Field} label="Bin"><${TextInput} value=${b.name} placeholder="Recycling" onInput=${(v) => upd({ ...b, name: v })} /><//>
+        <${Field} label="Calendar events with" hint="Words in the event's title, separated by commas. Empty: the bin's name."><${TextInput} value=${b.match} placeholder="e.g. recycling, blue bin" onInput=${(v) => upd({ ...b, match: v })} /><//>
+        <${Field} label="Or its sensor" hint="A date, or days until."><${EntityPicker} domains=${['sensor', 'input_datetime']} value=${b.entity} onChange=${(id) => upd({ ...b, entity: id })} /><//>
+        <${ColorPicker} value=${b.color} onChange=${(v) => upd({ ...b, color: v })} />
+      </div>`}
+    />
+    <div class="row">
+      <${Field} label="Collections shown"><${NumberInput} min="1" max="8" value=${s.count} onChange=${(v) => set({ ...s, count: v })} /><//>
+      <${Field} label="Look ahead (days)"><${NumberInput} min="1" max="60" value=${s.days} onChange=${(v) => set({ ...s, days: v })} /><//>
+      <${Field} label="“Put out tonight” from" hint="The evening before; Never to leave it off.">
+        <${Select} value=${String(s.tonightFrom)} onChange=${(v) => set({ ...s, tonightFrom: Number(v) })}
+          options=${[{ value: '0', label: 'Never' }, ...HOURS.slice(12)]} />
+      <//>
+    </div>`;
+}
+
+const AIR_KIND_OPTIONS = [
+  { value: 'auto', label: 'Work it out' },
+  { value: 'co2', label: 'CO2 (ppm)' },
+  { value: 'pm25', label: 'PM2.5' },
+  { value: 'pm10', label: 'PM10' },
+  { value: 'voc', label: 'VOC' },
+  { value: 'aqi', label: 'Air quality index' },
+  { value: 'humidity', label: 'Humidity' },
+  { value: 'pollen', label: 'Pollen' },
+  { value: 'other', label: 'Other: my own limits' }
+];
+const AIR_DEFAULT_LIMITS = { co2: '1000 / 1500 ppm', pm25: '15 / 35 µg/m³', pm10: '45 / 100 µg/m³', voc: '250 / 400', aqi: '51 / 101', pollen: '3 / 5', humidity: 'good 30–60%' };
+
+function AirQualityEditor({ s, set }) {
+  const num = (v) => (v === '' ? null : Number(v));
+  return html`
+    <${ItemList}
+      items=${s.items}
+      max=${10}
+      addLabel="Add reading"
+      onChange=${(l) => set({ ...s, items: l })}
+      newItem=${() => ({ id: newId(), name: '', entity: '', kind: 'auto', fair: null, poor: null })}
+      render=${(it, upd) => html`<div class="row" style="align-items:flex-end">
+        <${Field} label="Sensor"><${EntityPicker} domains=${['sensor']} value=${it.entity} onChange=${(id, e) => upd({ ...it, entity: id, name: it.name || (e && e.name) || '' })} /><//>
+        <${Field} label="Label"><${TextInput} value=${it.name} onInput=${(v) => upd({ ...it, name: v })} /><//>
+        <${Field} label="Kind" hint=${AIR_DEFAULT_LIMITS[it.kind] ? `Fair / poor from ${AIR_DEFAULT_LIMITS[it.kind]}` : ''}><${Select} value=${it.kind} onChange=${(v) => upd({ ...it, kind: v })} options=${AIR_KIND_OPTIONS} /><//>
+        <div style="width:90px"><${Field} label="Fair from"><input type="number" value=${it.fair ?? ''} placeholder="—" onInput=${(e) => upd({ ...it, fair: num(e.target.value) })} /><//></div>
+        <div style="width:90px"><${Field} label="Poor from"><input type="number" value=${it.poor ?? ''} placeholder="—" onInput=${(e) => upd({ ...it, poor: num(e.target.value) })} /><//></div>
+      </div>`}
+    />
+    <${Toggle} checked=${s.showLevel} onChange=${(v) => set({ ...s, showLevel: v })} label="Say Good, Fair or Poor beside each number" />
+    <p class="hint">Each reading is green, yellow or red by its kind's usual limits, or your own. Pollen and other sensors that give words (low, moderate, high) are coloured by the word.</p>`;
+}
+
 const EDITORS = {
   spacer: ({ s, set }) =>
     html`<div style="width:200px"><${Field} label="Height (px)" hint="The panel is 480 px tall."><${NumberInput} min="0" max="400" value=${s.height} onChange=${(v) => set({ ...s, height: v })} /><//></div>`,
@@ -758,6 +868,10 @@ const EDITORS = {
   alarm: AlarmEditor,
   openings: OpeningsEditor,
   motion: ({ s, set }) => html`<${NamedList} items=${s.sensors} onChange=${(l) => set({ ...s, sensors: l })} domains=${['binary_sensor']} max=${10} addLabel="Add sensor" />`,
+  guestWifi: GuestWifiEditor,
+  message: MessageEditor,
+  bins: BinsEditor,
+  airQuality: AirQualityEditor,
   cameras: ({ s, set }) => html`<${NamedList} items=${s.cameras} onChange=${(l) => set({ ...s, cameras: l })} domains=${['binary_sensor', 'sensor', 'camera', 'event']} max=${10} addLabel="Add camera" />`
 };
 
