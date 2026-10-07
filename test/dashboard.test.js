@@ -88,7 +88,7 @@ test('the default layout is stable (same ids every time) and is the kitchen dash
   const a = dashboard.defaultLayout();
   assert.equal(JSON.stringify(a), JSON.stringify(dashboard.defaultLayout()));
   assert.deepEqual(a.screens.map((s) => s.id), ['status', 'heating', 'security']);
-  assert.equal(a.carousel.mode, 'stay');
+  assert.equal(a.carousel.mode, 'returnFirst');
 });
 
 test('a layout saved as the old fixed four screens converts to sections', () => {
