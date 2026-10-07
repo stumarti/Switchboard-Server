@@ -95,10 +95,10 @@ function screens(states = house()) {
 }
 const data = (screen, id) => screen.columns.flat().find((s) => s.id === id).data;
 
-test('the kitchen dashboard: Status, Heating and Security, returning to Status, quieter overnight', () => {
+test('the kitchen dashboard: Status, Heating and Security, staying where it is put, quieter overnight', () => {
   const l = dashboard.defaultLayout();
   assert.deepEqual(l.screens.map((s) => s.id), ['status', 'heating', 'security']);
-  assert.deepEqual(l.carousel, { mode: 'returnFirst', everyMin: 30 });
+  assert.deepEqual(l.carousel, { mode: 'stay', everyMin: 30 });
   assert.equal(l.refreshIntervalMin, 30);
   assert.deepEqual(l.quietHours, { enabled: true, start: 23, end: 6, intervalMin: 60, weekends: false });
   assert.equal(l.screens[2].template, 'triple');
