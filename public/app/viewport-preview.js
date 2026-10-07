@@ -416,12 +416,14 @@ const COLS = { sidebar: '250px 550px', columns: '400px 400px', single: '800px', 
 // The width a section is drawn at in each column, as the firmware's boxes.
 const COL_W = { sidebar: [250, 540], columns: [400, 390], single: [780], triple: [240, 278, 266] };
 
-function SectionsScreen({ d, highlight }) {
+function SectionsScreen({ d, highlight, portrait }) {
   const all = d.columns.flat();
   const bg = d.background;
-  const style = { gridTemplateColumns: COLS[d.template] || '800px' };
-  if (bg && bg.src) style.backgroundImage = `url(${artUrl(bg.src, 800, 480)})`;
-  return html`<div class=${`vp-cols kd-${d.template} ${bg ? 'vp-photo-bg' : ''}`} style=${style}>
+  // Portrait: 480 x 800, the columns as bands one under the other.
+  const style = portrait ? { gridTemplateColumns: '480px', gridAutoRows: 'min-content', alignContent: 'start' } : { gridTemplateColumns: COLS[d.template] || '800px' };
+  const [W, H] = portrait ? [480, 800] : [800, 480];
+  if (bg && bg.src) style.backgroundImage = `url(${artUrl(bg.src, W, H)})`;
+  return html`<div class=${`vp-cols kd-${d.template} ${bg ? 'vp-photo-bg' : ''} ${portrait ? 'vp-portrait' : ''}`} style=${style}>
     ${bg && !bg.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${bg.empty}</span></div>`}
     ${bg && bg.caption && html`<div class="vp-bg-cap">${bg.caption}</div>`}
     ${d.columns.map(
@@ -435,7 +437,7 @@ function SectionsScreen({ d, highlight }) {
           const S = SECTIONS[s.type];
           return html`<div class=${`vp-section kd-other ${highlight === s.id ? 'vp-hl' : ''}`}>
             <${Label}>${s.title}<//>
-            ${S ? html`<${S} d=${s.data} w=${(COL_W[d.template] || [780])[ci] || 400} />` : null}
+            ${S ? html`<${S} d=${s.data} w=${portrait ? 460 : (COL_W[d.template] || [780])[ci] || 400} />` : null}
           </div>`;
         })}
       </div>`
@@ -511,24 +513,26 @@ function RoomFinder({ d, title }) {
 }
 
 // Scales the 800×480 panel to the width available.
-export function ViewportPreview({ screen, state, error, loading, highlight, carousel }) {
+export function ViewportPreview({ screen, state, error, loading, highlight, carousel, portrait = false }) {
   const wrap = useRef(null);
   const [scale, setScale] = useState(1);
+  const [W, H] = portrait ? [480, 800] : [800, 480];
   useEffect(() => {
     if (!wrap.current) return undefined;
-    const ro = new ResizeObserver(([e]) => setScale(Math.min(1, e.contentRect.width / 800)));
+    // A portrait panel is shown at most 600 px tall.
+    const ro = new ResizeObserver(([e]) => setScale(Math.min(1, e.contentRect.width / W, portrait ? 600 / H : 1)));
     ro.observe(wrap.current);
     return () => ro.disconnect();
-  }, []);
+  }, [portrait]);
   const d = state && state.screens && state.screens[screen];
-  return html`<div class="vp-wrap" ref=${wrap} style=${{ height: `${480 * scale}px` }}>
-    <div class="vp-panel" style=${{ transform: `scale(${scale})` }}>
+  return html`<div class="vp-wrap" ref=${wrap} style=${{ height: `${H * scale}px` }}>
+    <div class=${`vp-panel ${portrait ? 'vp-panel-portrait' : ''}`} style=${{ transform: `scale(${scale})`, width: `${W}px`, height: `${H}px` }}>
       ${d
         ? d.kind === 'meetingRoom'
           ? html`<${MeetingRoom} d=${d.data} />`
           : d.kind === 'roomFinder'
           ? html`<${RoomFinder} d=${d.data} title=${d.title} />`
-          : html`<${SectionsScreen} key=${screen} d=${d} highlight=${highlight} />`
+          : html`<${SectionsScreen} key=${screen} d=${d} highlight=${highlight} portrait=${portrait} />`
         : html`<div class="vp-empty">${error ? error : loading ? 'Loading…' : 'No preview'}</div>`}
       ${d && d.kind === 'sections' && html`<${DashFooter} generatedAt=${state.generatedAt} quiet=${state.quiet} carousel=${carousel} current=${screen} />`}
       ${loading && d && html`<div class="vp-loading"><${Icon} name="refresh" size=${16} /></div>`}

@@ -1066,10 +1066,14 @@ function sectionSummary(s) {
   return s.title ? SECTION_META[s.type].label : count ? `${count} item${count === 1 ? '' : 's'}` : SECTION_META[s.type].about;
 }
 
-function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId, useDragOrder }) {
-  const tpl = TEMPLATES.find((t) => t.value === screen.template) || TEMPLATES[0];
+// In portrait the columns are bands, one under the other, each the screen's width.
+const BAND_NAMES = { 1: ['Screen'], 2: ['Top', 'Bottom'], 3: ['Top', 'Middle', 'Bottom'] };
+
+function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId, useDragOrder, portrait }) {
+  const base = TEMPLATES.find((t) => t.value === screen.template) || TEMPLATES[0];
+  const tpl = portrait ? { ...base, columns: BAND_NAMES[base.columns.length] } : base;
   const setColumns = (columns) => setScreen({ ...screen, columns });
-  const px = COLUMN_PX[screen.template] || [];
+  const px = portrait ? base.columns.map(() => 480) : COLUMN_PX[screen.template] || [];
   let open = null;
   screen.columns.forEach((col, ci) => col.forEach((x, si) => { if (x.id === openId) open = { s: x, ci, si }; }));
   const setCol = (ci, next) => setColumns(screen.columns.map((c, j) => (j === ci ? next : c)));
@@ -1340,6 +1344,26 @@ const THRESHOLDS = [
   ['climateTolerance', 'Climate tolerance °', 'How far from target still counts as “at target”.']
 ];
 
+// How the display hangs. Portrait screens are 480 x 800, their columns
+// stacked top to bottom.
+export const ROTATIONS = [
+  { value: '0', label: 'Landscape' },
+  { value: '90', label: 'Portrait, turned clockwise' },
+  { value: '270', label: 'Portrait, turned anticlockwise' },
+  { value: '180', label: 'Landscape, upside down' }
+];
+export const isPortrait = (layout) => layout && (layout.rotation === 90 || layout.rotation === 270);
+
+function HangCard({ layout, onChange }) {
+  return html`<${Card} title="How it hangs" subtitle="Landscape or portrait, and which way up.">
+    <${Select} value=${String(layout.rotation || 0)} onChange=${(v) => onChange({ ...layout, rotation: Number(v) })} options=${ROTATIONS} />
+    <p class="hint">${isPortrait(layout)
+      ? 'Portrait screens are 480 × 800: each column becomes a band across the screen, one under the other. On a reTerminal E1002 turned clockwise, the buttons are on the right.'
+      : 'Landscape screens are 800 × 480. On a reTerminal E1002 the buttons are along the top; upside down, they’re underneath.'}
+    The setup and error screens stay landscape.</p>
+  <//>`;
+}
+
 function TimingCard({ layout, onChange }) {
   const c = layout.carousel;
   const set = (k, v) => onChange({ ...layout, carousel: { ...c, [k]: v } });
@@ -1501,6 +1525,7 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
         setSelected(id);
         setOpenId(null);
       }} onChange=${setScreens} useDragOrder=${useDragOrder} />
+      <${HangCard} layout=${layout} onChange=${onChange} />
       <${TimingCard} layout=${layout} onChange=${onChange} />
     </div>
     ${screen &&
@@ -1519,7 +1544,7 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
           ${errors.length > 0 && html`<span title=${errors.map(([k, v]) => `${k}: ${v}`).join('\n')}><${Badge} kind="warn" icon="alert-outline">${errors.length} couldn't load<//></span>`}
           ${!screen.enabled && html`<${Badge} icon="eye-off-outline">Off<//>`}
         </div>
-        <${ViewportPreview} screen=${screen.id} state=${preview.state} error=${preview.error} loading=${preview.loading} highlight=${openId}
+        <${ViewportPreview} screen=${screen.id} state=${preview.state} error=${preview.error} loading=${preview.loading} highlight=${openId} portrait=${isPortrait(layout)}
           carousel=${layout.screens.filter((s) => s.enabled).map((s) => ({ id: s.id, icon: s.icon }))} />
         <p class="hint">Live from Home Assistant, with your unsaved changes. The icon is this screen's mark in the display's footer.</p>
       <//>
@@ -1527,7 +1552,7 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
         ? html`<${MeetingEditor} screen=${screen} setScreen=${setScreen} />`
         : screen.kind === 'roomFinder'
         ? html`<${FinderEditor} screen=${screen} setScreen=${setScreen} layout=${layout} />`
-        : html`<${SectionsScreenEditor} screen=${screen} setScreen=${setScreen} ctx=${ctx} openId=${openId} setOpenId=${setOpenId} useDragOrder=${useDragOrder} />`}
+        : html`<${SectionsScreenEditor} screen=${screen} setScreen=${setScreen} ctx=${ctx} openId=${openId} setOpenId=${setOpenId} useDragOrder=${useDragOrder} portrait=${isPortrait(layout)} />`}
     </div>`}
   </div>`;
 }
