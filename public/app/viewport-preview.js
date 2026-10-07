@@ -366,7 +366,25 @@ const AirQuality = ({ d }) =>
       </div>`)}</div>`
     : html`<${Missing} what=${d.empty} />`;
 
+// A photo from Immich, as the panel shows it (the server's six-colour
+// picture), with its caption underneath. `w`: the column's width.
+const artUrl = (src, w, h) => `/api/art?src=${encodeURIComponent(src)}&w=${w}&h=${h}&fmt=png`;
+const PHOTO_CAPTION_H = 22;
+// Height 0 fills the rest of the column, down to the footer: about 416 px
+// under a heading at the top (the panel works it out exactly).
+function Photo({ d, w }) {
+  const h = d.height || 416;
+  const ph = d.caption ? h - PHOTO_CAPTION_H : h;
+  return html`<div>
+    ${d.src
+      ? html`<img class="vp-photo" src=${artUrl(d.src, w, ph)} width=${w} height=${ph} alt="" />`
+      : html`<div class="vp-photo vp-photo-empty" style=${{ width: `${w}px`, height: `${ph}px` }}><${Icon} name="image-off-outline" size=${32} /><span>${d.empty}</span></div>`}
+    ${d.caption && html`<div class="vp-tiny vp-photo-cap">${d.caption}</div>`}
+  </div>`;
+}
+
 const SECTIONS = {
+  photo: Photo,
   weather: Weather,
   energy: Energy,
   energyGraph: EnergyGraph,
@@ -395,11 +413,19 @@ const SECTIONS = {
 // divider between), three columns of 244 / 286 / 270, two halves, or one.
 const COLS = { sidebar: '250px 550px', columns: '400px 400px', single: '800px', triple: '244px 286px 270px' };
 
+// The width a section is drawn at in each column, as the firmware's boxes.
+const COL_W = { sidebar: [250, 540], columns: [400, 390], single: [780], triple: [240, 278, 266] };
+
 function SectionsScreen({ d, highlight }) {
   const all = d.columns.flat();
-  return html`<div class=${`vp-cols kd-${d.template}`} style=${{ gridTemplateColumns: COLS[d.template] || '800px' }}>
+  const bg = d.background;
+  const style = { gridTemplateColumns: COLS[d.template] || '800px' };
+  if (bg && bg.src) style.backgroundImage = `url(${artUrl(bg.src, 800, 480)})`;
+  return html`<div class=${`vp-cols kd-${d.template} ${bg ? 'vp-photo-bg' : ''}`} style=${style}>
+    ${bg && !bg.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${bg.empty}</span></div>`}
+    ${bg && bg.caption && html`<div class="vp-bg-cap">${bg.caption}</div>`}
     ${d.columns.map(
-      (col) => html`<div class="vp-col kd-col">
+      (col, ci) => html`<div class="vp-col kd-col">
         ${col.map((s) => {
           if (s.type === 'message' && !(s.data && s.data.lines.length)) return null;
           if (s.type === 'spacer') return html`<div class=${highlight === s.id ? 'vp-hl' : ''} style=${{ height: `${s.data?.height ?? 0}px` }}></div>`;
@@ -409,7 +435,7 @@ function SectionsScreen({ d, highlight }) {
           const S = SECTIONS[s.type];
           return html`<div class=${`vp-section kd-other ${highlight === s.id ? 'vp-hl' : ''}`}>
             <${Label}>${s.title}<//>
-            ${S ? html`<${S} d=${s.data} />` : null}
+            ${S ? html`<${S} d=${s.data} w=${(COL_W[d.template] || [780])[ci] || 400} />` : null}
           </div>`;
         })}
       </div>`

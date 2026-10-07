@@ -1129,3 +1129,15 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .vp-wifi-text { min-width: 150px; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .vp-qr { flex: none; max-width: 100%; height: auto; }
 .vp-dot { width: 14px; height: 14px; border-radius: 50%; flex: none; border: 1.5px solid #111; }
+
+/* Photos from Immich: a section, or the whole screen behind white cards. */
+.vp-photo { display: block; max-width: 100%; object-fit: cover; }
+.vp-photo-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: repeating-linear-gradient(45deg, #eee 0 8px, #f7f7f7 8px 16px); color: #666; font-size: 14px; text-align: center; }
+.vp-photo-cap { margin-top: 3px; }
+.vp-cols.vp-photo-bg { position: relative; background-size: 800px 480px; background-position: 0 0; }
+.vp-cols.vp-photo-bg > .kd-col { background: none !important; }
+.vp-cols.vp-photo-bg .vp-col { gap: 8px; }
+.vp-cols.vp-photo-bg .kd-section, .vp-cols.vp-photo-bg .vp-section { position: relative; background: #fff; padding: 4px 6px; border-bottom: 0; }
+.vp-photo-bg-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #666; background: repeating-linear-gradient(45deg, #eee 0 8px, #f7f7f7 8px 16px); font-size: 15px; }
+.vp-cols.vp-photo-bg ~ .kd-footer { background: #fff; padding: 3px 6px; right: 6px; bottom: 3px; }
+.vp-bg-cap { position: absolute; left: 8px; bottom: 8px; background: #fff; padding: 2px 8px; font-size: 13px; z-index: 1; }

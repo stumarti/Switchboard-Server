@@ -124,7 +124,8 @@ export const SECTION_META = {
   guestWifi: { label: 'Guest Wi-Fi', icon: 'qrcode', about: 'A QR code that joins a guest network' },
   message: { label: 'Message', icon: 'message-text-outline', about: 'Your own words, with live values filled in' },
   bins: { label: 'Bin collection', icon: 'trash-can-outline', about: 'Which bin goes out next, and when' },
-  airQuality: { label: 'Air quality', icon: 'air-filter', about: 'CO2, particles, pollen: good, fair or poor' }
+  airQuality: { label: 'Air quality', icon: 'air-filter', about: 'CO2, particles, pollen: good, fair or poor' },
+  photo: { label: 'Photo', icon: 'image-outline', about: 'A photo from Immich that changes on its own' }
 };
 
 const TEMPLATES = [
@@ -190,6 +191,8 @@ function newSection(type) {
       return { ...base, title: 'Air quality', items: [], showLevel: true };
     case 'heating':
       return { ...base, entity: '', zones: [], hotWater: '', callingDelta: 0.5 };
+    case 'photo':
+      return { ...base, source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'none', height: 0 };
     default:
       return base;
   }
@@ -844,6 +847,75 @@ function AirQualityEditor({ s, set }) {
     <p class="hint">Each reading is green, yellow or red by its kind's usual limits, or your own. Pollen and other sensors that give words (low, moderate, high) are coloured by the word.</p>`;
 }
 
+// --- Photos from Immich (a section, or a screen's background) ------------------------------
+
+const PHOTO_KINDS = [
+  { value: 'favorites', label: 'Favourites' },
+  { value: 'album', label: 'An album' },
+  { value: 'person', label: 'A person' },
+  { value: 'memories', label: 'On this day, in earlier years' },
+  { value: 'random', label: 'Anything in the library' }
+];
+const PHOTO_EVERY = [15, 30, 60, 180, 360, 720, 1440, 10080].map((m) => ({
+  value: String(m),
+  label: m < 60 ? `Every ${m} minutes` : m === 60 ? 'Every hour' : m < 1440 ? `Every ${m / 60} hours` : m === 1440 ? 'Once a day' : 'Once a week'
+}));
+const PHOTO_CAPTIONS = [
+  { value: 'none', label: 'No caption' },
+  { value: 'date', label: 'When it was taken' },
+  { value: 'place', label: 'Where it was taken' },
+  { value: 'both', label: 'Where and when' }
+];
+
+// Where the photos come from, how often they change, and the caption.
+function PhotoFields({ p, set }) {
+  const [conn] = useApi('/api/immich');
+  const ready = conn && conn.configured;
+  const src = p.source || { kind: 'favorites', album: '', person: '' };
+  const [albums, albumsErr] = useApi(ready && src.kind === 'album' ? '/api/immich/albums' : null);
+  const [people, peopleErr] = useApi(ready && src.kind === 'person' ? '/api/immich/people' : null);
+  const setSrc = (k, v) => set({ ...p, source: { ...src, [k]: v } });
+  const err = albumsErr || peopleErr;
+  return html`
+    ${conn && !ready && html`<p class="banner-inline"><${Icon} name="image-off-outline" size=${16} /><span>Immich isn't set up yet. Add its address and an API key under <a href="#/settings/immich">Settings → Immich</a>.</span></p>`}
+    <div class="row">
+      <${Field} label="Photos from"><${Select} value=${src.kind} onChange=${(v) => setSrc('kind', v)} options=${PHOTO_KINDS} /><//>
+      ${src.kind === 'album' && html`<${Field} label="Album">
+        <${Select} value=${src.album} onChange=${(v) => setSrc('album', v)}
+          options=${[{ value: '', label: albums ? 'Pick an album' : 'Loading…' }, ...(albums || []).map((a) => ({ value: a.id, label: `${a.name} (${a.count})` }))]} />
+      <//>`}
+      ${src.kind === 'person' && html`<${Field} label="Person" hint="People you've named in Immich.">
+        <${Select} value=${src.person} onChange=${(v) => setSrc('person', v)}
+          options=${[{ value: '', label: people ? 'Pick a person' : 'Loading…' }, ...(people || []).map((x) => ({ value: x.id, label: x.name }))]} />
+      <//>`}
+    </div>
+    ${err && html`<p class="hint" style="color:var(--bad)">${err.message}</p>`}
+    <div class="row">
+      <${Field} label="Change" hint="The display shows the new photo at its next refresh."><${Select} value=${String(p.every)} onChange=${(v) => set({ ...p, every: Number(v) })} options=${PHOTO_EVERY} /><//>
+      <${Field} label="Caption"><${Select} value=${p.caption} onChange=${(v) => set({ ...p, caption: v })} options=${PHOTO_CAPTIONS} /><//>
+    </div>`;
+}
+
+function PhotoEditor({ s, set }) {
+  return html`
+    <${PhotoFields} p=${s} set=${set} />
+    <div style="width:220px"><${Field} label="Height (px)" hint="0 fills the rest of the column. The panel is 480 px tall.">
+      <${NumberInput} min="0" max="480" value=${s.height} onChange=${(v) => set({ ...s, height: v })} />
+    <//></div>
+    <p class="hint">Each photo is cropped to fit around what matters in it, then drawn in the panel's six colours. Your Immich address and key stay on this server: displays only ever get the finished picture.</p>`;
+}
+
+// A photo behind the whole screen; the sections sit on white cards over it.
+function BackgroundEditor({ screen, setScreen }) {
+  const bg = screen.background || { enabled: false, source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'none' };
+  const set = (next) => setScreen({ ...screen, background: next });
+  return html`<div style="margin-bottom:14px"><${Card} icon="image-outline" title="Photo background" subtitle="A photo from Immich behind this screen, with the sections on white cards over it.">
+    <${Toggle} checked=${bg.enabled} onChange=${(v) => set({ ...bg, enabled: v })} label="A photo behind this screen" />
+    ${bg.enabled && html`<${PhotoFields} p=${bg} set=${set} />
+      <p class="hint">The photo fills the panel; each section sits on a white card so its text stays readable. Leave a column empty to show more of the photo.</p>`}
+  <//></div>`;
+}
+
 const EDITORS = {
   spacer: ({ s, set }) =>
     html`<div style="width:200px"><${Field} label="Height (px)" hint="The panel is 480 px tall."><${NumberInput} min="0" max="400" value=${s.height} onChange=${(v) => set({ ...s, height: v })} /><//></div>`,
@@ -872,6 +944,7 @@ const EDITORS = {
   message: MessageEditor,
   bins: BinsEditor,
   airQuality: AirQualityEditor,
+  photo: PhotoEditor,
   cameras: ({ s, set }) => html`<${NamedList} items=${s.cameras} onChange=${(l) => set({ ...s, cameras: l })} domains=${['binary_sensor', 'sensor', 'camera', 'event']} max=${10} addLabel="Add camera" />`
 };
 
@@ -1017,7 +1090,8 @@ function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId, useDr
       if (openId === s.id) setOpenId(null);
     } }
   ];
-  return html`<div class="section-columns" style=${{ gridTemplateColumns: GRID_COLUMNS[screen.template] || '1fr' }}>
+  return html`<${BackgroundEditor} screen=${screen} setScreen=${setScreen} />
+  <div class="section-columns" style=${{ gridTemplateColumns: GRID_COLUMNS[screen.template] || '1fr' }}>
     ${screen.columns.map((col, ci) => html`<${SectionColumn} key=${ci} col=${col} ci=${ci} name=${tpl.columns[ci]} px=${px[ci]}
       openId=${openId} setOpenId=${setOpenId} setCol=${(next) => setCol(ci, next)} menu=${menu} useDragOrder=${useDragOrder} />`)}
     ${open &&

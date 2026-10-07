@@ -76,6 +76,70 @@ function HomeAssistantTab() {
   </div>`;
 }
 
+// Immich (lib/immich.js): photos for viewports. The key is sent here once
+// and never comes back: the page only learns whether one is saved.
+function ImmichTab() {
+  const [conn, setConn] = useState(null);
+  const [url, setUrl] = useState('');
+  const [key, setKey] = useState('');
+  const [check, setCheck] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, flash] = useFlash();
+  useEffect(() => {
+    api('/api/immich').then((c) => { setConn(c); setUrl(c.url); }).catch((e) => flash(e.message, 0));
+  }, []);
+  if (!conn) return html`<p class="hint">Loading…</p>`;
+  const dirty = url !== conn.url || key !== '';
+  const test = async () => {
+    setBusy(true);
+    try {
+      setCheck(await api('/api/immich/test'));
+    } catch (e) {
+      setCheck({ ok: false, error: e.message });
+    }
+    setBusy(false);
+  };
+  const save = async () => {
+    try {
+      setConn(await api('/api/immich', { method: 'POST', body: { url, apiKey: key } }));
+      setKey('');
+      flash('Saved');
+      await test();
+    } catch (e) {
+      flash(`Save failed: ${e.message}`, 6000);
+    }
+  };
+  const forget = async () => {
+    if (!confirm('Remove the saved API key? Photo sections stop changing until you add one again.')) return;
+    setConn(await api('/api/immich', { method: 'POST', body: { clearKey: true } }));
+    setCheck(null);
+  };
+  return html`<div class="grid">
+    <${Card} icon="image-multiple-outline" title="Connection" subtitle="Your Immich server, for photo sections and photo backgrounds on viewports."
+      actions=${check && (check.ok ? html`<${Badge} kind="ok" icon="check-circle-outline">Connected<//>` : html`<${Badge} kind="bad" icon="alert-circle-outline">Not connected<//>`)}>
+      <${Field} label="Address" hint="As this server reaches it, e.g. http://192.168.1.20:2283 or https://photos.example.com">
+        <${TextInput} value=${url} placeholder="http://192.168.1.20:2283" onInput=${setUrl} />
+      <//>
+      <${Field} label="API key" hint=${conn.hasKey ? 'A key is saved. Type a new one to replace it.' : 'In Immich: your account → Account settings → API keys → New API key. Read access to albums, assets, people and memories is enough.'}>
+        <${SecretInput} value=${key} placeholder=${conn.hasKey ? '•••••••• (saved)' : ''} onInput=${setKey} />
+      <//>
+      ${check && (check.ok
+        ? html`<p class="hint">Signed in as <b>${check.user || 'your account'}</b>; ${check.albums} album${check.albums === 1 ? '' : 's'}.</p>`
+        : html`<p class="hint" style="color:var(--bad)">${check.error}</p>`)}
+      <div class="row" style="align-items:center">
+        <${Button} kind="primary" icon="content-save-outline" disabled=${!dirty} onClick=${save}>Save<//>
+        <${Button} icon="lan-connect" disabled=${busy || dirty || !conn.configured} onClick=${test}>${busy ? 'Testing…' : 'Test'}<//>
+        ${conn.hasKey && html`<${Button} icon="key-remove" onClick=${forget}>Remove key<//>`}
+        <span class=${`flash ${msg.startsWith('Save failed') ? 'flash-bad' : ''}`}>${msg}</span>
+      </div>
+    <//>
+    <${Card} icon="information-outline" title="How photos reach a display">
+      <p class="hint">This server asks Immich for each photo, crops it around what matters in it and turns it into the panel's six colours. A display only ever downloads that finished picture: it never sees Immich's address or your key.</p>
+      <p class="hint">Add a <b>Photo</b> section to a viewport layout, or turn on <b>A photo behind this screen</b> in its screen settings.</p>
+    <//>
+  </div>`;
+}
+
 // Battery sensors published back to Home Assistant (lib/ha-publish.js).
 function PublishCard({ g }) {
   const on = Boolean((g.globals.homeAssistant || {}).publishBattery);
@@ -618,6 +682,7 @@ function AccountTab({ onSignOut }) {
 const PAGE_HINTS = {
   'home-assistant': 'The Home Assistant every remote and viewport reads from.',
   wifi: 'Networks the devices may join, besides the one they were set up on.',
+  immich: 'Photos from your Immich library for viewport layouts.',
   clock: 'The server’s time, the time zone every device shows times in, and where devices set their clocks from.',
   updates: 'Send new firmware to remotes and displays over Wi-Fi.',
   pairing: 'New devices asking to pair, and how they find this server.',
@@ -637,6 +702,7 @@ export function SettingsPage({ tab, onSignOut }) {
   let body;
   if (active.id === 'home-assistant') body = html`<${HomeAssistantTab} />`;
   else if (active.id === 'wifi') body = html`<${WifiTab} />`;
+  else if (active.id === 'immich') body = html`<${ImmichTab} />`;
   else if (active.id === 'clock') body = html`<${ClockTab} />`;
   else if (active.id === 'theme') body = html`<${ThemeTab} />`;
   else if (active.id === 'pairing') body = html`<${PairingTab} />`;
