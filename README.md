@@ -41,6 +41,9 @@ The server learns how fast each battery drains, so you know **how many days each
 
 Get this running and set up at least one room or viewport layout *before* you flash a device: each one pulls its whole setup from here.
 
+<p><img src="screenshots/reception-builder.png" width="760" alt="The layout builder with a reception screen: a guest Wi-Fi QR code, a welcome message and the office's air quality in the live preview, with the screen's sections listed below"></p>
+<sub>Building a reception screen: guest Wi-Fi, a welcome naming today's visitor, and the office's air, with the live preview above the sections.</sub>
+
 ## Quick start
 
 ```yaml
