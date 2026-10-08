@@ -693,7 +693,7 @@ app.get('/api/art', auth.requireAdminOrDevice, async (req, res) => {
       fit: req.query.fit === 'contain' ? 'contain' : 'cover',
       // A photo is cropped around what matters in it, not its middle.
       position: src.startsWith('immich:') ? 'attention' : 'centre'
-    }, store.getGlobals(), (s) => immich.resolveSrc(s) || enigma2.resolvePiconSrc(s, store.getProfile));
+    }, store.getGlobals(), (s, side) => immich.resolveSrc(s, undefined, side) || enigma2.resolvePiconSrc(s, store.getProfile));
     const etag = `"${img.key.slice(0, 20)}"`;
     res.set('ETag', etag);
     res.set('Cache-Control', 'private, max-age=86400');

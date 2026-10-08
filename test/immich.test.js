@@ -148,3 +148,29 @@ test('a whole-panel picture: 800x480 in the six inks, cropped round what matters
     global.fetch = realFetch;
   }
 });
+
+test('a picture past 1440 px asks Immich for the full size, and falls back to the preview', async () => {
+  assert.equal(immich.resolveSrc('immich:11111111-1111-1111-1111-111111111111', conn, 1440).url.endsWith('size=preview'), true);
+  const big = immich.resolveSrc('immich:11111111-1111-1111-1111-111111111111', conn, 1600);
+  assert.ok(big.url.endsWith('size=fullsize'));
+  assert.ok(big.fallback.endsWith('size=preview'));
+
+  // An Immich without full-size images: the preview, scaled up.
+  const jpeg = await sharp({ create: { width: 1440, height: 1080, channels: 3, background: { r: 200, g: 120, b: 40 } } }).jpeg().toBuffer();
+  const realFetch = global.fetch;
+  const asked = [];
+  global.fetch = async (url) => {
+    asked.push(url);
+    if (url.endsWith('fullsize')) return { ok: false, status: 404, headers: new Map() };
+    return { ok: true, status: 200, headers: new Map([['content-length', String(jpeg.length)]]), arrayBuffer: async () => jpeg };
+  };
+  try {
+    const img = await art.prepare('immich:22222222-2222-2222-2222-222222222222', { width: 1600, height: 1200, format: 'spectra', position: 'attention' }, {}, (s, side) => immich.resolveSrc(s, conn, side));
+    assert.equal(img.width, 1600);
+    assert.equal(img.height, 1200);
+    assert.equal(img.body.length, 800 * 1200);
+    assert.deepEqual(asked.map((u) => u.split('size=')[1]), ['fullsize', 'preview']);
+  } finally {
+    global.fetch = realFetch;
+  }
+});
