@@ -366,7 +366,25 @@ const AirQuality = ({ d }) =>
       </div>`)}</div>`
     : html`<${Missing} what=${d.empty} />`;
 
+// A photo from Immich, as the panel shows it (the server's six-colour
+// picture), with its caption underneath. `w`: the column's width.
+const artUrl = (src, w, h) => `/api/art?src=${encodeURIComponent(src)}&w=${w}&h=${h}&fmt=png`;
+const PHOTO_CAPTION_H = 22;
+// Height 0 fills the rest of the column, down to the footer: about 416 px
+// under a heading at the top (the panel works it out exactly).
+function Photo({ d, w }) {
+  const h = d.height || 416;
+  const ph = d.caption ? h - PHOTO_CAPTION_H : h;
+  return html`<div>
+    ${d.src
+      ? html`<img class="vp-photo" src=${artUrl(d.src, w, ph)} width=${w} height=${ph} alt="" />`
+      : html`<div class="vp-photo vp-photo-empty" style=${{ width: `${w}px`, height: `${ph}px` }}><${Icon} name="image-off-outline" size=${32} /><span>${d.empty}</span></div>`}
+    ${d.caption && html`<div class="vp-tiny vp-photo-cap">${d.caption}</div>`}
+  </div>`;
+}
+
 const SECTIONS = {
+  photo: Photo,
   weather: Weather,
   energy: Energy,
   energyGraph: EnergyGraph,
@@ -394,12 +412,31 @@ const SECTIONS = {
 // The panel's columns: a 250 px sidebar and the main column (a dotted
 // divider between), three columns of 244 / 286 / 270, two halves, or one.
 const COLS = { sidebar: '250px 550px', columns: '400px 400px', single: '800px', triple: '244px 286px 270px' };
+// A wider screen (an E1004 at full size) lays the columns out in proportion,
+// as the firmware does; the sidebar stays 250 px.
+const colsFor = (tpl, W) =>
+  W === 800 ? COLS[tpl] || '800px'
+    : tpl === 'sidebar' ? `250px ${W - 250}px`
+    : tpl === 'columns' ? `${W / 2}px ${W / 2}px`
+    : tpl === 'triple' ? `${Math.round((W * 244) / 800)}px ${Math.round((W * 286) / 800)}px ${W - Math.round((W * 244) / 800) - Math.round((W * 286) / 800)}px`
+    : `${W}px`;
+const colWFor = (tpl, W) =>
+  tpl === 'sidebar' ? [250, W - 260] : tpl === 'columns' ? [W / 2, W / 2 - 10] : tpl === 'triple' ? [Math.round((W * 240) / 800), Math.round((W * 278) / 800), W - Math.round((W * 534) / 800)] : [W - 20];
 
-function SectionsScreen({ d, highlight }) {
+// The width a section is drawn at in each column, as the firmware's boxes.
+const COL_W = { sidebar: [250, 540], columns: [400, 390], single: [780], triple: [240, 278, 266] };
+
+function SectionsScreen({ d, highlight, portrait, W = portrait ? 480 : 800, H = portrait ? 800 : 480 }) {
   const all = d.columns.flat();
-  return html`<div class=${`vp-cols kd-${d.template}`} style=${{ gridTemplateColumns: COLS[d.template] || '800px' }}>
+  const bg = d.background;
+  // Portrait: the columns as bands one under the other.
+  const style = portrait ? { gridTemplateColumns: `${W}px`, gridAutoRows: 'min-content', alignContent: 'start', height: `${H}px` } : { gridTemplateColumns: colsFor(d.template, W), height: `${H}px` };
+  if (bg && bg.src) style.backgroundImage = `url(${artUrl(bg.src, W, H)})`;
+  return html`<div class=${`vp-cols kd-${d.template} ${bg ? 'vp-photo-bg' : ''} ${portrait ? 'vp-portrait' : ''}`} style=${style}>
+    ${bg && !bg.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${bg.empty}</span></div>`}
+    ${bg && bg.caption && html`<div class="vp-bg-cap">${bg.caption}</div>`}
     ${d.columns.map(
-      (col) => html`<div class="vp-col kd-col">
+      (col, ci) => html`<div class="vp-col kd-col">
         ${col.map((s) => {
           if (s.type === 'message' && !(s.data && s.data.lines.length)) return null;
           if (s.type === 'spacer') return html`<div class=${highlight === s.id ? 'vp-hl' : ''} style=${{ height: `${s.data?.height ?? 0}px` }}></div>`;
@@ -409,7 +446,7 @@ function SectionsScreen({ d, highlight }) {
           const S = SECTIONS[s.type];
           return html`<div class=${`vp-section kd-other ${highlight === s.id ? 'vp-hl' : ''}`}>
             <${Label}>${s.title}<//>
-            ${S ? html`<${S} d=${s.data} />` : null}
+            ${S ? html`<${S} d=${s.data} w=${portrait ? W - 20 : colWFor(d.template, W)[ci] || 400} />` : null}
           </div>`;
         })}
       </div>`
@@ -485,24 +522,50 @@ function RoomFinder({ d, title }) {
 }
 
 // Scales the 800×480 panel to the width available.
-export function ViewportPreview({ screen, state, error, loading, highlight, carousel }) {
+// A photo frame: the photo filling the screen, a few lines over it in white
+// (outlined, as the panel draws them), in one corner; the caption last, small.
+function PhotoFrame({ d, W, H }) {
+  const big = d.size === 'large';
+  const top = d.corner === 'topLeft' || d.corner === 'topRight';
+  const right = d.corner === 'bottomRight' || d.corner === 'topRight';
+  return html`<div class="vp-frame" style=${{ width: `${W}px`, height: `${H}px`, backgroundImage: d.src ? `url(${artUrl(d.src, W, H)})` : 'none' }}>
+    ${!d.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${d.empty}</span></div>`}
+    <div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''}`} style=${{ [top ? 'top' : 'bottom']: '14px', [right ? 'right' : 'left']: '16px', textAlign: right ? 'right' : 'left', alignItems: right ? 'flex-end' : 'flex-start' }}>
+      ${d.lines.map((l) => html`<div class=${l.big ? 'vp-frame-big' : 'vp-frame-line'}>${l.icon && html`<${Icon} name=${l.icon} size=${big ? 32 : 24} />`}<span>${l.text}</span></div>`)}
+      ${d.caption && html`<div class="vp-frame-cap">${d.caption}</div>`}
+    </div>
+  </div>`;
+}
+
+// The screen's size: a viewport (E1002) 800x480; an E1004 800x600 when it
+// shows the layout large, 1600x1200 when small. Portrait: turned.
+export function screenSize(device, portrait) {
+  const [w, h] = device === 'e1004-small' ? [1600, 1200] : device === 'e1004-large' ? [800, 600] : [800, 480];
+  return portrait ? [h, w] : [w, h];
+}
+
+export function ViewportPreview({ screen, state, error, loading, highlight, carousel, portrait = false, device = 'e1002' }) {
   const wrap = useRef(null);
   const [scale, setScale] = useState(1);
+  const [W, H] = screenSize(device, portrait);
   useEffect(() => {
     if (!wrap.current) return undefined;
-    const ro = new ResizeObserver(([e]) => setScale(Math.min(1, e.contentRect.width / 800)));
+    // A portrait panel is shown at most 600 px tall.
+    const ro = new ResizeObserver(([e]) => setScale(Math.min(1, e.contentRect.width / W, portrait ? 600 / H : 1)));
     ro.observe(wrap.current);
     return () => ro.disconnect();
-  }, []);
+  }, [W, H, portrait]);
   const d = state && state.screens && state.screens[screen];
-  return html`<div class="vp-wrap" ref=${wrap} style=${{ height: `${480 * scale}px` }}>
-    <div class="vp-panel" style=${{ transform: `scale(${scale})` }}>
+  return html`<div class="vp-wrap" ref=${wrap} style=${{ height: `${H * scale}px` }}>
+    <div class=${`vp-panel ${portrait ? 'vp-panel-portrait' : ''}`} style=${{ transform: `scale(${scale})`, width: `${W}px`, height: `${H}px` }}>
       ${d
         ? d.kind === 'meetingRoom'
           ? html`<${MeetingRoom} d=${d.data} />`
           : d.kind === 'roomFinder'
           ? html`<${RoomFinder} d=${d.data} title=${d.title} />`
-          : html`<${SectionsScreen} key=${screen} d=${d} highlight=${highlight} />`
+          : d.kind === 'photoFrame'
+          ? html`<${PhotoFrame} d=${d.data} W=${W} H=${H} />`
+          : html`<${SectionsScreen} key=${screen} d=${d} highlight=${highlight} portrait=${portrait} W=${W} H=${H} />`
         : html`<div class="vp-empty">${error ? error : loading ? 'Loading…' : 'No preview'}</div>`}
       ${d && d.kind === 'sections' && html`<${DashFooter} generatedAt=${state.generatedAt} quiet=${state.quiet} carousel=${carousel} current=${screen} />`}
       ${loading && d && html`<div class="vp-loading"><${Icon} name="refresh" size=${16} /></div>`}

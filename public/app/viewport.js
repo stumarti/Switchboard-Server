@@ -124,7 +124,8 @@ export const SECTION_META = {
   guestWifi: { label: 'Guest Wi-Fi', icon: 'qrcode', about: 'A QR code that joins a guest network' },
   message: { label: 'Message', icon: 'message-text-outline', about: 'Your own words, with live values filled in' },
   bins: { label: 'Bin collection', icon: 'trash-can-outline', about: 'Which bin goes out next, and when' },
-  airQuality: { label: 'Air quality', icon: 'air-filter', about: 'CO2, particles, pollen: good, fair or poor' }
+  airQuality: { label: 'Air quality', icon: 'air-filter', about: 'CO2, particles, pollen: good, fair or poor' },
+  photo: { label: 'Photo', icon: 'image-outline', about: 'A photo from Immich that changes on its own' }
 };
 
 const TEMPLATES = [
@@ -190,6 +191,8 @@ function newSection(type) {
       return { ...base, title: 'Air quality', items: [], showLevel: true };
     case 'heating':
       return { ...base, entity: '', zones: [], hotWater: '', callingDelta: 0.5 };
+    case 'photo':
+      return { ...base, source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'none', height: 0 };
     default:
       return base;
   }
@@ -210,6 +213,12 @@ function newScreen(kind) {
     return {
       id: newId(), title: 'Other rooms', enabled: true, kind,
       finder: { rooms: [], showBusy: true, soonMin: 10, emptyMin: 10, freeIcon: 'door-open', occupiedIcon: 'account-group', labels: { ...DEFAULT_LABELS.finder } }
+    };
+  }
+  if (kind === 'photoFrame') {
+    return {
+      id: newId(), title: 'Photo frame', enabled: true, kind,
+      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', outline: true, date: true, weather: '', calendars: [], message: '' }
     };
   }
   return { id: newId(), title: 'New screen', enabled: true, kind: 'sections', template: 'sidebar', columns: [[], []] };
@@ -844,6 +853,118 @@ function AirQualityEditor({ s, set }) {
     <p class="hint">Each reading is green, yellow or red by its kind's usual limits, or your own. Pollen and other sensors that give words (low, moderate, high) are coloured by the word.</p>`;
 }
 
+// --- Photos from Immich (a section, or a screen's background) ------------------------------
+
+const PHOTO_KINDS = [
+  { value: 'favorites', label: 'Favourites' },
+  { value: 'album', label: 'An album' },
+  { value: 'person', label: 'A person' },
+  { value: 'memories', label: 'On this day, in earlier years' },
+  { value: 'random', label: 'Anything in the library' }
+];
+const PHOTO_EVERY = [15, 30, 60, 180, 360, 720, 1440, 10080].map((m) => ({
+  value: String(m),
+  label: m < 60 ? `Every ${m} minutes` : m === 60 ? 'Every hour' : m < 1440 ? `Every ${m / 60} hours` : m === 1440 ? 'Once a day' : 'Once a week'
+}));
+const PHOTO_CAPTIONS = [
+  { value: 'none', label: 'No caption' },
+  { value: 'date', label: 'When it was taken' },
+  { value: 'place', label: 'Where it was taken' },
+  { value: 'both', label: 'Where and when' }
+];
+
+// Where the photos come from, how often they change, and the caption.
+function PhotoFields({ p, set }) {
+  const [conn] = useApi('/api/immich');
+  const ready = conn && conn.configured;
+  const src = p.source || { kind: 'favorites', album: '', person: '' };
+  const [albums, albumsErr] = useApi(ready && src.kind === 'album' ? '/api/immich/albums' : null);
+  const [people, peopleErr] = useApi(ready && src.kind === 'person' ? '/api/immich/people' : null);
+  const setSrc = (k, v) => set({ ...p, source: { ...src, [k]: v } });
+  const err = albumsErr || peopleErr;
+  return html`
+    ${conn && !ready && html`<p class="banner-inline"><${Icon} name="image-off-outline" size=${16} /><span>Immich isn't set up yet. Add its address and an API key under <a href="#/settings/immich">Settings → Immich</a>.</span></p>`}
+    <div class="row">
+      <${Field} label="Photos from"><${Select} value=${src.kind} onChange=${(v) => setSrc('kind', v)} options=${PHOTO_KINDS} /><//>
+      ${src.kind === 'album' && html`<${Field} label="Album">
+        <${Select} value=${src.album} onChange=${(v) => setSrc('album', v)}
+          options=${[{ value: '', label: albums ? 'Pick an album' : 'Loading…' }, ...(albums || []).map((a) => ({ value: a.id, label: `${a.name} (${a.count})` }))]} />
+      <//>`}
+      ${src.kind === 'person' && html`<${Field} label="Person" hint="People you've named in Immich.">
+        <${Select} value=${src.person} onChange=${(v) => setSrc('person', v)}
+          options=${[{ value: '', label: people ? 'Pick a person' : 'Loading…' }, ...(people || []).map((x) => ({ value: x.id, label: x.name }))]} />
+      <//>`}
+    </div>
+    ${err && html`<p class="hint" style="color:var(--bad)">${err.message}</p>`}
+    <div class="row">
+      <${Field} label="Change" hint="The display shows the new photo at its next refresh."><${Select} value=${String(p.every)} onChange=${(v) => set({ ...p, every: Number(v) })} options=${PHOTO_EVERY} /><//>
+      <${Field} label="Caption"><${Select} value=${p.caption} onChange=${(v) => set({ ...p, caption: v })} options=${PHOTO_CAPTIONS} /><//>
+    </div>`;
+}
+
+function PhotoEditor({ s, set }) {
+  return html`
+    <${PhotoFields} p=${s} set=${set} />
+    <div style="width:220px"><${Field} label="Height (px)" hint="0 fills the rest of the column. The panel is 480 px tall.">
+      <${NumberInput} min="0" max="480" value=${s.height} onChange=${(v) => set({ ...s, height: v })} />
+    <//></div>
+    <p class="hint">Each photo is cropped to fit around what matters in it, then drawn in the panel's six colours. Your Immich address and key stay on this server: displays only ever get the finished picture.</p>`;
+}
+
+// A photo frame: a photo filling the screen, a few lines over it in white.
+const FRAME_CORNERS = [
+  { value: 'bottomLeft', label: 'Bottom left' },
+  { value: 'bottomRight', label: 'Bottom right' },
+  { value: 'topLeft', label: 'Top left' },
+  { value: 'topRight', label: 'Top right' }
+];
+function FrameEditor({ screen, setScreen }) {
+  const f = screen.frame;
+  const set = (next) => setScreen({ ...screen, frame: next });
+  return html`<div class="grid">
+    <${Card} icon="image-multiple-outline" title="The photo">
+      <${PhotoFields} p=${f} set=${set} />
+    <//>
+    <${Card} icon="format-text" title="Over the photo" subtitle="A few lines in white over the photo. Leave any off.">
+      <${Toggle} checked=${f.date} onChange=${(v) => set({ ...f, date: v })} label="The date (large)" />
+      <${Field} label="Weather" hint="The temperature and the sky, with its icon.">
+        <${EntityPicker} domains=${['weather']} value=${f.weather} onChange=${(id) => set({ ...f, weather: id || '' })} />
+      <//>
+      <${Field} label="Next event" hint="The next one today or tomorrow, from any of these calendars.">
+        <${ItemList}
+          items=${f.calendars.map((x, i) => ({ id: String(i), entity: x }))}
+          onChange=${(l) => set({ ...f, calendars: l.map((x) => x.entity) })}
+          max=${4}
+          addLabel="Add calendar"
+          newItem=${() => ({ id: newId(), entity: '' })}
+          render=${(it, upd) => html`<${CalendarField} value=${it.entity} onChange=${(id) => upd({ ...it, entity: id })} />`}
+        />
+      <//>
+      <${Field} label="Message" hint="Your own words; {entity_id} shows its state, e.g. {input_text.note}. Blank: nothing.">
+        <textarea rows="2" value=${f.message} placeholder="Welcome home" onInput=${(e) => set({ ...f, message: e.target.value })}></textarea>
+      <//>
+      <div class="row">
+        <${Field} label="Corner"><${Select} value=${f.corner} onChange=${(v) => set({ ...f, corner: v })} options=${FRAME_CORNERS} /><//>
+        <${Field} label="Text size"><${Select} value=${f.size} onChange=${(v) => set({ ...f, size: v })} options=${[{ value: 'normal', label: 'Normal' }, { value: 'large', label: 'Large' }]} /><//>
+      </div>
+      <${Toggle} checked=${f.outline !== false} onChange=${(v) => set({ ...f, outline: v })} label="Black outline" />
+      <p class="hint">A thin black edge round the text and icons, so they read on light photos. Off: plain white, cleaner on dark ones.</p>
+      <p class="hint">The caption (where and when the photo was taken) goes last, small. The footer is left off, so nothing else covers the photo; the battery shows only when it's low.</p>
+    <//>
+  </div>`;
+}
+
+// A photo behind the whole screen; the sections sit on white cards over it.
+function BackgroundEditor({ screen, setScreen }) {
+  const bg = screen.background || { enabled: false, source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'none' };
+  const set = (next) => setScreen({ ...screen, background: next });
+  return html`<div style="margin-bottom:14px"><${Card} icon="image-outline" title="Photo background" subtitle="A photo from Immich behind this screen, with the sections on white cards over it.">
+    <${Toggle} checked=${bg.enabled} onChange=${(v) => set({ ...bg, enabled: v })} label="A photo behind this screen" />
+    ${bg.enabled && html`<${PhotoFields} p=${bg} set=${set} />
+      <p class="hint">The photo fills the panel; each section sits on a white card so its text stays readable. Leave a column empty to show more of the photo.</p>`}
+  <//></div>`;
+}
+
 const EDITORS = {
   spacer: ({ s, set }) =>
     html`<div style="width:200px"><${Field} label="Height (px)" hint="The panel is 480 px tall."><${NumberInput} min="0" max="400" value=${s.height} onChange=${(v) => set({ ...s, height: v })} /><//></div>`,
@@ -872,6 +993,7 @@ const EDITORS = {
   message: MessageEditor,
   bins: BinsEditor,
   airQuality: AirQualityEditor,
+  photo: PhotoEditor,
   cameras: ({ s, set }) => html`<${NamedList} items=${s.cameras} onChange=${(l) => set({ ...s, cameras: l })} domains=${['binary_sensor', 'sensor', 'camera', 'event']} max=${10} addLabel="Add camera" />`
 };
 
@@ -993,10 +1115,14 @@ function sectionSummary(s) {
   return s.title ? SECTION_META[s.type].label : count ? `${count} item${count === 1 ? '' : 's'}` : SECTION_META[s.type].about;
 }
 
-function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId, useDragOrder }) {
-  const tpl = TEMPLATES.find((t) => t.value === screen.template) || TEMPLATES[0];
+// In portrait the columns are bands, one under the other, each the screen's width.
+const BAND_NAMES = { 1: ['Screen'], 2: ['Top', 'Bottom'], 3: ['Top', 'Middle', 'Bottom'] };
+
+function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId, useDragOrder, portrait }) {
+  const base = TEMPLATES.find((t) => t.value === screen.template) || TEMPLATES[0];
+  const tpl = portrait ? { ...base, columns: BAND_NAMES[base.columns.length] } : base;
   const setColumns = (columns) => setScreen({ ...screen, columns });
-  const px = COLUMN_PX[screen.template] || [];
+  const px = portrait ? base.columns.map(() => 480) : COLUMN_PX[screen.template] || [];
   let open = null;
   screen.columns.forEach((col, ci) => col.forEach((x, si) => { if (x.id === openId) open = { s: x, ci, si }; }));
   const setCol = (ci, next) => setColumns(screen.columns.map((c, j) => (j === ci ? next : c)));
@@ -1017,7 +1143,8 @@ function SectionsScreenEditor({ screen, setScreen, ctx, openId, setOpenId, useDr
       if (openId === s.id) setOpenId(null);
     } }
   ];
-  return html`<div class="section-columns" style=${{ gridTemplateColumns: GRID_COLUMNS[screen.template] || '1fr' }}>
+  return html`<${BackgroundEditor} screen=${screen} setScreen=${setScreen} />
+  <div class="section-columns" style=${{ gridTemplateColumns: GRID_COLUMNS[screen.template] || '1fr' }}>
     ${screen.columns.map((col, ci) => html`<${SectionColumn} key=${ci} col=${col} ci=${ci} name=${tpl.columns[ci]} px=${px[ci]}
       openId=${openId} setOpenId=${setOpenId} setCol=${(next) => setCol(ci, next)} menu=${menu} useDragOrder=${useDragOrder} />`)}
     ${open &&
@@ -1055,7 +1182,8 @@ function SectionColumn({ col, ci, name, px, openId, setOpenId, setCol, menu, use
 
 const SCREEN_KIND_META = {
   meetingRoom: { icon: 'calendar-account-outline', label: 'Meeting room' },
-  roomFinder: { icon: 'door-sliding-open', label: 'Room finder' }
+  roomFinder: { icon: 'door-sliding-open', label: 'Room finder' },
+  photoFrame: { icon: 'image-frame', label: 'Photo frame' }
 };
 
 const TIMELINE_CHOICES = [
@@ -1248,6 +1376,7 @@ function ScreensList({ screens, selected, onSelect, onChange, useDragOrder }) {
           <button type="button" class="palette-item" onClick=${() => add('sections')}><${Icon} name="view-dashboard-edit-outline" size=${22} /><span><b>Sections</b><br /><span class="hint">An arrangement filled with any sections</span></span></button>
           <button type="button" class="palette-item" onClick=${() => add('meetingRoom')}><${Icon} name="calendar-account-outline" size=${22} /><span><b>Meeting room</b><br /><span class="hint">Free or in use, a timeline, the next meetings</span></span></button>
           <button type="button" class="palette-item" onClick=${() => add('roomFinder')}><${Icon} name="door-sliding-open" size=${22} /><span><b>Room finder</b><br /><span class="hint">Which other rooms are free now</span></span></button>
+          <button type="button" class="palette-item" onClick=${() => add('photoFrame')}><${Icon} name="image-frame" size=${22} /><span><b>Photo frame</b><br /><span class="hint">A photo from Immich, with the day and the weather over it in white</span></span></button>
         </div>`}
       </div>
     </div>
@@ -1265,6 +1394,38 @@ const THRESHOLDS = [
   ['motionRecentMin', 'Motion recent (min)', 'Motion this recent shows blue.'],
   ['climateTolerance', 'Climate tolerance °', 'How far from target still counts as “at target”.']
 ];
+
+// How the display hangs. Portrait screens are 480 x 800, their columns
+// stacked top to bottom.
+export const ROTATIONS = [
+  { value: '0', label: 'Landscape' },
+  { value: '90', label: 'Portrait, turned clockwise' },
+  { value: '270', label: 'Portrait, turned anticlockwise' },
+  { value: '180', label: 'Landscape, upside down' }
+];
+export const isPortrait = (layout) => layout && (layout.rotation === 90 || layout.rotation === 270);
+
+function HangCard({ layout, onChange, previewOn, setPreviewOn }) {
+  return html`<${Card} title="How it hangs" subtitle="Landscape or portrait, and which way up.">
+    <${Select} value=${String(layout.rotation || 0)} onChange=${(v) => onChange({ ...layout, rotation: Number(v) })} options=${ROTATIONS} />
+    <${Field} label="On a 13.3” board (reTerminal E1004)" hint=${(layout.boardSize || 'large') === 'large'
+      ? 'Everything twice the size, crisp: the text in fonts made at twice the resolution, photos at full resolution. The screen is 800 × 600.'
+      : 'At the panel’s full resolution, the usual sizes: four times the room, 1600 × 1200. Best read from close up.'}>
+      <${Select} value=${layout.boardSize || 'large'} onChange=${(v) => onChange({ ...layout, boardSize: v })}
+        options=${[{ value: 'large', label: 'Large: twice the size' }, { value: 'small', label: 'Small: fit more on' }]} />
+    <//>
+    <div class="row" style="align-items:center">
+      <span class="hint">Preview on</span>
+      <div class="seg">
+        ${[['e1002', '7.3” E1002'], ['e1004', '13.3” E1004']].map(([v, l]) => html`<button type="button" class=${previewOn === v ? 'on' : ''} onClick=${() => setPreviewOn(v)}>${l}</button>`)}
+      </div>
+    </div>
+    <p class="hint">${isPortrait(layout)
+      ? 'Portrait screens are 480 × 800: each column becomes a band across the screen, one under the other. On a reTerminal E1002 turned clockwise, the buttons are on the right.'
+      : 'Landscape screens are 800 × 480. On a reTerminal E1002 the buttons are along the top; upside down, they’re underneath.'}
+    The setup and error screens stay landscape.</p>
+  <//>`;
+}
 
 function TimingCard({ layout, onChange }) {
   const c = layout.carousel;
@@ -1403,6 +1564,10 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
   const [openId, setOpenId] = useState(null);
   const [presets, setPresets] = useState(null);
   const preview = usePreview(layout);
+  // Which display the preview shows the layout on (not saved: a layout can
+  // be on both).
+  const [previewOn, setPreviewOn] = useState('e1002');
+  const previewDevice = previewOn === 'e1004' ? `e1004-${layout.boardSize || 'large'}` : 'e1002';
   useEffect(() => {
     api('/api/clients/schema').then((s) => setPresets(s.dashboard && s.dashboard.iconPresets)).catch(() => {});
   }, []);
@@ -1427,6 +1592,7 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
         setSelected(id);
         setOpenId(null);
       }} onChange=${setScreens} useDragOrder=${useDragOrder} />
+      <${HangCard} layout=${layout} onChange=${onChange} previewOn=${previewOn} setPreviewOn=${setPreviewOn} />
       <${TimingCard} layout=${layout} onChange=${onChange} />
     </div>
     ${screen &&
@@ -1445,15 +1611,17 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
           ${errors.length > 0 && html`<span title=${errors.map(([k, v]) => `${k}: ${v}`).join('\n')}><${Badge} kind="warn" icon="alert-outline">${errors.length} couldn't load<//></span>`}
           ${!screen.enabled && html`<${Badge} icon="eye-off-outline">Off<//>`}
         </div>
-        <${ViewportPreview} screen=${screen.id} state=${preview.state} error=${preview.error} loading=${preview.loading} highlight=${openId}
+        <${ViewportPreview} screen=${screen.id} state=${preview.state} error=${preview.error} loading=${preview.loading} highlight=${openId} portrait=${isPortrait(layout)} device=${previewDevice}
           carousel=${layout.screens.filter((s) => s.enabled).map((s) => ({ id: s.id, icon: s.icon }))} />
         <p class="hint">Live from Home Assistant, with your unsaved changes. The icon is this screen's mark in the display's footer.</p>
       <//>
       ${screen.kind === 'meetingRoom'
         ? html`<${MeetingEditor} screen=${screen} setScreen=${setScreen} />`
+        : screen.kind === 'photoFrame'
+        ? html`<${FrameEditor} screen=${screen} setScreen=${setScreen} />`
         : screen.kind === 'roomFinder'
         ? html`<${FinderEditor} screen=${screen} setScreen=${setScreen} layout=${layout} />`
-        : html`<${SectionsScreenEditor} screen=${screen} setScreen=${setScreen} ctx=${ctx} openId=${openId} setOpenId=${setOpenId} useDragOrder=${useDragOrder} />`}
+        : html`<${SectionsScreenEditor} screen=${screen} setScreen=${setScreen} ctx=${ctx} openId=${openId} setOpenId=${setOpenId} useDragOrder=${useDragOrder} portrait=${isPortrait(layout)} />`}
     </div>`}
   </div>`;
 }

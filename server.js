@@ -33,6 +33,10 @@
  *                                           addition beyond the spec, not a
  *                                           per-device endpoint)
  *   POST   /api/globals                 -> create/update the Globals record
+ *   /api/immich, /api/immich/{test,albums,people}
+ *                                        -> the Immich connection (admin
+ *                                           only; its key is never sent back)
+ *                                           and its pickers; lib/immich.js
  *   /api/auth/*, /api/pairing/*, /api/theme*, /api/assets/*
  *                                        -> admin login + device pairing +
  *                                           the runtime icon/font theme
@@ -63,6 +67,7 @@ const clients = require('./lib/clients');
 const dashboard = require('./lib/dashboard');
 const dashboardState = require('./lib/dashboard-state');
 const art = require('./lib/art');
+const immich = require('./lib/immich');
 const haMonitor = require('./lib/ha-monitor');
 const overview = require('./lib/overview');
 const enigma2 = require('./lib/enigma2');
@@ -685,8 +690,10 @@ app.get('/api/art', auth.requireAdminOrDevice, async (req, res) => {
       width: Number(req.query.w) || size || 120,
       height: Number(req.query.h) || size || 120,
       format: String(req.query.fmt || 'mask1'),
-      fit: req.query.fit === 'contain' ? 'contain' : 'cover'
-    }, store.getGlobals(), (s) => enigma2.resolvePiconSrc(s, store.getProfile));
+      fit: req.query.fit === 'contain' ? 'contain' : 'cover',
+      // A photo is cropped around what matters in it, not its middle.
+      position: src.startsWith('immich:') ? 'attention' : 'centre'
+    }, store.getGlobals(), (s, side) => immich.resolveSrc(s, undefined, side) || enigma2.resolvePiconSrc(s, store.getProfile));
     const etag = `"${img.key.slice(0, 20)}"`;
     res.set('ETag', etag);
     res.set('Cache-Control', 'private, max-age=86400');
@@ -698,6 +705,35 @@ app.get('/api/art', auth.requireAdminOrDevice, async (req, res) => {
     res.status(e.status || 502).json({ error: e.message });
   }
 });
+
+// --- Immich (lib/immich.js): photos for viewports --------------------------
+//
+// The connection is the admin's alone: GET answers the address and whether a
+// key is saved, never the key. Albums and people fill the photo pickers.
+app.get('/api/immich', auth.requireAdminSession, (req, res) => res.json(immich.publicView()));
+app.post('/api/immich', auth.requireAdminSession, (req, res) => {
+  try {
+    res.json(immich.save(req.body));
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
+  }
+});
+app.get('/api/immich/test', auth.requireAdminSession, async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await immich.test()) });
+  } catch (e) {
+    res.status(e.status || 502).json({ ok: false, error: e.message });
+  }
+});
+for (const [route, fn] of [['albums', immich.albums], ['people', immich.people]]) {
+  app.get(`/api/immich/${route}`, auth.requireAdminSession, async (req, res) => {
+    try {
+      res.json(await fn());
+    } catch (e) {
+      res.status(e.status || 502).json({ error: e.message });
+    }
+  });
+}
 
 // --- Theme (compiled icon/font packs a paired device downloads) ---------
 
@@ -754,7 +790,8 @@ app.get('/api/theme/fonts.pack', auth.requireAdminOrDevice, (req, res) => {
 // iconsCompiler.compileSingleIcon -> resolveIconSvg), so this one route
 // already serves both without the firmware needing to know which is which.
 app.get('/api/icons/mdi/:name', auth.requireAdminOrDevice, async (req, res) => {
-  const size = Math.min(Math.max(Number(req.query.size) || 40, 8), 128);
+  // Up to 256: an E1004 fetches every icon at twice the size it's drawn.
+  const size = Math.min(Math.max(Number(req.query.size) || 40, 8), 256);
   try {
     const buf = await iconsCompiler.compileSingleIcon(req.params.name, size);
     res.set('Content-Type', 'application/octet-stream');

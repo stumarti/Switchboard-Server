@@ -340,6 +340,33 @@ async function seed() {
   ];
   await api('PUT', `/api/dashboards/${hall.slug}`, { name: 'Hall', layout: hl.layout });
 
+  // Photos from the pretend Immich (fake-ha.js): a photo frame with the
+  // weather and the day on cards over it, and a photo beside the news.
+  await api('POST', '/api/immich', { url: `http://127.0.0.1:${HA_PORT}`, apiKey: 'demo' });
+  const frame = await api('POST', '/api/dashboards', { name: 'Photo frame', template: 'blank' });
+  const fr = await api('GET', `/api/dashboards/${frame.slug}`);
+  fr.layout.screens[0] = {
+    ...fr.layout.screens[0], title: 'Photo', icon: 'image-outline', template: 'sidebar',
+    background: { enabled: true, source: { kind: 'album', album: 'album-holidays' }, every: 360, caption: 'both' },
+    columns: [
+      [{ type: 'weather', entity: 'weather.home', later: false, days: 3 }],
+      [{ type: 'calendar', title: 'Today', entities: ['calendar.family'], days: 1, lines: 3 }]
+    ]
+  };
+  fr.layout.screens.push({
+    id: 'photo-news', kind: 'sections', title: 'Memories', icon: 'image-multiple-outline', enabled: true, template: 'columns',
+    columns: [
+      [{ type: 'photo', title: 'On this day', source: { kind: 'memories' }, every: 1440, caption: 'both', height: 0 }],
+      [{ type: 'weather', entity: 'weather.home' }, { type: 'message', text: 'Welcome home', size: 'large', color: 5, icon: 'hand-wave' }]
+    ]
+  });
+  // A photo frame proper: the photo, and the day over it in white.
+  fr.layout.screens.unshift({
+    id: 'frame', kind: 'photoFrame', title: 'Frame', icon: 'image-frame', enabled: true,
+    frame: { source: { kind: 'album', album: 'album-holidays' }, every: 360, caption: 'both', corner: 'bottomLeft', size: 'normal', date: true, weather: 'weather.home', calendars: ['calendar.family'], message: '' }
+  });
+  await api('PUT', `/api/dashboards/${frame.slug}`, { name: 'Photo frame', layout: fr.layout });
+
   // Pair every device, and have each check in once with its health.
   const tokens = {};
   for (const d of [...REMOTES, ...VIEWPORTS]) {

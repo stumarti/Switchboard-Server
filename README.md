@@ -22,7 +22,8 @@ The server learns how fast each battery drains, so you know **how many days each
 
 ## What it does
 
-- **Every screen is built here.** A room's remote has its lights, blinds, music, TV, climate and Quick Access. A wall display gets screens made from twenty-five section types: weather, energy, the home battery, heating, security, calendar, departures, bins, air quality, a guest Wi-Fi code and more. The devices are dumb hardware: change a layout and they follow.
+- **Every screen is built here.** A room's remote has its lights, blinds, music, TV, climate and Quick Access. A wall display gets screens made from twenty-six section types: weather, energy, the home battery, heating, security, calendar, departures, bins, air quality, a guest Wi-Fi code, photos and more. The devices are dumb hardware: change a layout and they follow.
+- **Photos from [Immich](https://immich.app).** Put a photo section in any column, or a photo behind a whole screen with the other sections on white cards over it. It can use an album, your favourites, a person, "on this day" or the whole library, changes on its own, and can show where and when the photo was taken. The server crops each photo around what matters in it and turns it into the panel's six colours. Your Immich address and API key stay on the server: displays only get the finished picture.
 - **Live previews** of each remote page and each viewport screen, drawn from your Home Assistant as you edit.
 - **Pair once.** Devices find the server by mDNS (`switchboard.local`), and you approve each from the admin UI.
 - **Keep an eye on them:** the Home page shows every device's battery and days left, Wi-Fi signal, firmware and last check-in, and anything that needs attention.

@@ -52,6 +52,7 @@ export const SETTINGS_GROUPS = [
     items: [
       { id: 'home-assistant', label: 'Home Assistant', icon: 'home-assistant' },
       { id: 'wifi', label: 'Wi-Fi networks', icon: 'wifi' },
+      { id: 'immich', label: 'Immich photos', icon: 'image-multiple-outline' },
       { id: 'clock', label: 'Clock and time zone', icon: 'clock-outline' }
     ]
   },

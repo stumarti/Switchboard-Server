@@ -270,10 +270,62 @@ function calendar(id) {
   }
 }
 
+// --- A pretend Immich (immich.app), on the same port, key "demo": a few
+// drawn scenes standing in for a photo library.
+const IMMICH_KEY = 'demo';
+const scene = (sky1, sky2, ground) => (extra) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1080"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky1}"/><stop offset="1" stop-color="${sky2}"/></linearGradient></defs><rect width="1440" height="1080" fill="url(#s)"/>${extra}<path d="M0 760 Q 360 640 720 740 T 1440 700 V1080 H0Z" fill="${ground}"/></svg>`;
+const PHOTOS = [
+  { id: 'a0000000-0000-4000-8000-000000000001', name: 'Sunset at the beach', taken: '2019-10-07T19:12:00.000Z', city: 'Lahinch', fav: true, people: ['p-sam'],
+    svg: scene('#f6a04d', '#fde3a7', '#c9a36b')('<circle cx="980" cy="560" r="130" fill="#ffdb6e"/><rect y="700" width="1440" height="90" fill="#3d7fb8"/>') },
+  { id: 'a0000000-0000-4000-8000-000000000002', name: 'Mountains', taken: '2021-06-01T10:40:00.000Z', city: 'Glendalough', fav: true, people: [],
+    svg: scene('#5aa0e6', '#cfe7fb', '#3f7d3a')('<path d="M100 760 L520 260 L760 560 L980 340 L1360 760Z" fill="#6b6f7a"/><path d="M450 345 L520 260 L590 345 L560 330 L520 360 L480 330Z" fill="#fff"/>') },
+  { id: 'a0000000-0000-4000-8000-000000000003', name: 'The lake', taken: '2022-08-14T15:05:00.000Z', city: 'Killarney', fav: false, people: ['p-sam'],
+    svg: scene('#7fb7e8', '#e3f1fb', '#2f6b2f')('<ellipse cx="720" cy="820" rx="560" ry="120" fill="#2c6fb0"/><circle cx="300" cy="300" r="90" fill="#fff6c8"/>') },
+  { id: 'a0000000-0000-4000-8000-000000000004', name: 'City lights', taken: '2023-12-20T21:30:00.000Z', city: 'Dublin', fav: true, people: [],
+    svg: scene('#141a3c', '#3a3f7a', '#1c1c24')('<rect x="200" y="420" width="160" height="380" fill="#262a40"/><rect x="420" y="320" width="200" height="480" fill="#2d3150"/><rect x="700" y="460" width="150" height="340" fill="#262a40"/><rect x="920" y="360" width="220" height="440" fill="#30355a"/>' +
+      Array.from({ length: 40 }, (_, i) => `<rect x="${220 + (i % 10) * 90}" y="${450 + Math.floor(i / 10) * 70}" width="18" height="24" fill="#ffd54a"/>`).join('')) }
+];
+const immichAsset = (p) => ({ id: p.id, type: 'IMAGE', originalFileName: `${p.name}.jpg`, localDateTime: p.taken, fileCreatedAt: p.taken, isFavorite: p.fav, exifInfo: { city: p.city, country: 'Ireland' } });
+const jpegs = new Map();
+
+function immich(req, res, url, json) {
+  if (req.headers['x-api-key'] !== IMMICH_KEY) return json({ message: 'Invalid API key' }, 401);
+  const p = url.pathname;
+  if (p === '/api/users/me') return json({ name: 'Demo', email: 'demo@example.com' });
+  if (p === '/api/albums') return json([{ id: 'album-holidays', albumName: 'Holidays', assetCount: 3 }, { id: 'album-home', albumName: 'Home', assetCount: 1 }]);
+  if (p === '/api/albums/album-holidays') return json({ id: 'album-holidays', assets: PHOTOS.slice(0, 3).map(immichAsset) });
+  if (p === '/api/albums/album-home') return json({ id: 'album-home', assets: PHOTOS.slice(3).map(immichAsset) });
+  if (p === '/api/people') return json({ people: [{ id: 'p-sam', name: 'Sam' }] });
+  if (p === '/api/memories') return json([{ type: 'on_this_day', assets: [immichAsset(PHOTOS[0])] }]);
+  if (p === '/api/search/random') return json(PHOTOS.map(immichAsset));
+  if (p === '/api/search/metadata') {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    return req.on('end', () => {
+      const f = JSON.parse(body || '{}');
+      const items = PHOTOS.filter((x) => (!f.isFavorite || x.fav) && (!f.personIds || f.personIds.some((id) => x.people.includes(id)))).map(immichAsset);
+      json({ assets: { total: items.length, count: items.length, items, nextPage: null } });
+    });
+  }
+  const m = /^\/api\/assets\/([^/]+)\/thumbnail$/.exec(p);
+  const photo = m && PHOTOS.find((x) => x.id === m[1]);
+  if (photo) {
+    if (!jpegs.has(photo.id)) jpegs.set(photo.id, sharp(Buffer.from(photo.svg)).jpeg({ quality: 85 }).toBuffer());
+    return jpegs.get(photo.id).then((buf) => {
+      res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': buf.length });
+      res.end(buf);
+    });
+  }
+  return json({ message: 'Not found' }, 404);
+}
+const IMMICH_PATHS = /^\/api\/(users\/me|albums|people|memories|search\/(random|metadata)|assets\/[^/]+\/thumbnail)/;
+
 http.createServer((req, res) => {
   const json = (o, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
   const png = (buf) => { res.writeHead(200, { 'content-type': 'image/png', 'content-length': buf.length }); res.end(buf); };
   const url = new URL(req.url, 'http://ha');
+  if (IMMICH_PATHS.test(url.pathname)) return immich(req, res, url, json);
   if (url.pathname === '/feed.xml') {
     const item = (h, title, summary) => `<item><title>${title}</title><description>${summary}</description><pubDate>${new Date(now - h * 3600000).toUTCString()}</pubDate><link>http://intranet.example/news</link></item>`;
     res.writeHead(200, { 'content-type': 'application/rss+xml' });
