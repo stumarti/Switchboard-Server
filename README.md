@@ -20,6 +20,9 @@ The server learns how fast each battery drains, so you know **how many days each
 
 <p><img src="screenshots/home.png" width="760" alt="The Home page: every device's battery and days left, Wi-Fi, firmware, and what needs attention"></p>
 
+<p><img src="screenshots/fridge-status.jpg" width="760" alt="A viewport and a remote on a kitchen fridge, both run by Switchboard Server"></p>
+<sub>What it runs: a viewport and a remote on a kitchen fridge.</sub>
+
 ## What it does
 
 - **Every screen is built here.** A room's remote has its lights, blinds, music, TV, climate and Quick Access. A wall display gets screens made from twenty-six section types: weather, energy, the home battery, heating, security, calendar, departures, bins, air quality, a guest Wi-Fi code, photos and more. The devices are dumb hardware: change a layout and they follow.
@@ -38,6 +41,9 @@ The server learns how fast each battery drains, so you know **how many days each
 </table>
 
 Get this running and set up at least one room or viewport layout *before* you flash a device: each one pulls its whole setup from here.
+
+<p><img src="screenshots/reception-builder.png" width="760" alt="The layout builder with a reception screen: a guest Wi-Fi QR code, a welcome message and the office's air quality in the live preview, with the screen's sections listed below"></p>
+<sub>Building a reception screen: guest Wi-Fi, a welcome naming today's visitor, and the office's air, with the live preview above the sections.</sub>
 
 ## Quick start
 
