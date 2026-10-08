@@ -1134,7 +1134,7 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .vp-photo { display: block; max-width: 100%; object-fit: cover; }
 .vp-photo-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: repeating-linear-gradient(45deg, #eee 0 8px, #f7f7f7 8px 16px); color: #666; font-size: 14px; text-align: center; }
 .vp-photo-cap { margin-top: 3px; }
-.vp-cols.vp-photo-bg { position: relative; background-size: 800px 480px; background-position: 0 0; }
+.vp-cols.vp-photo-bg { position: relative; background-size: 100% 100%; background-repeat: no-repeat; background-position: 0 0; }
 .vp-cols.vp-photo-bg > .kd-col { background: none !important; }
 .vp-cols.vp-photo-bg .vp-col { gap: 8px; }
 .vp-cols.vp-photo-bg .kd-section, .vp-cols.vp-photo-bg .vp-section { position: relative; background: #fff; padding: 4px 6px; border-bottom: 0; }
@@ -1146,4 +1146,14 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .vp-cols.vp-portrait { height: 800px !important; }
 .vp-cols.vp-portrait > .kd-col { background: none !important; padding-left: 10px !important; padding-right: 10px; border-left: 0 !important; }
 .vp-cols.vp-portrait:not(.vp-photo-bg) > .kd-col + .kd-col { border-top: 2px dotted #111; padding-top: 6px; }
-.vp-cols.vp-portrait.vp-photo-bg { background-size: 480px 800px; }
+
+/* A photo frame: the photo filling the panel, white lines outlined in black. */
+.vp-frame { position: relative; background-size: cover; background-position: center; }
+.vp-frame-text { position: absolute; display: flex; flex-direction: column; gap: 4px; color: #fff; font: 700 18px/1.25 'Atkinson Hyperlegible', system-ui, sans-serif;
+  text-shadow: -1px -1px 0 #111, 1px -1px 0 #111, -1px 1px 0 #111, 1px 1px 0 #111, 0 2px 0 #111, 2px 0 0 #111, -2px 0 0 #111, 0 -2px 0 #111; }
+.vp-frame-text .icon { filter: drop-shadow(1px 1px 0 #111) drop-shadow(-1px -1px 0 #111) drop-shadow(1px -1px 0 #111) drop-shadow(-1px 1px 0 #111); }
+.vp-frame-line, .vp-frame-big { display: flex; align-items: center; gap: 8px; }
+.vp-frame-big { font-size: 32px; }
+.vp-frame-text.big { font-size: 24px; }
+.vp-frame-text.big .vp-frame-big { font-size: 48px; }
+.vp-frame-cap { font-weight: 400; font-size: 14px; }

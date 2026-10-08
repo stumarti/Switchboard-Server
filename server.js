@@ -790,7 +790,8 @@ app.get('/api/theme/fonts.pack', auth.requireAdminOrDevice, (req, res) => {
 // iconsCompiler.compileSingleIcon -> resolveIconSvg), so this one route
 // already serves both without the firmware needing to know which is which.
 app.get('/api/icons/mdi/:name', auth.requireAdminOrDevice, async (req, res) => {
-  const size = Math.min(Math.max(Number(req.query.size) || 40, 8), 128);
+  // Up to 256: an E1004 fetches every icon at twice the size it's drawn.
+  const size = Math.min(Math.max(Number(req.query.size) || 40, 8), 256);
   try {
     const buf = await iconsCompiler.compileSingleIcon(req.params.name, size);
     res.set('Content-Type', 'application/octet-stream');

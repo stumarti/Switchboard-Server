@@ -215,6 +215,12 @@ function newScreen(kind) {
       finder: { rooms: [], showBusy: true, soonMin: 10, emptyMin: 10, freeIcon: 'door-open', occupiedIcon: 'account-group', labels: { ...DEFAULT_LABELS.finder } }
     };
   }
+  if (kind === 'photoFrame') {
+    return {
+      id: newId(), title: 'Photo frame', enabled: true, kind,
+      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', date: true, weather: '', calendars: [], message: '' }
+    };
+  }
   return { id: newId(), title: 'New screen', enabled: true, kind: 'sections', template: 'sidebar', columns: [[], []] };
 }
 
@@ -905,6 +911,47 @@ function PhotoEditor({ s, set }) {
     <p class="hint">Each photo is cropped to fit around what matters in it, then drawn in the panel's six colours. Your Immich address and key stay on this server: displays only ever get the finished picture.</p>`;
 }
 
+// A photo frame: a photo filling the screen, a few lines over it in white.
+const FRAME_CORNERS = [
+  { value: 'bottomLeft', label: 'Bottom left' },
+  { value: 'bottomRight', label: 'Bottom right' },
+  { value: 'topLeft', label: 'Top left' },
+  { value: 'topRight', label: 'Top right' }
+];
+function FrameEditor({ screen, setScreen }) {
+  const f = screen.frame;
+  const set = (next) => setScreen({ ...screen, frame: next });
+  return html`<div class="grid">
+    <${Card} icon="image-multiple-outline" title="The photo">
+      <${PhotoFields} p=${f} set=${set} />
+    <//>
+    <${Card} icon="format-text" title="Over the photo" subtitle="A few lines in white, outlined so they read on any photo. Leave any off.">
+      <${Toggle} checked=${f.date} onChange=${(v) => set({ ...f, date: v })} label="The date (large)" />
+      <${Field} label="Weather" hint="The temperature and the sky, with its icon.">
+        <${EntityPicker} domains=${['weather']} value=${f.weather} onChange=${(id) => set({ ...f, weather: id || '' })} />
+      <//>
+      <${Field} label="Next event" hint="The next one today or tomorrow, from any of these calendars.">
+        <${ItemList}
+          items=${f.calendars.map((x, i) => ({ id: String(i), entity: x }))}
+          onChange=${(l) => set({ ...f, calendars: l.map((x) => x.entity) })}
+          max=${4}
+          addLabel="Add calendar"
+          newItem=${() => ({ id: newId(), entity: '' })}
+          render=${(it, upd) => html`<${CalendarField} value=${it.entity} onChange=${(id) => upd({ ...it, entity: id })} />`}
+        />
+      <//>
+      <${Field} label="Message" hint="Your own words; {entity_id} shows its state, e.g. {input_text.note}. Blank: nothing.">
+        <textarea rows="2" value=${f.message} placeholder="Welcome home" onInput=${(e) => set({ ...f, message: e.target.value })}></textarea>
+      <//>
+      <div class="row">
+        <${Field} label="Corner"><${Select} value=${f.corner} onChange=${(v) => set({ ...f, corner: v })} options=${FRAME_CORNERS} /><//>
+        <${Field} label="Text size"><${Select} value=${f.size} onChange=${(v) => set({ ...f, size: v })} options=${[{ value: 'normal', label: 'Normal' }, { value: 'large', label: 'Large' }]} /><//>
+      </div>
+      <p class="hint">The caption (where and when the photo was taken) goes last, small. The footer is left off, so nothing else covers the photo; the battery shows only when it's low.</p>
+    <//>
+  </div>`;
+}
+
 // A photo behind the whole screen; the sections sit on white cards over it.
 function BackgroundEditor({ screen, setScreen }) {
   const bg = screen.background || { enabled: false, source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'none' };
@@ -1133,7 +1180,8 @@ function SectionColumn({ col, ci, name, px, openId, setOpenId, setCol, menu, use
 
 const SCREEN_KIND_META = {
   meetingRoom: { icon: 'calendar-account-outline', label: 'Meeting room' },
-  roomFinder: { icon: 'door-sliding-open', label: 'Room finder' }
+  roomFinder: { icon: 'door-sliding-open', label: 'Room finder' },
+  photoFrame: { icon: 'image-frame', label: 'Photo frame' }
 };
 
 const TIMELINE_CHOICES = [
@@ -1326,6 +1374,7 @@ function ScreensList({ screens, selected, onSelect, onChange, useDragOrder }) {
           <button type="button" class="palette-item" onClick=${() => add('sections')}><${Icon} name="view-dashboard-edit-outline" size=${22} /><span><b>Sections</b><br /><span class="hint">An arrangement filled with any sections</span></span></button>
           <button type="button" class="palette-item" onClick=${() => add('meetingRoom')}><${Icon} name="calendar-account-outline" size=${22} /><span><b>Meeting room</b><br /><span class="hint">Free or in use, a timeline, the next meetings</span></span></button>
           <button type="button" class="palette-item" onClick=${() => add('roomFinder')}><${Icon} name="door-sliding-open" size=${22} /><span><b>Room finder</b><br /><span class="hint">Which other rooms are free now</span></span></button>
+          <button type="button" class="palette-item" onClick=${() => add('photoFrame')}><${Icon} name="image-frame" size=${22} /><span><b>Photo frame</b><br /><span class="hint">A photo from Immich, with the day and the weather over it in white</span></span></button>
         </div>`}
       </div>
     </div>
@@ -1354,9 +1403,21 @@ export const ROTATIONS = [
 ];
 export const isPortrait = (layout) => layout && (layout.rotation === 90 || layout.rotation === 270);
 
-function HangCard({ layout, onChange }) {
+function HangCard({ layout, onChange, previewOn, setPreviewOn }) {
   return html`<${Card} title="How it hangs" subtitle="Landscape or portrait, and which way up.">
     <${Select} value=${String(layout.rotation || 0)} onChange=${(v) => onChange({ ...layout, rotation: Number(v) })} options=${ROTATIONS} />
+    <${Field} label="On a 13.3” board (reTerminal E1004)" hint=${(layout.boardSize || 'large') === 'large'
+      ? 'Everything twice the size, crisp: the text in fonts made at twice the resolution, photos at full resolution. The screen is 800 × 600.'
+      : 'At the panel’s full resolution, the usual sizes: four times the room, 1600 × 1200. Best read from close up.'}>
+      <${Select} value=${layout.boardSize || 'large'} onChange=${(v) => onChange({ ...layout, boardSize: v })}
+        options=${[{ value: 'large', label: 'Large: twice the size' }, { value: 'small', label: 'Small: fit more on' }]} />
+    <//>
+    <div class="row" style="align-items:center">
+      <span class="hint">Preview on</span>
+      <div class="seg">
+        ${[['e1002', '7.3” E1002'], ['e1004', '13.3” E1004']].map(([v, l]) => html`<button type="button" class=${previewOn === v ? 'on' : ''} onClick=${() => setPreviewOn(v)}>${l}</button>`)}
+      </div>
+    </div>
     <p class="hint">${isPortrait(layout)
       ? 'Portrait screens are 480 × 800: each column becomes a band across the screen, one under the other. On a reTerminal E1002 turned clockwise, the buttons are on the right.'
       : 'Landscape screens are 800 × 480. On a reTerminal E1002 the buttons are along the top; upside down, they’re underneath.'}
@@ -1501,6 +1562,10 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
   const [openId, setOpenId] = useState(null);
   const [presets, setPresets] = useState(null);
   const preview = usePreview(layout);
+  // Which display the preview shows the layout on (not saved: a layout can
+  // be on both).
+  const [previewOn, setPreviewOn] = useState('e1002');
+  const previewDevice = previewOn === 'e1004' ? `e1004-${layout.boardSize || 'large'}` : 'e1002';
   useEffect(() => {
     api('/api/clients/schema').then((s) => setPresets(s.dashboard && s.dashboard.iconPresets)).catch(() => {});
   }, []);
@@ -1525,7 +1590,7 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
         setSelected(id);
         setOpenId(null);
       }} onChange=${setScreens} useDragOrder=${useDragOrder} />
-      <${HangCard} layout=${layout} onChange=${onChange} />
+      <${HangCard} layout=${layout} onChange=${onChange} previewOn=${previewOn} setPreviewOn=${setPreviewOn} />
       <${TimingCard} layout=${layout} onChange=${onChange} />
     </div>
     ${screen &&
@@ -1544,12 +1609,14 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
           ${errors.length > 0 && html`<span title=${errors.map(([k, v]) => `${k}: ${v}`).join('\n')}><${Badge} kind="warn" icon="alert-outline">${errors.length} couldn't load<//></span>`}
           ${!screen.enabled && html`<${Badge} icon="eye-off-outline">Off<//>`}
         </div>
-        <${ViewportPreview} screen=${screen.id} state=${preview.state} error=${preview.error} loading=${preview.loading} highlight=${openId} portrait=${isPortrait(layout)}
+        <${ViewportPreview} screen=${screen.id} state=${preview.state} error=${preview.error} loading=${preview.loading} highlight=${openId} portrait=${isPortrait(layout)} device=${previewDevice}
           carousel=${layout.screens.filter((s) => s.enabled).map((s) => ({ id: s.id, icon: s.icon }))} />
         <p class="hint">Live from Home Assistant, with your unsaved changes. The icon is this screen's mark in the display's footer.</p>
       <//>
       ${screen.kind === 'meetingRoom'
         ? html`<${MeetingEditor} screen=${screen} setScreen=${setScreen} />`
+        : screen.kind === 'photoFrame'
+        ? html`<${FrameEditor} screen=${screen} setScreen=${setScreen} />`
         : screen.kind === 'roomFinder'
         ? html`<${FinderEditor} screen=${screen} setScreen=${setScreen} layout=${layout} />`
         : html`<${SectionsScreenEditor} screen=${screen} setScreen=${setScreen} ctx=${ctx} openId=${openId} setOpenId=${setOpenId} useDragOrder=${useDragOrder} portrait=${isPortrait(layout)} />`}

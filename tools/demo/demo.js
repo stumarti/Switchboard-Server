@@ -360,6 +360,11 @@ async function seed() {
       [{ type: 'weather', entity: 'weather.home' }, { type: 'message', text: 'Welcome home', size: 'large', color: 5, icon: 'hand-wave' }]
     ]
   });
+  // A photo frame proper: the photo, and the day over it in white.
+  fr.layout.screens.unshift({
+    id: 'frame', kind: 'photoFrame', title: 'Frame', icon: 'image-frame', enabled: true,
+    frame: { source: { kind: 'album', album: 'album-holidays' }, every: 360, caption: 'both', corner: 'bottomLeft', size: 'normal', date: true, weather: 'weather.home', calendars: ['calendar.family'], message: '' }
+  });
   await api('PUT', `/api/dashboards/${frame.slug}`, { name: 'Photo frame', layout: fr.layout });
 
   // Pair every device, and have each check in once with its health.
