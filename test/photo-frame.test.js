@@ -54,3 +54,9 @@ test('a 13.3" board shows a layout large unless it says small', () => {
   assert.equal(dashboard.normalizeLayout({ boardSize: 'small' }).boardSize, 'small');
   assert.equal(dashboard.normalizeLayout({ boardSize: 'huge' }).boardSize, 'large');
 });
+
+test('a photo frame is outlined in black unless that is turned off', () => {
+  assert.equal(dashboard.normalizeLayout({ screens: [{ kind: 'photoFrame', frame: {} }] }).screens[0].frame.outline, true);
+  assert.equal(frame({ source: { kind: 'favorites' } }).data.outline, true);
+  assert.equal(frame({ source: { kind: 'favorites' }, outline: false }).data.outline, false);
+});

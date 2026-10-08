@@ -1152,6 +1152,8 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .vp-frame-text { position: absolute; display: flex; flex-direction: column; gap: 4px; color: #fff; font: 700 18px/1.25 'Atkinson Hyperlegible', system-ui, sans-serif;
   text-shadow: -1px -1px 0 #111, 1px -1px 0 #111, -1px 1px 0 #111, 1px 1px 0 #111, 0 2px 0 #111, 2px 0 0 #111, -2px 0 0 #111, 0 -2px 0 #111; }
 .vp-frame-text .icon { filter: drop-shadow(1px 1px 0 #111) drop-shadow(-1px -1px 0 #111) drop-shadow(1px -1px 0 #111) drop-shadow(-1px 1px 0 #111); }
+.vp-frame-text.plain { text-shadow: none; }
+.vp-frame-text.plain .icon { filter: none; }
 .vp-frame-line, .vp-frame-big { display: flex; align-items: center; gap: 8px; }
 .vp-frame-big { font-size: 32px; }
 .vp-frame-text.big { font-size: 24px; }

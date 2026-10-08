@@ -530,7 +530,7 @@ function PhotoFrame({ d, W, H }) {
   const right = d.corner === 'bottomRight' || d.corner === 'topRight';
   return html`<div class="vp-frame" style=${{ width: `${W}px`, height: `${H}px`, backgroundImage: d.src ? `url(${artUrl(d.src, W, H)})` : 'none' }}>
     ${!d.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${d.empty}</span></div>`}
-    <div class=${`vp-frame-text ${big ? 'big' : ''}`} style=${{ [top ? 'top' : 'bottom']: '14px', [right ? 'right' : 'left']: '16px', textAlign: right ? 'right' : 'left', alignItems: right ? 'flex-end' : 'flex-start' }}>
+    <div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''}`} style=${{ [top ? 'top' : 'bottom']: '14px', [right ? 'right' : 'left']: '16px', textAlign: right ? 'right' : 'left', alignItems: right ? 'flex-end' : 'flex-start' }}>
       ${d.lines.map((l) => html`<div class=${l.big ? 'vp-frame-big' : 'vp-frame-line'}>${l.icon && html`<${Icon} name=${l.icon} size=${big ? 32 : 24} />`}<span>${l.text}</span></div>`)}
       ${d.caption && html`<div class="vp-frame-cap">${d.caption}</div>`}
     </div>

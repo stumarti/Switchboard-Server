@@ -218,7 +218,7 @@ function newScreen(kind) {
   if (kind === 'photoFrame') {
     return {
       id: newId(), title: 'Photo frame', enabled: true, kind,
-      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', date: true, weather: '', calendars: [], message: '' }
+      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', outline: true, date: true, weather: '', calendars: [], message: '' }
     };
   }
   return { id: newId(), title: 'New screen', enabled: true, kind: 'sections', template: 'sidebar', columns: [[], []] };
@@ -925,7 +925,7 @@ function FrameEditor({ screen, setScreen }) {
     <${Card} icon="image-multiple-outline" title="The photo">
       <${PhotoFields} p=${f} set=${set} />
     <//>
-    <${Card} icon="format-text" title="Over the photo" subtitle="A few lines in white, outlined so they read on any photo. Leave any off.">
+    <${Card} icon="format-text" title="Over the photo" subtitle="A few lines in white over the photo. Leave any off.">
       <${Toggle} checked=${f.date} onChange=${(v) => set({ ...f, date: v })} label="The date (large)" />
       <${Field} label="Weather" hint="The temperature and the sky, with its icon.">
         <${EntityPicker} domains=${['weather']} value=${f.weather} onChange=${(id) => set({ ...f, weather: id || '' })} />
@@ -947,6 +947,8 @@ function FrameEditor({ screen, setScreen }) {
         <${Field} label="Corner"><${Select} value=${f.corner} onChange=${(v) => set({ ...f, corner: v })} options=${FRAME_CORNERS} /><//>
         <${Field} label="Text size"><${Select} value=${f.size} onChange=${(v) => set({ ...f, size: v })} options=${[{ value: 'normal', label: 'Normal' }, { value: 'large', label: 'Large' }]} /><//>
       </div>
+      <${Toggle} checked=${f.outline !== false} onChange=${(v) => set({ ...f, outline: v })} label="Black outline" />
+      <p class="hint">A thin black edge round the text and icons, so they read on light photos. Off: plain white, cleaner on dark ones.</p>
       <p class="hint">The caption (where and when the photo was taken) goes last, small. The footer is left off, so nothing else covers the photo; the battery shows only when it's low.</p>
     <//>
   </div>`;
