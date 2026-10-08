@@ -35,7 +35,7 @@ test('a photo frame: the photo, then the date, the weather, the next event and a
   assert.equal(d.corner, 'bottomRight');
   assert.deepEqual(d.lines, [
     { icon: '', text: 'Wednesday 7 October', big: true },
-    { icon: 'weather-partly-cloudy', text: '16°  Partly cloudy', big: false },
+    { icon: 'weather-partly-cloudy', text: '16°C  Partly cloudy', big: false },
     // The school run is over: the next one.
     { icon: 'calendar-blank-outline', text: '14:00 Football practice', big: false },
     { icon: '', text: 'Bins out tonight', big: false }
