@@ -284,18 +284,22 @@ const PHOTOS = [
     svg: scene('#7fb7e8', '#e3f1fb', '#2f6b2f')('<ellipse cx="720" cy="820" rx="560" ry="120" fill="#2c6fb0"/><circle cx="300" cy="300" r="90" fill="#fff6c8"/>') },
   { id: 'a0000000-0000-4000-8000-000000000004', name: 'City lights', taken: '2023-12-20T21:30:00.000Z', city: 'Dublin', fav: true, people: [],
     svg: scene('#141a3c', '#3a3f7a', '#1c1c24')('<rect x="200" y="420" width="160" height="380" fill="#262a40"/><rect x="420" y="320" width="200" height="480" fill="#2d3150"/><rect x="700" y="460" width="150" height="340" fill="#262a40"/><rect x="920" y="360" width="220" height="440" fill="#30355a"/>' +
-      Array.from({ length: 40 }, (_, i) => `<rect x="${220 + (i % 10) * 90}" y="${450 + Math.floor(i / 10) * 70}" width="18" height="24" fill="#ffd54a"/>`).join('')) }
+      Array.from({ length: 40 }, (_, i) => `<rect x="${220 + (i % 10) * 90}" y="${450 + Math.floor(i / 10) * 70}" width="18" height="24" fill="#ffd54a"/>`).join('')) },
+  // A portrait one, taken with the phone upright (stored sideways, EXIF orientation 6).
+  { id: 'a0000000-0000-4000-8000-000000000005', name: 'Lighthouse', taken: '2024-05-03T12:00:00.000Z', city: 'Hook Head', fav: false, people: [], portrait: true,
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1440"><rect width="1080" height="1440" fill="#9fd0f2"/><rect y="1100" width="1080" height="340" fill="#2c6fb0"/><rect x="460" y="380" width="160" height="740" fill="#ffffff"/><rect x="460" y="520" width="160" height="90" fill="#d23b2f"/><rect x="460" y="780" width="160" height="90" fill="#d23b2f"/><rect x="440" y="300" width="200" height="90" fill="#222"/></svg>' }
 ];
-const immichAsset = (p) => ({ id: p.id, type: 'IMAGE', originalFileName: `${p.name}.jpg`, localDateTime: p.taken, fileCreatedAt: p.taken, isFavorite: p.fav, exifInfo: { city: p.city, country: 'Ireland' } });
+const immichAsset = (p) => ({ id: p.id, type: 'IMAGE', originalFileName: `${p.name}.jpg`, localDateTime: p.taken, fileCreatedAt: p.taken, isFavorite: p.fav,
+  exifInfo: { city: p.city, country: 'Ireland', ...(p.portrait ? { exifImageWidth: 4032, exifImageHeight: 3024, orientation: '6' } : { exifImageWidth: 4032, exifImageHeight: 3024, orientation: '1' }) } });
 const jpegs = new Map();
 
 function immich(req, res, url, json) {
   if (req.headers['x-api-key'] !== IMMICH_KEY) return json({ message: 'Invalid API key' }, 401);
   const p = url.pathname;
   if (p === '/api/users/me') return json({ name: 'Demo', email: 'demo@example.com' });
-  if (p === '/api/albums') return json([{ id: 'album-holidays', albumName: 'Holidays', assetCount: 3 }, { id: 'album-home', albumName: 'Home', assetCount: 1 }]);
-  if (p === '/api/albums/album-holidays') return json({ id: 'album-holidays', assets: PHOTOS.slice(0, 3).map(immichAsset) });
-  if (p === '/api/albums/album-home') return json({ id: 'album-home', assets: PHOTOS.slice(3).map(immichAsset) });
+  if (p === '/api/albums') return json([{ id: 'album-holidays', albumName: 'Holidays', assetCount: 4 }, { id: 'album-home', albumName: 'Home', assetCount: 1 }]);
+  if (p === '/api/albums/album-holidays') return json({ id: 'album-holidays', assets: [...PHOTOS.slice(0, 3), PHOTOS[4]].map(immichAsset) });
+  if (p === '/api/albums/album-home') return json({ id: 'album-home', assets: PHOTOS.slice(3, 4).map(immichAsset) });
   if (p === '/api/people') return json({ people: [{ id: 'p-sam', name: 'Sam' }] });
   if (p === '/api/memories') return json([{ type: 'on_this_day', assets: [immichAsset(PHOTOS[0])] }]);
   if (p === '/api/search/random') return json(PHOTOS.map(immichAsset));

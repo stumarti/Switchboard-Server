@@ -231,3 +231,33 @@ test('a photo background: white cards unless the layout asks for none', () => {
   assert.equal(screen({ enabled: true, cards: 'none' }).cards, 'none');
   assert.equal(screen({ enabled: true, cards: 'glass' }).cards, 'white');
 });
+
+test('a photo the shape of where it goes: portrait for a portrait screen, landscape for a landscape one', async () => {
+  immich._lists.clear();
+  const sideways = { exifImageWidth: 4032, exifImageHeight: 3024, orientation: '6' };
+  const wide = { exifImageWidth: 4032, exifImageHeight: 3024, orientation: '1' };
+  const ALBUM = [
+    asset('aaaaaaaa-0000-4000-8000-000000000001', '2020-01-01T10:00:00.000Z', 'Cork', { exifInfo: { city: 'Cork', ...wide } }),
+    asset('aaaaaaaa-0000-4000-8000-000000000002', '2020-02-01T10:00:00.000Z', 'Cork', { exifInfo: { city: 'Cork', ...sideways } }),
+    asset('aaaaaaaa-0000-4000-8000-000000000003', '2020-03-01T10:00:00.000Z', 'Cork', { exifInfo: { city: 'Cork', exifImageWidth: 3000, exifImageHeight: 4000 } })
+  ];
+  const fetchImpl = async (url, init) => {
+    const u = new URL(url);
+    if (u.pathname === '/api/albums/mixed') return { ok: true, status: 200, json: async () => ({ assets: ALBUM }) };
+    return fakeImmich().fetchImpl(url, init);
+  };
+  const opts = { conn, fetchImpl };
+  const t0 = new Date('2026-10-07T10:05:00Z');
+  const seen = { landscape: new Set(), portrait: new Set() };
+  for (const shape of ['landscape', 'portrait'])
+    for (let h = 0; h < 24; h++) {
+      const r = await immich.pick({ source: { kind: 'album', album: 'mixed' }, every: 60, seed: 'bg:s', shape }, new Date(t0.getTime() + h * 3600000), 'UTC', opts);
+      seen[shape].add(r.id);
+    }
+  assert.deepEqual([...seen.landscape], [ALBUM[0].id]);
+  assert.deepEqual([...seen.portrait].sort(), [ALBUM[1].id, ALBUM[2].id].sort());
+  // None that shape: any of them rather than nothing.
+  immich._lists.clear();
+  const onlyWide = async (url, init) => (new URL(url).pathname === '/api/albums/mixed' ? { ok: true, status: 200, json: async () => ({ assets: [ALBUM[0]] }) } : fetchImpl(url, init));
+  assert.equal((await immich.pick({ source: { kind: 'album', album: 'mixed' }, seed: 'x', shape: 'portrait' }, t0, 'UTC', { conn, fetchImpl: onlyWide })).id, ALBUM[0].id);
+});
