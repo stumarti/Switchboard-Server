@@ -120,7 +120,6 @@ export function SideNav({ route, data, overview }) {
         <${SideLink} href="#/layouts/new-remote" icon="plus" label="New remote layout" active=${id === 'new-remote'} />
       <//>
       <${SideGroup} label="Viewport layouts">
-        <${SideLink} href="#/viewport-layouts" icon="view-carousel-outline" label="All viewports, one builder" />
         ${dashboards.map((d) => html`<${SideLink} key=${d.slug} href=${`#/viewport-layouts/${encodeURIComponent(d.slug)}`} icon=${layoutIcon(d)} label=${d.name}
           count=${d.devices.length || null} />`)}
         <${SideLink} href="#/layouts/new-viewport" icon="plus" label="New viewport layout" active=${id === 'new-viewport'} />
@@ -149,15 +148,6 @@ export function SideNav({ route, data, overview }) {
       <//>
       <${SideGroup} label="Other layouts">
         ${rooms.filter((r) => r.slug !== id).map((r) => html`<${SideLink} key=${r.slug} href=${`#/remote-layouts/${encodeURIComponent(r.slug)}`} icon=${roomIcon} label=${r.name} />`)}
-      <//>
-    <//>`;
-  }
-
-  if (section === 'viewport-layouts' && !id) {
-    return html`<${SideColumn} title="All viewports" back=${{ href: '#/layouts', label: 'All layouts' }} server=${server}>
-      <${SideGroup} label="Viewport layouts">
-        <${SideLink} href="#/viewport-layouts" icon="view-carousel-outline" label="All viewports, one builder" active=${true} />
-        ${dashboards.map((x) => html`<${SideLink} key=${x.slug} href=${`#/viewport-layouts/${encodeURIComponent(x.slug)}`} icon=${layoutIcon(x)} label=${x.name} count=${x.devices.length || null} />`)}
       <//>
     <//>`;
   }
@@ -223,8 +213,7 @@ function crumbs({ section, id, sub }, data) {
     out.push({ label: r ? r.name : id, href: sub ? `#/remote-layouts/${encodeURIComponent(id)}` : undefined });
     if (REMOTE_SUBS[sub]) out.push({ label: REMOTE_SUBS[sub] });
   }
-  if (section === 'viewport-layouts' && !id) out.push({ label: 'All viewports' });
-  if (section === 'viewport-layouts' && id) {
+  if (section === 'viewport-layouts') {
     const d = find(data.dashboards, 'slug', id);
     out.push({ label: d ? d.name : id, href: sub ? `#/viewport-layouts/${encodeURIComponent(id)}` : undefined });
     if (VIEWPORT_SUBS[sub]) out.push({ label: VIEWPORT_SUBS[sub] });
