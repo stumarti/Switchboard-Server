@@ -285,7 +285,9 @@ function HomeAssistantCard({ ha, server }) {
 function ServerCard({ server }) {
   return html`<${Card} icon="server" title="This server">
     <div class="kv kv-home">
-      <span>Version</span><b>${server.version}</b>
+      <span>Version</span><b>${server.version}${server.update && server.update.newer
+        ? html` <a href="#/settings/about" class="text-accent">${server.update.latest} is out</a>`
+        : ''}</b>
       <span>Running since</span><b>${timeAgo(server.startedAt)}</b>
       <span>Devices find it at</span><b><code>${String(server.mdnsHostname).replace(/\.local$/, '')}.local:${server.port}</code></b>
     </div>

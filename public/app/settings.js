@@ -640,6 +640,43 @@ function PairingTab() {
   </div>`;
 }
 
+// Is there a newer Switchboard Server (lib/server-version.js): what the
+// last check found, and a button to ask GitHub again.
+function VersionStatus({ version }) {
+  const [v, , , setV] = useApi('/api/server/version');
+  const [busy, setBusy] = useState(false);
+  const checkNow = async () => {
+    setBusy(true);
+    try {
+      setV(await api('/api/server/version/check', { method: 'POST' }));
+    } catch (e) {
+      setV({ ...(v || {}), error: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!v) return html`<p class="hint">Loading…</p>`;
+  if (!v.enabled) return html`<p class="hint">Checking for new versions is off (DISABLE_UPDATE_CHECK). <a href=${v.url} target="_blank" rel="noopener">Releases on GitHub</a></p>`;
+  let status;
+  if (v.newer) {
+    status = html`<p><${Badge} kind="accent" icon="arrow-up-circle-outline">${v.latest} is out<//> You have ${version}. <a href=${v.url} target="_blank" rel="noopener">What’s new</a>, then update it the way you installed it: <code>docker compose pull && docker compose up -d</code>, or <code>git pull && npm install</code> and restart.</p>`;
+  } else if (v.latest && v.known === false) {
+    status = html`<p class="hint">The latest release is ${v.latest}. This is a development build (${version}), so it can’t tell whether it’s older.</p>`;
+  } else if (v.latest) {
+    status = html`<p class="hint"><${Icon} name="check-circle-outline" size=${16} /> Up to date: ${v.latest} is the latest release.</p>`;
+  } else if (!v.checkedAt) {
+    status = html`<p class="hint">Not checked yet: it asks GitHub a minute after starting, then twice a day.</p>`;
+  }
+  return html`<div class="version-status">
+    ${status}
+    ${v.error && html`<p class="hint text-bad"><${Icon} name="alert-circle-outline" size=${16} /> ${v.error}</p>`}
+    <div class="row-inline">
+      <${Button} small icon="refresh" disabled=${busy} onClick=${checkNow}>${busy ? 'Checking…' : 'Check now'}<//>
+      ${v.checkedAt && html`<span class="hint">Checked ${timeAgo(v.checkedAt)}</span>`}
+    </div>
+  </div>`;
+}
+
 function AboutTab() {
   const [health] = useApi('/api/health');
   const MANUAL = 'https://stumarti.github.io/Switchboard/manual/';
@@ -653,6 +690,9 @@ function AboutTab() {
           <dt>Data folder</dt><dd><code>${health.dataDir}</code></dd>
         </dl>`
         : html`<p class="hint">Loading…</p>`}
+    <//>
+    <${Card} title="Updates" subtitle="Whether a newer Switchboard Server is out. It only looks: updating is up to you.">
+      <${VersionStatus} version=${health ? health.version : ''} />
     <//>
     <${Card} title="Help">
       <div class="link-list">
