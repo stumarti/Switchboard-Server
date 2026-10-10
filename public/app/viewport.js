@@ -866,6 +866,10 @@ const PHOTO_EVERY = [15, 30, 60, 180, 360, 720, 1440, 10080].map((m) => ({
   value: String(m),
   label: m < 60 ? `Every ${m} minutes` : m === 60 ? 'Every hour' : m < 1440 ? `Every ${m / 60} hours` : m === 1440 ? 'Once a day' : 'Once a week'
 }));
+const PHOTO_ORDER = [
+  { value: 'random', label: 'Random' },
+  { value: 'sequential', label: 'In order, oldest first' }
+];
 const PHOTO_CAPTIONS = [
   { value: 'none', label: 'No caption' },
   { value: 'date', label: 'When it was taken' },
@@ -898,6 +902,7 @@ function PhotoFields({ p, set }) {
     ${err && html`<p class="hint" style="color:var(--bad)">${err.message}</p>`}
     <div class="row">
       <${Field} label="Change" hint="The display shows the new photo at its next refresh."><${Select} value=${String(p.every)} onChange=${(v) => set({ ...p, every: Number(v) })} options=${PHOTO_EVERY} /><//>
+      ${src.kind !== 'random' && html`<${Field} label="Order"><${Select} value=${p.order || 'random'} onChange=${(v) => set({ ...p, order: v })} options=${PHOTO_ORDER} /><//>`}
       <${Field} label="Caption"><${Select} value=${p.caption} onChange=${(v) => set({ ...p, caption: v })} options=${PHOTO_CAPTIONS} /><//>
     </div>`;
 }

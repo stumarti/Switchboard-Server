@@ -174,3 +174,26 @@ test('a picture past 1440 px asks Immich for the full size, and falls back to th
     global.fetch = realFetch;
   }
 });
+
+test('an album in order: one photo after another, oldest first, then round again', async () => {
+  immich._lists.clear();
+  const f = fakeImmich();
+  // The album lists them newest first; in order means by when they were taken.
+  const t0 = new Date('2026-10-07T10:05:00Z');
+  const ids = [];
+  for (let h = 0; h < 6; h++) {
+    const r = await immich.pick({ source: { kind: 'favorites' }, every: 60, order: 'sequential', seed: 'photo:s1' }, new Date(t0.getTime() + h * 3600000), 'UTC', f.opts);
+    ids.push(r.id);
+  }
+  const order = FAVS.slice(0, 3).map((x) => x.id); // 2019, 2021, 2022
+  const start = order.indexOf(ids[0]);
+  assert.notEqual(start, -1);
+  assert.deepEqual(ids, [0, 1, 2, 3, 4, 5].map((i) => order[(start + i) % 3]));
+  // The same in every section and on every display: it's the period's turn.
+  const other = await immich.pick({ source: { kind: 'favorites' }, every: 60, order: 'sequential', seed: 'bg:other' }, t0, 'UTC', f.opts);
+  assert.equal(other.id, ids[0]);
+  // Kept by the layout; random unless asked.
+  const s = dashboard.normalizeLayout({ screens: [{ id: 'pf', kind: 'photoFrame', frame: { order: 'sequential' } }] }).screens[0].frame;
+  assert.equal(s.order, 'sequential');
+  assert.equal(dashboard.normalizeLayout({ screens: [{ id: 'pf', kind: 'photoFrame', frame: {} }] }).screens[0].frame.order, 'random');
+});
