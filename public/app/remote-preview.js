@@ -362,8 +362,16 @@ const PAGES = {
   xbox: XboxPage, wifi: WifiPage, climate: ClimatePage, receiver: ReceiverPage, quick: QuickPage
 };
 
-// One remote screen: the status bar, the page, the carousel dots.
-function Screen({ page, index, count, ...props }) {
+// Each page's mark in the carousel: the default icon of its nav_* slot
+// (lib/assets/icon-slots.js), as the remote draws it.
+const PAGE_ICONS = {
+  status: 'view-dashboard-outline', lighting: 'lightbulb-on-outline', blinds: 'blinds', music: 'music-note-outline', tv: 'television',
+  xbox: 'microsoft-xbox', wifi: 'wifi', climate: 'thermostat', receiver: 'satellite-variant'
+};
+
+// One remote screen: the status bar, the page, the carousel's icons (the
+// page showing underlined).
+function Screen({ page, index, pages, ...props }) {
   const Page = PAGES[page];
   return html`<div class="rp-screen" style=${{ width: `${W}px`, height: `${H}px` }}>
     <div class="rp-status">
@@ -372,8 +380,8 @@ function Screen({ page, index, count, ...props }) {
       <span class="rp-row"><${Icon} name="wifi" size=${22} /><${Icon} name="battery-80" size=${22} /></span>
     </div>
     <div class="rp-body"><${Page} ...${props} /></div>
-    ${page !== 'quick' &&
-    html`<div class="rp-dots">${Array.from({ length: count }, (_, i) => html`<span class=${i === index ? 'on' : ''}></span>`)}</div>`}
+    ${page !== 'quick' && pages.length > 1 &&
+    html`<div class="rp-dots">${pages.map((p, i) => html`<span class=${i === index ? 'on' : ''}><${Icon} name=${PAGE_ICONS[p] || 'view-dashboard-outline'} size=${22} /></span>`)}</div>`}
   </div>`;
 }
 
@@ -415,7 +423,7 @@ export function RemotePreview({ slug, room, carousel, page, scale = 0.56 }) {
   return html`<div class="rp-single">
     <div class="rp-scale" style=${{ width: `${W * scale}px`, height: `${H * scale}px` }}>
       <div style=${{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-        <${Screen} page=${page} index=${index} count=${pages.length} room=${room} s=${s} carousel=${carousel} globals=${globals} />
+        <${Screen} page=${page} index=${index} pages=${pages} room=${room} s=${s} carousel=${carousel} globals=${globals} />
       </div>
     </div>
     <div class="rp-cap">${loading ? 'Updating…' : error ? (error.includes('not configured') ? 'Home Assistant isn’t set up: no live state' : 'No live state from Home Assistant') : 'Live from Home Assistant'}</div>

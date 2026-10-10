@@ -861,9 +861,9 @@ a.att-item:hover { background: var(--panel-2); }
 .rp-screen { position: relative; display: flex; flex-direction: column; background: #f3f2ec; color: #111; font-family: 'Atkinson Hyperlegible', system-ui, sans-serif; text-align: left; overflow: hidden; }
 .rp-status { display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 16px; border-bottom: 2px solid #111; }
 .rp-body { flex: 1; position: relative; min-height: 0; }
-.rp-dots { position: absolute; bottom: 14px; left: 0; right: 0; display: flex; justify-content: center; gap: 10px; }
-.rp-dots span { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #111; }
-.rp-dots span.on { background: #111; }
+.rp-dots { position: absolute; bottom: 9px; left: 0; right: 0; display: flex; justify-content: center; gap: 12px; color: #111; }
+.rp-dots span { display: flex; padding-bottom: 4px; border-bottom: 3px solid transparent; }
+.rp-dots span.on { border-bottom-color: #111; }
 .rp-pad { position: absolute; inset: 0 0 40px; padding: 18px 20px; display: flex; flex-direction: column; }
 .rp-bottom { margin-top: auto; }
 .rp-row { display: flex; align-items: center; }
@@ -1159,3 +1159,10 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .vp-frame-text.big { font-size: 24px; }
 .vp-frame-text.big .vp-frame-big { font-size: 48px; }
 .vp-frame-cap { font-weight: 400; font-size: 14px; }
+
+/* Settings → About: is a newer server out */
+.version-status { display: flex; flex-direction: column; gap: 8px; }
+.version-status p { margin: 0; }
+.version-status .badge { margin-right: 6px; }
+.version-status .row-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.text-accent { color: var(--accent); }

@@ -866,6 +866,10 @@ const PHOTO_EVERY = [15, 30, 60, 180, 360, 720, 1440, 10080].map((m) => ({
   value: String(m),
   label: m < 60 ? `Every ${m} minutes` : m === 60 ? 'Every hour' : m < 1440 ? `Every ${m / 60} hours` : m === 1440 ? 'Once a day' : 'Once a week'
 }));
+const PHOTO_ORDER = [
+  { value: 'random', label: 'Random' },
+  { value: 'sequential', label: 'In order, oldest first' }
+];
 const PHOTO_CAPTIONS = [
   { value: 'none', label: 'No caption' },
   { value: 'date', label: 'When it was taken' },
@@ -898,6 +902,7 @@ function PhotoFields({ p, set }) {
     ${err && html`<p class="hint" style="color:var(--bad)">${err.message}</p>`}
     <div class="row">
       <${Field} label="Change" hint="The display shows the new photo at its next refresh."><${Select} value=${String(p.every)} onChange=${(v) => set({ ...p, every: Number(v) })} options=${PHOTO_EVERY} /><//>
+      ${src.kind !== 'random' && html`<${Field} label="Order"><${Select} value=${p.order || 'random'} onChange=${(v) => set({ ...p, order: v })} options=${PHOTO_ORDER} /><//>`}
       <${Field} label="Caption"><${Select} value=${p.caption} onChange=${(v) => set({ ...p, caption: v })} options=${PHOTO_CAPTIONS} /><//>
     </div>`;
 }
@@ -1331,7 +1336,8 @@ function screenSummary(s) {
 }
 const screenIcon = (s) => s.icon || (SCREEN_KIND_META[s.kind] ? SCREEN_KIND_META[s.kind].icon : (TEMPLATES.find((t) => t.value === s.template) || TEMPLATES[0]).icon);
 
-function ScreensList({ screens, selected, onSelect, onChange, useDragOrder }) {
+export function ScreensList({ screens, selected, onSelect, onChange, useDragOrder,
+  title = 'Screens', subtitle = 'Its buttons step through these: left previous, middle next, green back to the first.', actions }) {
   const { props, cls } = useDragOrder(screens, onChange, { vertical: true });
   const [adding, setAdding] = useState(false);
   let n = 0;
@@ -1341,7 +1347,7 @@ function ScreensList({ screens, selected, onSelect, onChange, useDragOrder }) {
     onSelect(s.id);
     setAdding(false);
   };
-  return html`<${Card} title="Screens" subtitle="Its buttons step through these: left previous, middle next, green back to the first." class="card-flush">
+  return html`<${Card} title=${title} subtitle=${subtitle} actions=${actions} class="card-flush">
     <div class="page-list">
       ${screens.map((s, i) => {
         if (s.enabled) n += 1;
@@ -1559,9 +1565,14 @@ function usePreview(layout) {
 
 // `part`: the side column's link. '' is the screens; 'settings' the
 // thresholds; 'start' starting from, or importing, a layout.
-export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }) {
-  const [selected, setSelected] = useState(layout.screens[0] && layout.screens[0].id);
+// `selectedId`/`onSelect` choose the screen from outside, and `screensList`
+// replaces this layout's list (the All viewports page lists every layout's).
+export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part, selectedId, onSelect, screensList }) {
+  const [ownSelected, setOwnSelected] = useState(layout.screens[0] && layout.screens[0].id);
+  const selected = selectedId !== undefined ? selectedId : ownSelected;
+  const setSelected = onSelect || setOwnSelected;
   const [openId, setOpenId] = useState(null);
+  useEffect(() => setOpenId(null), [selected]);
   const [presets, setPresets] = useState(null);
   const preview = usePreview(layout);
   // Which display the preview shows the layout on (not saved: a layout can
@@ -1588,10 +1599,11 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
   };
   return html`<div class="vp-builder">
     <div class="vp-builder-side">
-      <${ScreensList} screens=${layout.screens} selected=${screen && screen.id} onSelect=${(id) => {
+      ${screensList ||
+      html`<${ScreensList} screens=${layout.screens} selected=${screen && screen.id} onSelect=${(id) => {
         setSelected(id);
         setOpenId(null);
-      }} onChange=${setScreens} useDragOrder=${useDragOrder} />
+      }} onChange=${setScreens} useDragOrder=${useDragOrder} />`}
       <${HangCard} layout=${layout} onChange=${onChange} previewOn=${previewOn} setPreviewOn=${setPreviewOn} />
       <${TimingCard} layout=${layout} onChange=${onChange} />
     </div>

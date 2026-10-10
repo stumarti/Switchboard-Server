@@ -87,6 +87,7 @@ const viewportSlots = require('./lib/assets/viewport-slots');
 const iconsCompiler = require('./lib/assets/icons');
 const fontsCompiler = require('./lib/assets/fonts');
 const googleFonts = require('./lib/assets/google-fonts');
+const serverVersion = require('./lib/server-version');
 
 const APP_VERSION = process.env.APP_VERSION || 'dev';
 const PORT = Number(process.env.PORT) || 45678;
@@ -97,6 +98,13 @@ const MDNS_INTERFACE = process.env.MDNS_INTERFACE || undefined;
 const MDNS_SERVICE_TYPE = process.env.MDNS_SERVICE_TYPE || 'switchboard';
 const MDNS_INSTANCE_NAME = process.env.MDNS_INSTANCE_NAME || undefined;
 const DISABLE_MDNS = /^(1|true|yes)$/i.test(process.env.DISABLE_MDNS || '');
+// Whether a newer Switchboard Server is out (lib/server-version.js): asks
+// GitHub twice a day unless turned off.
+const versionCheck = serverVersion.createChecker({
+  current: APP_VERSION,
+  enabled: !/^(1|true|yes)$/i.test(process.env.DISABLE_UPDATE_CHECK || ''),
+  log: (m) => console.log(m)
+});
 
 // Seed/refresh admin auth settings (ADMIN_PASSWORD env override, or
 // generate a sessionSecret on first-ever boot) before the app starts
@@ -1356,6 +1364,7 @@ app.get('/api/overview', auth.requireAdminSession, (req, res) => {
       updateSummary: firmware.summary(store.getDevices()),
       server: {
         version: APP_VERSION,
+        update: versionCheck.status(),
         startedAt: STARTED_AT.toISOString(),
         mdnsHostname: MDNS_HOSTNAME,
         port: PORT,
@@ -1363,6 +1372,14 @@ app.get('/api/overview', auth.requireAdminSession, (req, res) => {
       }
     })
   );
+});
+
+// Is there a newer Switchboard Server: the last answer, or ask GitHub now.
+app.get('/api/server/version', auth.requireAdminSession, (req, res) => {
+  res.json(versionCheck.status());
+});
+app.post('/api/server/version/check', auth.requireAdminSession, async (req, res) => {
+  res.json(await versionCheck.checkNow());
 });
 
 app.get('/api/health', (req, res) => {
@@ -1423,6 +1440,7 @@ app.listen(PORT, HOST, () => {
   console.log(`homeremote-server listening on http://${HOST}:${PORT}`);
   // The house's time zone from Home Assistant, unless TZ is set.
   houseTz.start(() => store.getGlobals());
+  versionCheck.start();
   console.log(`profiles stored under ${store.DATA_DIR}`);
 
   if (DISABLE_MDNS) {
