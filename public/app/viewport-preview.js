@@ -369,6 +369,46 @@ const AirQuality = ({ d }) =>
 // A photo from Immich, as the panel shows it (the server's six-colour
 // picture), with its caption underneath. `w`: the column's width.
 const artUrl = (src, w, h) => `/api/art?src=${encodeURIComponent(src)}&w=${w}&h=${h}&fmt=png`;
+
+// A photo as the panel gets it. The last one stays up while the next loads
+// (an edit re-draws the preview); it says so while it loads, and why when
+// it can't (Immich too slow, the photo too big...), after one more try.
+function ArtImg({ src, w, h, cls = '' }) {
+  const url = artUrl(src, w, h);
+  const [shown, setShown] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let live = true;
+    let retry = null;
+    setErr('');
+    const load = (tries) => {
+      const im = new Image();
+      im.onload = () => live && setShown(url);
+      im.onerror = () => {
+        if (!live) return;
+        if (tries > 0) {
+          retry = setTimeout(() => load(tries - 1), 1500);
+          return;
+        }
+        fetch(url)
+          .then((r) => r.json())
+          .then((j) => live && setErr(j.error || 'Couldn’t load the photo'))
+          .catch(() => live && setErr('Couldn’t load the photo'));
+      };
+      im.src = url;
+    };
+    load(1);
+    return () => {
+      live = false;
+      clearTimeout(retry);
+    };
+  }, [url]);
+  return html`<div class=${`vp-art ${cls}`} style=${{ width: `${w}px`, height: `${h}px` }}>
+    ${shown && html`<img src=${shown} width=${w} height=${h} alt="" />`}
+    ${!shown && !err && html`<div class="vp-art-msg"><${Icon} name="image-outline" size=${24} /><span>Loading the photo…</span></div>`}
+    ${err && html`<div class="vp-art-msg vp-art-err"><${Icon} name="image-broken-variant" size=${24} /><span>Couldn’t load the photo: ${err}</span></div>`}
+  </div>`;
+}
 const PHOTO_CAPTION_H = 22;
 // Height 0 fills the rest of the column, down to the footer: about 416 px
 // under a heading at the top (the panel works it out exactly).
@@ -377,7 +417,7 @@ function Photo({ d, w }) {
   const ph = d.caption ? h - PHOTO_CAPTION_H : h;
   return html`<div>
     ${d.src
-      ? html`<img class="vp-photo" src=${artUrl(d.src, w, ph)} width=${w} height=${ph} alt="" />`
+      ? html`<${ArtImg} cls="vp-photo" src=${d.src} w=${w} h=${ph} />`
       : html`<div class="vp-photo vp-photo-empty" style=${{ width: `${w}px`, height: `${ph}px` }}><${Icon} name="image-off-outline" size=${32} /><span>${d.empty}</span></div>`}
     ${d.caption && html`<div class="vp-tiny vp-photo-cap">${d.caption}</div>`}
   </div>`;
@@ -431,8 +471,8 @@ function SectionsScreen({ d, highlight, portrait, W = portrait ? 480 : 800, H = 
   const bg = d.background;
   // Portrait: the columns as bands one under the other.
   const style = portrait ? { gridTemplateColumns: `${W}px`, gridAutoRows: 'min-content', alignContent: 'start', height: `${H}px` } : { gridTemplateColumns: colsFor(d.template, W), height: `${H}px` };
-  if (bg && bg.src) style.backgroundImage = `url(${artUrl(bg.src, W, H)})`;
-  return html`<div class=${`vp-cols kd-${d.template} ${bg ? 'vp-photo-bg' : ''} ${portrait ? 'vp-portrait' : ''}`} style=${style}>
+  return html`<div class=${`vp-cols kd-${d.template} ${bg ? 'vp-photo-bg' : ''} ${bg && bg.cards === 'none' ? 'vp-clear' : ''} ${portrait ? 'vp-portrait' : ''}`} style=${style}>
+    ${bg && bg.src && html`<${ArtImg} cls="vp-bg-img" src=${bg.src} w=${W} h=${H} />`}
     ${bg && !bg.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${bg.empty}</span></div>`}
     ${bg && bg.caption && html`<div class="vp-bg-cap">${bg.caption}</div>`}
     ${d.columns.map(
@@ -528,7 +568,8 @@ function PhotoFrame({ d, W, H }) {
   const big = d.size === 'large';
   const top = d.corner === 'topLeft' || d.corner === 'topRight';
   const right = d.corner === 'bottomRight' || d.corner === 'topRight';
-  return html`<div class="vp-frame" style=${{ width: `${W}px`, height: `${H}px`, backgroundImage: d.src ? `url(${artUrl(d.src, W, H)})` : 'none' }}>
+  return html`<div class="vp-frame" style=${{ width: `${W}px`, height: `${H}px` }}>
+    ${d.src && html`<${ArtImg} cls="vp-bg-img" src=${d.src} w=${W} h=${H} />`}
     ${!d.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${d.empty}</span></div>`}
     <div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''}`} style=${{ [top ? 'top' : 'bottom']: '14px', [right ? 'right' : 'left']: '16px', textAlign: right ? 'right' : 'left', alignItems: right ? 'flex-end' : 'flex-start' }}>
       ${d.lines.map((l) => html`<div class=${l.big ? 'vp-frame-big' : 'vp-frame-line'}>${l.icon && html`<${Icon} name=${l.icon} size=${big ? 32 : 24} />`}<span>${l.text}</span></div>`)}
