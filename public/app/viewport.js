@@ -963,10 +963,18 @@ function FrameEditor({ screen, setScreen }) {
 function BackgroundEditor({ screen, setScreen }) {
   const bg = screen.background || { enabled: false, source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'none' };
   const set = (next) => setScreen({ ...screen, background: next });
-  return html`<div style="margin-bottom:14px"><${Card} icon="image-outline" title="Photo background" subtitle="A photo from Immich behind this screen, with the sections on white cards over it.">
+  return html`<div style="margin-bottom:14px"><${Card} icon="image-outline" title="Photo background" subtitle="A photo from Immich behind this screen, with the sections over it.">
     <${Toggle} checked=${bg.enabled} onChange=${(v) => set({ ...bg, enabled: v })} label="A photo behind this screen" />
     ${bg.enabled && html`<${PhotoFields} p=${bg} set=${set} />
-      <p class="hint">The photo fills the panel; each section sits on a white card so its text stays readable. Leave a column empty to show more of the photo.</p>`}
+      <${Field} label="Behind the sections">
+        <${Select} value=${bg.cards || 'white'} onChange=${(v) => set({ ...bg, cards: v })} options=${[
+          { value: 'white', label: 'White cards' },
+          { value: 'none', label: 'Nothing: straight on the photo' }
+        ]} />
+      <//>
+      <p class="hint">${(bg.cards || 'white') === 'none'
+        ? 'Each section sits straight on the photo, with a thin white edge round its text and icons so they still read. Busy or pale photos make them harder to read.'
+        : 'The photo fills the panel; each section sits on a white card so its text stays readable. Leave a column empty to show more of the photo.'}</p>`}
   <//></div>`;
 }
 

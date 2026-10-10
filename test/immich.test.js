@@ -121,10 +121,10 @@ test('a photo section and a screen background in the state; the key never in it'
   assert.equal(photo.height, 300);
   assert.equal(photo.empty, '');
   assert.ok(['Dublin, Ireland', 'Galway, Ireland'].includes(photo.caption));
-  assert.deepEqual(s.background, { src: `immich:${FAVS[0].id}`, caption: '7 October 2019', empty: '' });
+  assert.deepEqual(s.background, { src: `immich:${FAVS[0].id}`, caption: '7 October 2019', empty: '', cards: 'white' });
   // No Immich: the screen still builds, saying why there's no photo.
   const none = buildScreens(layout, { states: {}, photos: {} }).pics;
-  assert.deepEqual(none.background, { src: '', caption: '', empty: 'No photo' });
+  assert.deepEqual(none.background, { src: '', caption: '', empty: 'No photo', cards: 'white' });
   // The layout a display gets has the sources, never the connection.
   assert.ok(!JSON.stringify(deviceLayout(layout)).includes('k-secret'));
   assert.ok(!JSON.stringify(s).includes('k-secret'));
@@ -196,4 +196,38 @@ test('an album in order: one photo after another, oldest first, then round again
   const s = dashboard.normalizeLayout({ screens: [{ id: 'pf', kind: 'photoFrame', frame: { order: 'sequential' } }] }).screens[0].frame;
   assert.equal(s.order, 'sequential');
   assert.equal(dashboard.normalizeLayout({ screens: [{ id: 'pf', kind: 'photoFrame', frame: {} }] }).screens[0].frame.order, 'random');
+});
+
+test('a list due a refresh is answered at once; the refresh happens behind it', async () => {
+  immich._lists.clear();
+  let slow = false;
+  let calls = 0;
+  const f = fakeImmich();
+  const fetchImpl = async (url, init) => {
+    if (url.includes('/search/metadata')) {
+      calls += 1;
+      if (slow) await new Promise((r) => setTimeout(r, 200));
+    }
+    return f.fetchImpl(url, init);
+  };
+  const opts = { conn, fetchImpl };
+  const t0 = new Date('2026-10-07T10:05:00Z');
+  const first = await immich.list({ kind: 'favorites', album: '', person: '' }, t0, opts);
+  assert.equal(first.length, 3);
+  // Older than the cache allows: the old list now, a fresh one fetched behind it.
+  for (const v of immich._lists.values()) v.at -= 11 * 60 * 1000;
+  slow = true;
+  const started = Date.now();
+  const again = await immich.list({ kind: 'favorites', album: '', person: '' }, t0, opts);
+  assert.ok(Date.now() - started < 150, 'answered without waiting for Immich');
+  assert.deepEqual(again, first);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(calls, 2);
+});
+
+test('a photo background: white cards unless the layout asks for none', () => {
+  const screen = (bg) => dashboard.normalizeLayout({ screens: [{ id: 's', kind: 'sections', template: 'single', columns: [[]], background: bg }] }).screens[0].background;
+  assert.equal(screen({ enabled: true }).cards, 'white');
+  assert.equal(screen({ enabled: true, cards: 'none' }).cards, 'none');
+  assert.equal(screen({ enabled: true, cards: 'glass' }).cards, 'white');
 });

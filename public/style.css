@@ -1132,6 +1132,19 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 
 /* Photos from Immich: a section, or the whole screen behind white cards. */
 .vp-photo { display: block; max-width: 100%; object-fit: cover; }
+.vp-art { position: relative; overflow: hidden; background: repeating-linear-gradient(45deg, #eee 0 8px, #f7f7f7 8px 16px); }
+.vp-art img { display: block; width: 100%; height: 100%; }
+.vp-art-msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 12px; color: #666; font-size: 14px; text-align: center; }
+.vp-art-err { color: #b42318; }
+.vp-bg-img { position: absolute; left: 0; top: 0; z-index: 0; }
+.vp-photo-bg > .kd-col { position: relative; z-index: 1; }
+.vp-photo-bg > .vp-bg-cap { z-index: 2; }
+/* See-through: the sections straight on the photo, a white edge round their text and icons. */
+.vp-cols.vp-photo-bg.vp-clear .kd-section, .vp-cols.vp-photo-bg.vp-clear .vp-section, .vp-cols.vp-photo-bg.vp-clear ~ .kd-footer, .vp-cols.vp-photo-bg.vp-clear .vp-bg-cap { background: none; }
+.vp-cols.vp-photo-bg.vp-clear .kd-col, .vp-cols.vp-photo-bg.vp-clear ~ .kd-footer, .vp-cols.vp-photo-bg.vp-clear .vp-bg-cap {
+  text-shadow: -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff, 0 2px 0 #fff, 2px 0 0 #fff, -2px 0 0 #fff, 0 -2px 0 #fff; }
+.vp-cols.vp-photo-bg.vp-clear .kd-col .icon, .vp-cols.vp-photo-bg.vp-clear ~ .kd-footer .icon, .vp-cols.vp-photo-bg.vp-clear .kd-col img, .vp-cols.vp-photo-bg.vp-clear .kd-col svg {
+  filter: drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff); }
 .vp-photo-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: repeating-linear-gradient(45deg, #eee 0 8px, #f7f7f7 8px 16px); color: #666; font-size: 14px; text-align: center; }
 .vp-photo-cap { margin-top: 3px; }
 .vp-cols.vp-photo-bg { position: relative; background-size: 100% 100%; background-repeat: no-repeat; background-position: 0 0; }
@@ -1148,7 +1161,8 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .vp-cols.vp-portrait:not(.vp-photo-bg) > .kd-col + .kd-col { border-top: 2px dotted #111; padding-top: 6px; }
 
 /* A photo frame: the photo filling the panel, white lines outlined in black. */
-.vp-frame { position: relative; background-size: cover; background-position: center; }
+.vp-frame { position: relative; }
+.vp-frame > .vp-frame-text { z-index: 1; }
 .vp-frame-text { position: absolute; display: flex; flex-direction: column; gap: 4px; color: #fff; font: 700 18px/1.25 'Atkinson Hyperlegible', system-ui, sans-serif;
   text-shadow: -1px -1px 0 #111, 1px -1px 0 #111, -1px 1px 0 #111, 1px 1px 0 #111, 0 2px 0 #111, 2px 0 0 #111, -2px 0 0 #111, 0 -2px 0 #111; }
 .vp-frame-text .icon { filter: drop-shadow(1px 1px 0 #111) drop-shadow(-1px -1px 0 #111) drop-shadow(1px -1px 0 #111) drop-shadow(-1px 1px 0 #111); }
