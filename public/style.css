@@ -1159,3 +1159,10 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .vp-frame-text.big { font-size: 24px; }
 .vp-frame-text.big .vp-frame-big { font-size: 48px; }
 .vp-frame-cap { font-weight: 400; font-size: 14px; }
+
+/* Settings → About: is a newer server out */
+.version-status { display: flex; flex-direction: column; gap: 8px; }
+.version-status p { margin: 0; }
+.version-status .badge { margin-right: 6px; }
+.version-status .row-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.text-accent { color: var(--accent); }
