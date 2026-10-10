@@ -5,7 +5,7 @@
 
 import { html, render, useState, useEffect, useCallback, api, setUnauthorizedHandler, Icon, Button } from './lib.js';
 import { RoomsPage } from './rooms.js';
-import { DashboardPage } from './dashboards.js';
+import { DashboardPage, AllViewportsPage } from './dashboards.js';
 import { ClientList, ClientPage } from './clients.js';
 import { SettingsPage } from './settings.js';
 import { HomePage } from './home.js';
@@ -187,6 +187,8 @@ function App() {
     main = html`<${HomePage} view=${id} />`;
   } else if (section === 'layouts' || section === 'remote-layouts') {
     main = html`<${RoomsPage} slug=${section === 'remote-layouts' ? id : ''} tool=${section === 'layouts' ? id : ''} part=${sub} ...${data} />`;
+  } else if (section === 'viewport-layouts' && !id) {
+    main = html`<${AllViewportsPage} ...${data} />`;
   } else if (section === 'viewport-layouts') {
     main = html`<${DashboardPage} key=${id} slug=${id} part=${sub} ...${data} />`;
   } else if (clientType) {
