@@ -771,7 +771,24 @@ textarea { min-height: 70px; font-family: var(--mono); font-size: 12px; }
   .page { padding: 8px 16px 60px; }
   .grid { grid-template-columns: 1fr; }
   .tiles { grid-template-columns: repeat(2, 1fr); }
+  /* A phone: nothing wider than the screen. A wide table or a row of tabs
+     scrolls sideways inside its card; the page itself never does (Safari
+     otherwise lets a wide table stretch the whole page). */
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .card-head { flex-wrap: wrap; }
+  .table-tools { flex-wrap: wrap; }
+  .table-tools .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .table-tools .seg::-webkit-scrollbar { display: none; }
+  .table-tools .seg > button { flex: none; }
+  .table-tools .filter-box { flex: 1 1 100%; }
+  .rollout-top { flex-wrap: wrap; }
 }
+/* Whatever's inside can't make a column, card or table box wider than its place. */
+.stack > *, .home-row > *, .card, .card-body, .table-wrap { min-width: 0; max-width: 100%; }
+.table-wrap { -webkit-overflow-scrolling: touch; }
+/* Long addresses, entity ids and snippets break rather than run off the card. */
+.card code { overflow-wrap: anywhere; }
+.card pre { max-width: 100%; overflow-x: auto; }
 
 .label-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 12px; margin: 10px 0; }
 
