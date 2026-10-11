@@ -1203,3 +1203,10 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .json-text { width: 100%; font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; white-space: pre; overflow: auto; resize: vertical; min-height: 220px; }
 .json-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .drawer-mode { margin: 0 0 12px; }
+.json-wrap { position: relative; }
+.json-suggest { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 5; max-height: 60%; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0,0,0,.18)); padding: 4px; }
+.json-suggest .hint { padding: 4px 8px; font-size: 11.5px; }
+.json-suggest button { display: flex; width: 100%; gap: 10px; align-items: baseline; padding: 6px 8px; border: 0; border-radius: 6px; background: none; text-align: left; font: inherit; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.json-suggest button span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.json-suggest button.on, .json-suggest button:hover { background: var(--accent-soft); }
+.text-warn { color: var(--warn); }

@@ -148,19 +148,111 @@ export function Toggle({ checked, onChange, label, disabled }) {
   </label>`;
 }
 
+// An entity id as it's written in a layout ("sensor.kitchen_temp").
+const ENTITY_ID = /^[a-z_]+\.[a-z0-9_]+$/;
+// Keys whose string values (or lists of strings) are entities.
+const ENTITY_KEY = /entit|sensor|battery|weather|calendar|player|camera|climate|heater|alarm|thermostat|forecast|^zones?$|^items$|^hotWater$|^water/i;
+
+// The string the caret is in, if it's where an entity goes: its text before
+// the caret, where it starts, and the key it's under (or '' in a list).
+function entityTokenAt(text, caret) {
+  const lineStart = text.lastIndexOf('\n', caret - 1) + 1;
+  const before = text.slice(lineStart, caret);
+  const q = before.lastIndexOf('"');
+  if (q < 0) return null;
+  // Inside a string: an odd number of quotes before the caret on this line.
+  if ((before.match(/"/g) || []).length % 2 === 0) return null;
+  const token = before.slice(q + 1);
+  if (!/^[a-z0-9_.]*$/.test(token) || token.length < 2) return null;
+  const key = (/"([^"]+)"\s*:\s*\[?\s*$/.exec(before.slice(0, q)) || [])[1] || '';
+  if (key ? !ENTITY_KEY.test(key) && !token.includes('.') : !token.includes('.')) return null;
+  return { token, from: lineStart + q + 1, to: caret };
+}
+
+// Every string in it that looks like an entity id.
+function entityIdsIn(v, out = new Set()) {
+  if (typeof v === 'string') {
+    if (ENTITY_ID.test(v)) out.add(v);
+  } else if (Array.isArray(v)) v.forEach((x) => entityIdsIn(x, out));
+  else if (v && typeof v === 'object') Object.values(v).forEach((x) => entityIdsIn(x, out));
+  return out;
+}
+
 // A JSON editor for a piece of config: the text as it is, Apply (through
 // `onApply`, which may throw: its message is shown), Revert, Copy. Tab
 // indents. `value` changing (an apply, or the form) resets the text.
+// Typing an entity (in a string under an entity key, or anything with a
+// dot) suggests Home Assistant's entities: arrows to pick, Enter or Tab to
+// put it in, Esc to close. Entities it names that Home Assistant hasn't got
+// are listed under it.
 export function JsonEditor({ value, onApply, hint, rows = 22 }) {
   const text = JSON.stringify(value, null, 2);
   const [draft, setDraft] = useState(text);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  const [tok, setTok] = useState(null); // {token, from, to}
+  const [hits, setHits] = useState([]);
+  const [hl, setHl] = useState(0);
+  const [missing, setMissing] = useState([]);
+  const area = useRef(null);
   useEffect(() => {
     setDraft(text);
     setErr('');
   }, [text]);
+
+  // Suggestions for the entity being typed.
+  useEffect(() => {
+    if (!tok) {
+      setHits([]);
+      return undefined;
+    }
+    let live = true;
+    const t = setTimeout(() => {
+      api(`/api/ha/entities?${new URLSearchParams({ q: tok.token, limit: '8' })}`)
+        .then((r) => {
+          if (!live) return;
+          setHits((r || []).filter((e) => e.entity_id !== tok.token));
+          setHl(0);
+        })
+        .catch(() => live && setHits([]));
+    }, 120);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [tok && tok.token, tok && tok.from]);
+
+  // Entities it names that Home Assistant hasn't got (once it parses).
+  useEffect(() => {
+    let live = true;
+    const t = setTimeout(() => {
+      let ids;
+      try {
+        ids = [...entityIdsIn(JSON.parse(draft))];
+      } catch {
+        return;
+      }
+      if (!ids.length) return live && setMissing([]);
+      api('/api/ha/lookup', { method: 'POST', body: { ids: ids.slice(0, 500) } })
+        .then((r) => live && setMissing(ids.filter((id) => r && r[id] === null)))
+        .catch(() => live && setMissing([]));
+    }, 600);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [draft]);
+
+  const track = (t) => setTok(entityTokenAt(t.value, t.selectionStart));
+  const pick = (e) => {
+    const t = area.current;
+    if (!t || !tok) return;
+    t.setRangeText(e.entity_id, tok.from, tok.to, 'end');
+    setDraft(t.value);
+    setTok(null);
+    t.focus();
+  };
   const apply = async () => {
     let v;
     try {
@@ -184,19 +276,47 @@ export function JsonEditor({ value, onApply, hint, rows = 22 }) {
       setBusy(false);
     }
   };
-  const tab = (e) => {
+  const keys = (e) => {
+    if (hits.length && tok) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHl((h) => (h + (e.key === 'ArrowDown' ? 1 : hits.length - 1)) % hits.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        pick(hits[hl]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setTok(null);
+        return;
+      }
+    }
     if (e.key !== 'Tab') return;
     e.preventDefault();
     const t = e.target;
-    const at = t.selectionStart;
-    t.setRangeText('  ', at, t.selectionEnd, 'end');
+    t.setRangeText('  ', t.selectionStart, t.selectionEnd, 'end');
     setDraft(t.value);
   };
   const copy = () => navigator.clipboard && navigator.clipboard.writeText(draft).then(() => setNote('Copied.')).catch(() => {});
   return html`<div class="json-editor">
-    <textarea class="json-text" spellcheck="false" autocapitalize="off" autocomplete="off" rows=${rows} value=${draft} onInput=${(e) => setDraft(e.target.value)} onKeyDown=${tab}></textarea>
+    <div class="json-wrap">
+      <textarea ref=${area} class="json-text" spellcheck="false" autocapitalize="off" autocomplete="off" rows=${rows} value=${draft}
+        onInput=${(e) => { setDraft(e.target.value); track(e.target); }}
+        onClick=${(e) => track(e.target)} onKeyUp=${(e) => !['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'].includes(e.key) && track(e.target)}
+        onKeyDown=${keys} onBlur=${() => setTimeout(() => setTok(null), 150)}></textarea>
+      ${tok && hits.length > 0 &&
+      html`<div class="json-suggest" role="listbox">
+        <div class="hint">Entities matching “${tok.token}” · ↑↓ Enter</div>
+        ${hits.map((e, i) => html`<button type="button" class=${i === hl ? 'on' : ''} onMouseDown=${(ev) => { ev.preventDefault(); pick(e); }}>
+          <code>${e.entity_id}</code><span>${e.name}</span></button>`)}
+      </div>`}
+    </div>
     ${err && html`<p class="hint text-bad">${err}</p>`}
     ${!err && note && html`<p class="hint">${note}</p>`}
+    ${missing.length > 0 && html`<p class="hint text-warn"><${Icon} name="alert-outline" size=${15} /> Not in Home Assistant: ${missing.map((id, i) => html`${i ? ', ' : ''}<code>${id}</code>`)}</p>`}
     ${hint && html`<p class="hint">${hint}</p>`}
     <div class="json-actions">
       <${Button} kind="primary" small icon="check" disabled=${draft === text || busy} onClick=${apply}>${busy ? 'Checking…' : 'Apply'}<//>
