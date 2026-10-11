@@ -771,7 +771,24 @@ textarea { min-height: 70px; font-family: var(--mono); font-size: 12px; }
   .page { padding: 8px 16px 60px; }
   .grid { grid-template-columns: 1fr; }
   .tiles { grid-template-columns: repeat(2, 1fr); }
+  /* A phone: nothing wider than the screen. A wide table or a row of tabs
+     scrolls sideways inside its card; the page itself never does (Safari
+     otherwise lets a wide table stretch the whole page). */
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .card-head { flex-wrap: wrap; }
+  .table-tools { flex-wrap: wrap; }
+  .table-tools .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .table-tools .seg::-webkit-scrollbar { display: none; }
+  .table-tools .seg > button { flex: none; }
+  .table-tools .filter-box { flex: 1 1 100%; }
+  .rollout-top { flex-wrap: wrap; }
 }
+/* Whatever's inside can't make a column, card or table box wider than its place. */
+.stack > *, .home-row > *, .card, .card-body, .table-wrap { min-width: 0; max-width: 100%; }
+.table-wrap { -webkit-overflow-scrolling: touch; }
+/* Long addresses, entity ids and snippets break rather than run off the card. */
+.card code { overflow-wrap: anywhere; }
+.card pre { max-width: 100%; overflow-x: auto; }
 
 .label-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 12px; margin: 10px 0; }
 
@@ -1180,3 +1197,16 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .version-status .badge { margin-right: 6px; }
 .version-status .row-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .text-accent { color: var(--accent); }
+
+/* The JSON editors */
+.json-editor { display: flex; flex-direction: column; gap: 8px; }
+.json-text { width: 100%; font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; white-space: pre; overflow: auto; resize: vertical; min-height: 220px; }
+.json-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.drawer-mode { margin: 0 0 12px; }
+.json-wrap { position: relative; }
+.json-suggest { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 5; max-height: 60%; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0,0,0,.18)); padding: 4px; }
+.json-suggest .hint { padding: 4px 8px; font-size: 11.5px; }
+.json-suggest button { display: flex; width: 100%; gap: 10px; align-items: baseline; padding: 6px 8px; border: 0; border-radius: 6px; background: none; text-align: left; font: inherit; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.json-suggest button span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.json-suggest button.on, .json-suggest button:hover { background: var(--accent-soft); }
+.text-warn { color: var(--warn); }

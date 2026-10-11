@@ -1079,6 +1079,20 @@ app.get('/api/devices/:slug/state', auth.requireAdminOrDevice, async (req, res) 
   }
 });
 
+// The JSON editors: what was typed, as the server keeps it (unknown keys
+// dropped, missing ones defaulted), so the forms get complete settings.
+// Nothing is saved here.
+app.post('/api/normalize/viewport', auth.requireAdminSession, (req, res) => {
+  const b = req.body || {};
+  if (b.section) return res.json({ section: dashboard.normalizeSection(b.section) });
+  if (b.screen) return res.json({ screen: dashboard.normalizeScreen(b.screen) });
+  if (b.layout) return res.json({ layout: dashboard.normalizeLayout(b.layout) });
+  res.status(400).json({ error: 'send {section}, {screen} or {layout}' });
+});
+app.post('/api/normalize/remote/:slug', auth.requireAdminSession, (req, res) => {
+  res.json({ profile: normalizeProfile(req.body || {}, store.getProfile(req.params.slug)) });
+});
+
 // The room editor's screen previews: the state the remote would get for the
 // room as it is in the editor, saved or not — the same entities and the same
 // trimming as /state, so the preview shows what the device would draw.
