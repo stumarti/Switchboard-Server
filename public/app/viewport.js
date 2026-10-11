@@ -259,8 +259,13 @@ function SuggestInput({ value, onInput, suggestions, placeholder }) {
 }
 
 // The values an entity (or one of its attributes) is likely to take.
+// "@heating" (the attribute boxes offer it): the heating state, worked out on
+// the server as the Heating section does.
+const HEATING_STATES = ['calling', 'idle', 'off'];
+const withHeating = (attrs) => ['@heating', ...(attrs || [])];
 function useStateSuggestions(entityId, attribute) {
   const e = useEntity(entityId);
+  if (attribute === '@heating') return HEATING_STATES;
   if (!e) return [];
   if (attribute) return [];
   const out = new Set([...(e.options || []), ...(DOMAIN_STATES[e.domain] || [])]);
@@ -420,7 +425,7 @@ function StatusIconEditor({ it, upd }) {
   return html`<div class="row">
       <${IconPicker} value=${it.icon} onChange=${(icon) => upd({ ...it, icon })} />
       <${Field} label="Entity"><${EntityPicker} value=${it.entity} onChange=${(id, x) => upd({ ...it, entity: id, name: it.name || (x && x.name) || '', icon: it.icon || (x && x.icon) || '' })} /><//>
-      <div style="width:150px"><${Field} label="Attribute (optional)"><${SuggestInput} value=${it.attribute} placeholder="state" suggestions=${(e && e.attributes) || []} onInput=${(v) => upd({ ...it, attribute: v })} /><//></div>
+      <div style="width:150px"><${Field} label="Attribute (optional)" hint="@heating: calling, idle or off"><${SuggestInput} value=${it.attribute} placeholder="state" suggestions=${withHeating(e && e.attributes)} onInput=${(v) => upd({ ...it, attribute: v })} /><//></div>
       <div style="width:150px"><${Field} label="Label"><${TextInput} value=${it.name} onInput=${(v) => upd({ ...it, name: v })} /><//></div>
     </div>
     <${Field} label="Also follows (optional)" hint="A rule then matches when any of these does — “a door is open”.">
@@ -443,7 +448,7 @@ function StatusIconEditor({ it, upd }) {
 function StatusIconsEditor({ s, set, presets }) {
   const add = (key) => {
     const p = (presets || {})[key] || { name: '', icon: '', rules: [] };
-    const icon = { id: newId(), name: p.name, entity: '', entities: [], attribute: '', icon: p.icon, color: 1, showByDefault: p.showByDefault !== false, rules: clone(p.rules || []).map((r) => ({ icon: '', hide: false, ...r })) };
+    const icon = { id: newId(), name: p.name, entity: '', entities: [], attribute: p.attribute || '', icon: p.icon, color: 1, showByDefault: p.showByDefault !== false, rules: clone(p.rules || []).map((r) => ({ icon: '', hide: false, ...r })) };
     set({ ...s, icons: [...s.icons, icon] });
   };
   return html`<${ItemList}
@@ -704,7 +709,9 @@ function NowItemEditor({ it, upd }) {
     html`<div class="row">${field('entity', 'Alarm state', [])}${field('eventEntity', 'Last event message (optional)', ['sensor'])}</div>
       <p class="hint">“Alarm disarmed” (green), “Alarm part set” or “Alarm armed” (red), with the last event under it.</p>`}
     ${it.kind === 'heating' &&
-    html`<${NamedList} items=${it.items} onChange=${(l) => upd({ ...it, items: l })} domains=${['climate']} max=${10} addLabel="Add zone" />
+    html`${!it.items.length && html`<div class="row">${field('entity', 'Thermostat', ['climate', 'water_heater', 'switch', 'binary_sensor'])}</div>`}
+      <${NamedList} items=${it.items} onChange=${(l) => upd({ ...it, items: l })} domains=${['climate']} max=${10} addLabel="Add zone" />
+      <p class="hint">Shown while any zone (or the thermostat, with no zones) is calling: in heat or auto and below its target by more than this, or saying it's heating. Auto alone isn't calling.</p>
       <div style="width:220px"><${Field} label="Calling when below setpoint by more than °"><${NumberInput} step="0.1" min="0" value=${it.callingDelta} onChange=${(v) => upd({ ...it, callingDelta: v })} /><//></div>
       ${words(false)}`}
     ${it.kind === 'hotWater' && html`${field('entity', 'Water heater', ['water_heater'])}${words(false)}`}
@@ -726,7 +733,7 @@ function NowItemEditor({ it, upd }) {
     ${it.kind === 'entity' &&
     html`<div class="row" style="align-items:flex-end">
         ${field('entity', 'Entity', [])}
-        <div style="width:120px"><${Field} label="Attribute"><${TextInput} value=${it.attribute} placeholder="state" onInput=${(v) => upd({ ...it, attribute: v })} /><//></div>
+        <div style="width:140px"><${Field} label="Attribute" hint="@heating: calling, idle or off"><${SuggestInput} value=${it.attribute} placeholder="state" suggestions=${withHeating([])} onInput=${(v) => upd({ ...it, attribute: v })} /><//></div>
         <div style="width:110px"><${Field} label="Is"><${CondSelect} value=${it.cond} onChange=${(v) => upd({ ...it, cond: v })} /><//></div>
         <div style="width:110px"><${Field} label="Value"><${TextInput} value=${it.value} onInput=${(v) => upd({ ...it, value: v })} /><//></div>
       </div>
