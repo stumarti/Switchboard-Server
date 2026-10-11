@@ -140,6 +140,7 @@ export function SideNav({ route, data, overview }) {
         <${SideLink} href=${base} icon="view-carousel-outline" label="Pages" active=${!sub} />
         <${SideLink} href=${`${base}/quick`} icon="view-grid-plus-outline" label="Quick Access" active=${sub === 'quick'} />
         <${SideLink} href=${`${base}/settings`} icon="tune-variant" label="On the remote" active=${sub === 'settings'} />
+        <${SideLink} href=${`${base}/json`} icon="code-json" label="Edit as JSON" active=${sub === 'json'} />
       <//>
       <${SideGroup} label="Remotes in this room">
         ${remotes.length
@@ -160,6 +161,7 @@ export function SideNav({ route, data, overview }) {
         <${SideLink} href=${base} icon="view-carousel-outline" label="Screens" active=${!sub} />
         <${SideLink} href=${`${base}/settings`} icon="tune-variant" label="Thresholds" active=${sub === 'settings'} />
         <${SideLink} href=${`${base}/start`} icon="file-replace-outline" label="Start from or import" active=${sub === 'start'} />
+        <${SideLink} href=${`${base}/json`} icon="code-json" label="Edit as JSON" active=${sub === 'json'} />
       <//>
       <${SideGroup} label="Displays">
         ${d && d.devices.length
@@ -199,8 +201,8 @@ const SECTION_NAMES = {
 
 const HOME_VIEWS = { attention: 'Needs attention', devices: 'Devices', batteries: 'Batteries', 'home-assistant': 'Home Assistant' };
 const LAYOUT_TOOLS = { 'meeting-rooms': 'Add many meeting rooms', waiting: 'Displays waiting', 'new-remote': 'New remote layout', 'new-viewport': 'New viewport layout' };
-const REMOTE_SUBS = { quick: 'Quick Access', settings: 'On the remote' };
-const VIEWPORT_SUBS = { settings: 'Thresholds', start: 'Start from or import' };
+const REMOTE_SUBS = { quick: 'Quick Access', settings: 'On the remote', json: 'JSON' };
+const VIEWPORT_SUBS = { settings: 'Thresholds', start: 'Start from or import', json: 'JSON' };
 
 function crumbs({ section, id, sub }, data) {
   const first = { label: SECTION_NAMES[section] || section, href: `#/${section.endsWith('layouts') ? 'layouts' : section}` };

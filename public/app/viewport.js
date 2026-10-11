@@ -15,7 +15,7 @@
 // page (clients.js) saves it.
 
 import {
-  html, useState, useEffect, useRef, api, Icon, Card, Field, TextInput, Select, Toggle, Button, Badge, useFlash, useApi, moveItem
+  html, useState, useEffect, useRef, api, Icon, Card, Field, TextInput, Select, Toggle, Button, Badge, useFlash, useApi, moveItem, JsonEditor
 } from './lib.js';
 import { EntityPicker, IconPicker, useEntity } from './pickers.js';
 import { ItemList } from './rooms.js';
@@ -1060,9 +1060,16 @@ function ShowWhenEditor({ s, set }) {
 // --- A section, as a collapsible card ---------------------------------------------------------------
 
 // A section's settings, in the drawer beside the screen.
+const MANUAL_REF = 'https://stumarti.github.io/Switchboard/manual/server/viewport-reference.html';
+
+// A section, a screen or a whole layout as the server keeps it (the JSON
+// editors apply through this, so the forms get complete settings).
+const normalizeViewport = (what, v) => api('/api/normalize/viewport', { method: 'POST', body: { [what]: v } }).then((r) => r[what]);
+
 function SectionDrawer({ s, set, onClose, ctx, actions }) {
   const meta = SECTION_META[s.type];
   const Editor = EDITORS[s.type];
+  const [asJson, setAsJson] = useState(false);
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && !e.target.closest('.modal') && onClose();
     window.addEventListener('keydown', onKey);
@@ -1076,11 +1083,18 @@ function SectionDrawer({ s, set, onClose, ctx, actions }) {
       <${Button} kind="ghost" icon="close" title="Close (Esc)" onClick=${onClose} />
     </header>
     <div class="drawer-body">
-      ${WAKE_ONLY[s.type] && !(s.showWhen && s.showWhen.mode !== 'always' && s.showWhen.liveMin) &&
+      <div class="seg drawer-mode">
+        <button type="button" class=${asJson ? '' : 'on'} onClick=${() => setAsJson(false)}><${Icon} name="form-select" size=${15} />Settings</button>
+        <button type="button" class=${asJson ? 'on' : ''} onClick=${() => setAsJson(true)}><${Icon} name="code-json" size=${15} />JSON</button>
+      </div>
+      ${asJson
+        ? html`<${JsonEditor} value=${s} onApply=${async (v) => set({ ...(await normalizeViewport('section', { ...v, id: s.id })), id: s.id })}
+            hint=${html`Every setting of this ${meta.label.toLowerCase()} section. What each one means: <a href=${`${MANUAL_REF}#${s.type.toLowerCase()}`} target="_blank" rel="noopener">the manual</a>.`} />`
+        : html`${WAKE_ONLY[s.type] && !(s.showWhen && s.showWhen.mode !== 'always' && s.showWhen.liveMin) &&
       html`<p class="hint wake-note"><${Icon} name="battery-clock-outline" size=${16} /> ${WAKE_ONLY[s.type]} It updates when the display wakes (every ${ctx.refreshMin} min${s.type === 'transport' ? ', or sooner when a departure turns imminent' : ''}), never in between — battery comes first.</p>`}
       ${s.type !== 'spacer' && html`<${Field} label="Heading (optional)"><${TextInput} value=${s.title} placeholder=${meta.label} onInput=${(v) => set({ ...s, title: v })} /><//>`}
       <${Editor} s=${s} set=${set} ctx=${ctx} presets=${ctx.presets} />
-      <${ShowWhenEditor} s=${s} set=${set} />
+      <${ShowWhenEditor} s=${s} set=${set} />`}
     </div>
   </aside>`;
 }
@@ -1592,6 +1606,12 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
     api('/api/clients/schema').then((s) => setPresets(s.dashboard && s.dashboard.iconPresets)).catch(() => {});
   }, []);
   if (part === 'settings' || part === 'start') return html`<${SettingsParts} layout=${layout} onChange=${onChange} part=${part} />`;
+  if (part === 'json') {
+    return html`<${Card} icon="code-json" title="The whole layout as JSON" subtitle="Every screen, section and setting. Apply puts it in the builder; Save keeps it.">
+      <${JsonEditor} value=${layout} rows=${32} onApply=${async (v) => onChange(await normalizeViewport('layout', v))}
+        hint=${html`What each key means: <a href=${MANUAL_REF} target="_blank" rel="noopener">the viewport layout reference</a>. A section's own JSON is also under its settings (the JSON tab).`} />
+    <//>`;
+  }
   const screen = layout.screens.find((s) => s.id === selected) || layout.screens[0];
   const setScreens = (screens) => onChange({ ...layout, screens });
   const setScreen = (next) => setScreens(layout.screens.map((s) => (s.id === next.id ? next : s)));

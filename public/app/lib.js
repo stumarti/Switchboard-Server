@@ -148,6 +148,64 @@ export function Toggle({ checked, onChange, label, disabled }) {
   </label>`;
 }
 
+// A JSON editor for a piece of config: the text as it is, Apply (through
+// `onApply`, which may throw: its message is shown), Revert, Copy. Tab
+// indents. `value` changing (an apply, or the form) resets the text.
+export function JsonEditor({ value, onApply, hint, rows = 22 }) {
+  const text = JSON.stringify(value, null, 2);
+  const [draft, setDraft] = useState(text);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  useEffect(() => {
+    setDraft(text);
+    setErr('');
+  }, [text]);
+  const apply = async () => {
+    let v;
+    try {
+      v = JSON.parse(draft);
+    } catch (e) {
+      setErr(`Not valid JSON: ${e.message}`);
+      return;
+    }
+    if (!v || typeof v !== 'object' || Array.isArray(v)) {
+      setErr('It must be a JSON object: { … }');
+      return;
+    }
+    setBusy(true);
+    try {
+      await onApply(v);
+      setErr('');
+      setNote('Applied. Unknown keys are dropped and missing ones get their defaults; Save to keep it.');
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const tab = (e) => {
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    const t = e.target;
+    const at = t.selectionStart;
+    t.setRangeText('  ', at, t.selectionEnd, 'end');
+    setDraft(t.value);
+  };
+  const copy = () => navigator.clipboard && navigator.clipboard.writeText(draft).then(() => setNote('Copied.')).catch(() => {});
+  return html`<div class="json-editor">
+    <textarea class="json-text" spellcheck="false" autocapitalize="off" autocomplete="off" rows=${rows} value=${draft} onInput=${(e) => setDraft(e.target.value)} onKeyDown=${tab}></textarea>
+    ${err && html`<p class="hint text-bad">${err}</p>`}
+    ${!err && note && html`<p class="hint">${note}</p>`}
+    ${hint && html`<p class="hint">${hint}</p>`}
+    <div class="json-actions">
+      <${Button} kind="primary" small icon="check" disabled=${draft === text || busy} onClick=${apply}>${busy ? 'Checking…' : 'Apply'}<//>
+      <${Button} small icon="undo" disabled=${draft === text} onClick=${() => { setDraft(text); setErr(''); }}>Revert<//>
+      <${Button} small icon="content-copy" onClick=${copy}>Copy<//>
+    </div>
+  </div>`;
+}
+
 export function Button({ icon, children, onClick, kind = 'secondary', small, disabled, title, type = 'button' }) {
   return html`<button
     type=${type}

@@ -1197,3 +1197,9 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .version-status .badge { margin-right: 6px; }
 .version-status .row-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .text-accent { color: var(--accent); }
+
+/* The JSON editors */
+.json-editor { display: flex; flex-direction: column; gap: 8px; }
+.json-text { width: 100%; font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; white-space: pre; overflow: auto; resize: vertical; min-height: 220px; }
+.json-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.drawer-mode { margin: 0 0 12px; }

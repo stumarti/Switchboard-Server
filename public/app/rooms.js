@@ -9,7 +9,7 @@
 
 import {
   html, useState, useEffect, api, go, Icon, Card, Field, TextInput, SecretInput, Select, Toggle, Button, Badge,
-  Empty, useFlash, setIn, getIn, moveItem, timeAgo
+  Empty, useFlash, setIn, getIn, moveItem, timeAgo, JsonEditor
 } from './lib.js';
 import { EntityPicker, IconPicker, useHaStatus, useEntity } from './pickers.js';
 import { CarouselList, HubBuilder, ClockAlign, DeveloperMenu } from './clients.js';
@@ -472,7 +472,18 @@ function RoomEditor({ slug, part, clients, reloadRooms }) {
   </div>`;
 
   let body;
-  if (part === 'settings') {
+  if (part === 'json') {
+    // The whole remote layout, checked by the server as it would save it.
+    const apply = async (v) => {
+      const r = await api(`/api/normalize/remote/${encodeURIComponent(slug)}`, { method: 'POST', body: v });
+      setRoom(r.profile);
+      setDirty(true);
+    };
+    body = html`<${Card} icon="code-json" title="The whole remote layout as JSON" subtitle="Every page, Quick Access and the remote's settings. Apply puts it in the editor; Save keeps it.">
+      <${JsonEditor} value=${room} rows=${32} onApply=${apply}
+        hint=${html`What each key means: <a href="https://stumarti.github.io/Switchboard/manual/server/profile-format.html" target="_blank" rel="noopener">the remote layout format</a>.`} />
+    <//>`;
+  } else if (part === 'settings') {
     body = pageEditor('room', cardProps, room, set);
   } else if (part === 'quick') {
     body = html`<div class="room-split">
