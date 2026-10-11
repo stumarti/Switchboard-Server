@@ -40,6 +40,7 @@ function fakeImmich() {
     if (u.pathname === '/api/people') return json({ people: [{ id: 'p1', name: 'Sam' }, { id: 'p2', name: '' }] });
     if (u.pathname === '/api/search/metadata') {
       const body = JSON.parse(init.body);
+      if (body.albumIds) return json({ assets: { items: body.albumIds.includes('a1') ? FAVS.slice(0, 2) : [], nextPage: null } });
       return json({ assets: { items: body.personIds ? FAVS.slice(1, 2) : FAVS, nextPage: null } });
     }
     if (u.pathname === '/api/memories') return json([{ type: 'on_this_day', assets: FAVS.slice(0, 1) }]);
@@ -260,4 +261,48 @@ test('a photo the shape of where it goes: portrait for a portrait screen, landsc
   immich._lists.clear();
   const onlyWide = async (url, init) => (new URL(url).pathname === '/api/albums/mixed' ? { ok: true, status: 200, json: async () => ({ assets: [ALBUM[0]] }) } : fetchImpl(url, init));
   assert.equal((await immich.pick({ source: { kind: 'album', album: 'mixed' }, seed: 'x', shape: 'portrait' }, t0, 'UTC', { conn, fetchImpl: onlyWide })).id, ALBUM[0].id);
+});
+
+test('an album’s photos: found by search (Immich 2 and 3), or in the album itself (older)', async () => {
+  immich._lists.clear();
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const u = new URL(url);
+    calls.push(u.pathname);
+    const json = (body) => ({ ok: true, status: 200, json: async () => body });
+    // Current Immich: the album without its photos; search finds them.
+    if (u.pathname === '/api/albums/new') return json({ id: 'new', albumName: 'New', assetCount: 2 });
+    // An older Immich: no album search, the photos in the album.
+    if (u.pathname === '/api/albums/old') return json({ id: 'old', assets: FAVS.slice(1, 3) });
+    if (u.pathname === '/api/search/metadata') {
+      const body = JSON.parse(init.body);
+      if (body.albumIds && body.albumIds[0] === 'new') return json({ assets: { items: FAVS.slice(0, 2), nextPage: null } });
+      if (body.albumIds) return { ok: false, status: 400, json: async () => ({ message: 'property albumIds should not exist' }) };
+    }
+    return json({});
+  };
+  const opts = { conn, fetchImpl };
+  const at = new Date('2026-10-07T10:05:00Z');
+  const ids = async (album) => {
+    const seen = new Set();
+    for (let h = 0; h < 24; h++) seen.add((await immich.pick({ source: { kind: 'album', album }, seed: 'x' }, new Date(at.getTime() + h * 3600000), 'UTC', opts)).id);
+    return [...seen].sort();
+  };
+  assert.deepEqual(await ids('new'), FAVS.slice(0, 2).map((x) => x.id).sort());
+  assert.ok(!calls.includes('/api/albums/new'), 'found by search, the album never asked');
+  assert.deepEqual(await ids('old'), FAVS.slice(1, 3).map((x) => x.id).sort());
+});
+
+test('photos in the Locked Folder, hidden or archived are never picked', async () => {
+  immich._lists.clear();
+  const fetchImpl = async (url, init) => {
+    if (new URL(url).pathname === '/api/search/metadata')
+      return { ok: true, status: 200, json: async () => ({ assets: { items: [
+        { ...FAVS[0], visibility: 'locked' }, { ...FAVS[1], visibility: 'hidden' }, { ...FAVS[2], visibility: 'archive' },
+        { ...asset('dddddddd-0000-4000-8000-000000000001', '2020-01-01T00:00:00.000Z', 'Cork'), visibility: 'timeline' }
+      ], nextPage: null } }) };
+    return fakeImmich().fetchImpl(url, init);
+  };
+  const list = await immich.list({ kind: 'favorites', album: '', person: '' }, new Date(), { conn, fetchImpl });
+  assert.deepEqual(list.map((x) => x.id), ['dddddddd-0000-4000-8000-000000000001']);
 });
