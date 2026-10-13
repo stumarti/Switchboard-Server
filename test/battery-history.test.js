@@ -83,3 +83,38 @@ test('battery: note() keeps readings per device and forget() drops them', () => 
   bh.forget(mac);
   assert.equal(bh.estimate(mac), null);
 });
+
+// A wall panel working its level out from the battery's voltage: readings a
+// few percent either side of the real level (a fixed pseudo-random sequence).
+function noisyDrain(entry, fromPct, perDay, days, noise, start = T0) {
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648) * 2 - 1;
+  for (let t = 0; t <= days * DAY; t += HOUR / 2) bh.addSample(entry, Math.round(fromPct - (perDay * t) / DAY + rnd() * noise), start + t);
+  return start + days * DAY;
+}
+
+test('battery: noisy readings are neither charges nor a wild estimate', () => {
+  for (const days of [1, 3, 7, 14]) {
+    const e = { samples: [] };
+    const end = noisyDrain(e, 92, 1, days, 4); // really 1% a day, read ±4
+    assert.equal(e.discharges || 0, 0, `${days} days: no charge learned from noise`);
+    const est = bh.estimateFor(e, end);
+    const truth = 92 - days - bh.EMPTY_PCT; // days left at 1%/day
+    if (est.daysLeft != null) assert.ok(est.daysLeft < truth * 1.6 && est.daysLeft > truth / 1.6, `${days} days: ${est.daysLeft} vs ${truth}`);
+  }
+  // Two weeks is plenty to tell 1% a day from the noise.
+  const e = { samples: [] };
+  assert.equal(bh.estimateFor(e, noisyDrain(e, 92, 1, 14, 4)).basis, 'measured');
+});
+
+test('battery: one high reading is not a charge; a big rise is one at once', () => {
+  const e = { samples: [] };
+  let t = drain(e, 80, 2, 4); // 80 -> 72
+  bh.addSample(e, 77, (t += HOUR / 2)); // +5, then back down: noise
+  bh.addSample(e, 72, (t += HOUR / 2));
+  assert.equal(bh.estimateFor(e, t).basis, 'measured');
+  assert.ok(Math.abs(bh.estimateFor(e, t).ratePerDay - 2) < 0.3);
+  bh.addSample(e, 100, (t += HOUR / 2)); // plugged in and charged
+  assert.equal(e.discharges, 1);
+  assert.equal(bh.estimateFor(e, t).basis, 'learned');
+});

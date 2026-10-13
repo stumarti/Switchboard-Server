@@ -700,7 +700,9 @@ app.get('/api/art', auth.requireAdminOrDevice, async (req, res) => {
       format: String(req.query.fmt || 'mask1'),
       fit: req.query.fit === 'contain' ? 'contain' : 'cover',
       // A photo is cropped around what matters in it, not its middle.
-      position: src.startsWith('immich:') ? 'attention' : 'centre'
+      position: src.startsWith('immich:') ? 'attention' : 'centre',
+      // How strong a photo's colours come out (its section's choice).
+      strength: immich.strengthOf(src)
     }, store.getGlobals(), (s, side) => immich.resolveSrc(s, undefined, side) || enigma2.resolvePiconSrc(s, store.getProfile));
     const etag = `"${img.key.slice(0, 20)}"`;
     res.set('ETag', etag);
