@@ -54,10 +54,15 @@ test('spectra: the picture is fitted into the panel\'s measured range', () => {
   const fit = art.fitToPanel(Buffer.from([255, 255, 255, 0, 0, 0]));
   assert.deepEqual([...fit.slice(0, 3)], art.SPECTRA[0]); // white -> the white ink, no error
   assert.deepEqual([...fit.slice(3, 6)], art.SPECTRA[1]); // black -> the black ink
-  // A mid grey dithers to a mix of white and black ink, nothing coloured.
+  // A mid grey dithers to a mix of white and black ink, all but nothing
+  // coloured (a stray dot in a few hundred).
   const grey = Buffer.alloc(16 * 16 * 3, 128);
   const idx = art.toSpectraIndices(grey, 16, 16);
-  assert.ok([...idx].every((v) => v === 0 || v === 1));
+  assert.ok([...idx].filter((v) => v > 1).length <= 2, 'a grey stays grey');
+  for (const g of [40, 90, 180, 230]) {
+    const flat = art.toSpectraIndices(Buffer.alloc(64 * 64 * 3, g), 64, 64);
+    assert.ok([...flat].filter((v) => v > 1).length / flat.length < 0.01, `grey ${g} stays grey`);
+  }
   const whites = [...idx].filter((v) => v === 0).length;
   assert.ok(whites > 96 && whites < 160, `about half white, got ${whites}/256`);
   // Realistic greens (foliage, sleeve art) find the green ink.
@@ -83,6 +88,18 @@ test('spectra: a deep blue sky doesn\'t turn what\'s under it blue', () => {
   assert.ok(share(165, 200, 5) < 0.1, `the red band is barely blue, got ${share(165, 200, 5)}`);
   assert.ok(share(165, 200, 2) > 0.5, `the red band is mostly red ink, got ${share(165, 200, 2)}`);
   assert.ok(share(205, 240, 4) + share(205, 240, 5) < 0.1, 'the grey stays grey');
+});
+
+test('spectra: colours keep their strength; white and black land on their inks', () => {
+  // The brightness goes onto the panel's range, not each channel on its own,
+  // so a colour isn't washed out with it.
+  const fit = art.fitToPanel(Buffer.from([255, 255, 255, 0, 0, 0, 200, 60, 40]));
+  for (let k = 0; k < 3; k++) {
+    assert.ok(Math.abs(fit[k] - art.SPECTRA[0][k]) < 0.5, 'white on the white ink');
+    assert.ok(Math.abs(fit[3 + k] - art.SPECTRA[1][k]) < 0.5, 'black on the black ink');
+  }
+  const [r, g, b] = [fit[6], fit[7], fit[8]];
+  assert.ok(r - Math.max(g, b) > 120, `a red stays strongly red, got ${[r, g, b].map(Math.round)}`);
 });
 
 test('entity_picture drops the rotating HA access token', () => {
