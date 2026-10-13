@@ -66,6 +66,25 @@ test('spectra: the picture is fitted into the panel\'s measured range', () => {
   assert.ok(greens > 200, `mostly green ink, got ${greens}/256`);
 });
 
+test('spectra: a deep blue sky doesn\'t turn what\'s under it blue', () => {
+  // A photo's clear sky (bluer than the blue ink, darker than white) over
+  // the Golden Gate's red, then grey concrete: the sky's error mustn't pile
+  // up and spill into them.
+  const W = 120;
+  const H = 240;
+  const px = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) px.push(...(y < 160 ? [41, 126, 209] : y < 200 ? [191, 90, 82] : [128, 128, 126]));
+  const idx = art.toSpectraIndices(Buffer.from(px), W, H);
+  const share = (y0, y1, ink) => {
+    let n = 0;
+    for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) n += idx[y * W + x] === ink ? 1 : 0;
+    return n / ((y1 - y0) * W);
+  };
+  assert.ok(share(165, 200, 5) < 0.1, `the red band is barely blue, got ${share(165, 200, 5)}`);
+  assert.ok(share(165, 200, 2) > 0.5, `the red band is mostly red ink, got ${share(165, 200, 2)}`);
+  assert.ok(share(205, 240, 4) + share(205, 240, 5) < 0.1, 'the grey stays grey');
+});
+
 test('entity_picture drops the rotating HA access token', () => {
   const { stablePicture } = require('../lib/ha-state');
   assert.equal(
