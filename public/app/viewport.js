@@ -877,6 +877,13 @@ const PHOTO_ORDER = [
   { value: 'random', label: 'Random' },
   { value: 'sequential', label: 'In order, oldest first' }
 ];
+// lib/art.js STRENGTHS.
+const PHOTO_STRENGTHS = [
+  { value: 'natural', label: 'Natural' },
+  { value: 'standard', label: 'Standard' },
+  { value: 'vivid', label: 'Vivid' },
+  { value: 'extra', label: 'Extra vivid' }
+];
 const PHOTO_CAPTIONS = [
   { value: 'none', label: 'No caption' },
   { value: 'date', label: 'When it was taken' },
@@ -911,6 +918,9 @@ function PhotoFields({ p, set }) {
       <${Field} label="Change" hint="The display shows the new photo at its next refresh."><${Select} value=${String(p.every)} onChange=${(v) => set({ ...p, every: Number(v) })} options=${PHOTO_EVERY} /><//>
       ${src.kind !== 'random' && html`<${Field} label="Order"><${Select} value=${p.order || 'random'} onChange=${(v) => set({ ...p, order: v })} options=${PHOTO_ORDER} /><//>`}
       <${Field} label="Caption"><${Select} value=${p.caption} onChange=${(v) => set({ ...p, caption: v })} options=${PHOTO_CAPTIONS} /><//>
+      <${Field} label="Colour" hint="How strong the colours come out on the panel. The six inks lose some; Standard makes up for it, Vivid and Extra vivid go further.">
+        <${Select} value=${p.strength || 'standard'} onChange=${(v) => set({ ...p, strength: v })} options=${PHOTO_STRENGTHS} />
+      <//>
     </div>`;
 }
 

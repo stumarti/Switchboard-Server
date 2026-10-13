@@ -306,3 +306,46 @@ test('photos in the Locked Folder, hidden or archived are never picked', async (
   const list = await immich.list({ kind: 'favorites', album: '', person: '' }, new Date(), { conn, fetchImpl });
   assert.deepEqual(list.map((x) => x.id), ['dddddddd-0000-4000-8000-000000000001']);
 });
+
+test('colour strength: chosen per photo, carried in its src, used by /api/art', async () => {
+  const id = '11111111-1111-1111-1111-111111111111';
+  // The layout keeps a known strength, and makes anything else standard.
+  const layout = dashboard.normalizeLayout({
+    screens: [{
+      id: 'pics', kind: 'sections', template: 'single',
+      background: { enabled: true, source: { kind: 'favorites' }, strength: 'vivid' },
+      columns: [[{ id: 'p', type: 'photo', source: { kind: 'favorites' }, strength: 'loud' }]]
+    }]
+  });
+  assert.equal(layout.screens[0].background.strength, 'vivid');
+  assert.equal(layout.screens[0].columns[0][0].strength, 'standard');
+  // Standard leaves the src as it was (and so the display's cached picture).
+  assert.equal(immich.srcFor(id), `immich:${id}`);
+  assert.equal(immich.srcFor(id, 'extra'), `immich:${id}?strength=extra`);
+  assert.equal(immich.strengthOf(`immich:${id}?strength=natural`), 'natural');
+  assert.equal(immich.strengthOf(`immich:${id}`), 'standard');
+  assert.equal(immich.strengthOf('/api/media_player_proxy/x?strength=vivid'), 'standard');
+  // The asset is fetched the same whatever the strength.
+  assert.deepEqual(immich.resolveSrc(`immich:${id}?strength=vivid`, conn), immich.resolveSrc(`immich:${id}`, conn));
+  // The background's photo comes with its strength.
+  immich._lists.clear();
+  const f = fakeImmich();
+  const inputs = await fetchInputs(layout, {}, new Date('2026-10-07T10:00:00Z'), { immichOpts: f.opts });
+  assert.match(buildScreens(layout, inputs).pics.background.src, /\?strength=vivid$/);
+  // Stronger means more colour ink in the same muted photo.
+  const muted = await sharp({ create: { width: 64, height: 64, channels: 3, background: { r: 150, g: 110, b: 100 } } }).jpeg().toBuffer();
+  const realFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, status: 200, headers: new Map(), arrayBuffer: async () => muted });
+  try {
+    const coloured = async (strength) => {
+      const img = await art.prepare(`immich:${id}?strength=${strength}`, { width: 64, height: 64, format: 'spectra', strength }, {}, (s) => immich.resolveSrc(s, conn));
+      let n = 0;
+      for (const b of img.body) n += ((b >> 4) > 1 ? 1 : 0) + ((b & 15) > 1 ? 1 : 0);
+      return n;
+    };
+    const [natural, standard, extra] = [await coloured('natural'), await coloured('standard'), await coloured('extra')];
+    assert.ok(natural < standard && standard < extra, `${natural} < ${standard} < ${extra}`);
+  } finally {
+    global.fetch = realFetch;
+  }
+});
