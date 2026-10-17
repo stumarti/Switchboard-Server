@@ -97,3 +97,21 @@ test('how light a photo is in the corner a frame writes in', async () => {
     global.fetch = realFetch;
   }
 });
+
+test('a photo frame corner note: an icon and a line in a corner of its own', () => {
+  const layout = (f) => dashboard.normalizeLayout({ screens: [{ kind: 'photoFrame', frame: f }] }).screens[0].frame;
+  assert.deepEqual(layout({}).note, { text: '', icon: '', corner: 'topRight' });
+  assert.equal(layout({ note: { corner: 'middle' } }).note.corner, 'topRight');
+  // Nothing set: no note.
+  assert.equal(frame({}).data.note, null);
+  // Its own corner, its text's live values filled in (first line only).
+  const states = { 'sensor.porch': st('12', { unit_of_measurement: '°C' }) };
+  const d = frame({ note: { text: 'Porch {sensor.porch}\nsecond line', icon: 'home-heart', corner: 'topLeft' } }, { states }).data;
+  assert.deepEqual(d.note, { icon: 'home-heart', text: 'Porch 12°C', corner: 'topLeft' });
+  // An icon alone is a note too.
+  assert.deepEqual(frame({ note: { icon: 'heart' } }).data.note, { icon: 'heart', text: '', corner: 'topRight' });
+  // In the lines' own corner: their last line, no separate note.
+  const same = frame({ corner: 'bottomLeft', date: false, note: { text: 'Welcome', icon: 'hand-wave', corner: 'bottomLeft' } }).data;
+  assert.equal(same.note, null);
+  assert.deepEqual(same.lines.at(-1), { icon: 'hand-wave', text: 'Welcome', big: false });
+});

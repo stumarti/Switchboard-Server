@@ -130,3 +130,19 @@ test('art: the remote’s 1-bit picture as a black-and-white PNG, for the screen
   assert.equal(info.width, 10);
   assert.deepEqual([...data], [0, 255, 0, 255, 0, 255, 0, 255, 0, 255]); // 0 = ink (black), 1 = paper
 });
+
+test('spectra: no white dots in the dark, no black ones in the light; greys keep their mix', () => {
+  const flat = (c, n = 64) => art.toSpectraIndices(Buffer.from(Array(n * n).fill(c).flat()), n, n);
+  const count = (idx, ink) => [...idx].filter((v) => v === ink).length;
+  // A coloured dark (a navy coat, a deep red): no white, its own inks.
+  for (const c of [[30, 32, 70], [45, 50, 95], [120, 20, 25], [60, 20, 30]]) assert.equal(count(flat(c), 0), 0, `${c}: no white`);
+  // A neutral near-black: black.
+  assert.equal(count(flat([18, 18, 18]), 1), 64 * 64);
+  // Near white: white.
+  assert.equal(count(flat([245, 245, 245]), 0), 64 * 64);
+  // A dark grey and a mid grey: still white and black only.
+  for (const g of [40, 128]) assert.ok([...flat([g, g, g])].filter((v) => v > 1).length / (64 * 64) < 0.01, `grey ${g}`);
+  // Pure yellow (lighter than the white point) is still yellow.
+  assert.equal(count(flat([255, 255, 0]), 0), 0);
+  assert.ok(count(flat([255, 255, 0]), 3) > 64 * 64 * 0.9);
+});
