@@ -218,7 +218,7 @@ function newScreen(kind) {
   if (kind === 'photoFrame') {
     return {
       id: newId(), title: 'Photo frame', enabled: true, kind,
-      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', ink: 'white', outline: true, note: { text: '', icon: '', corner: 'topRight' }, date: true, weather: '', calendars: [], message: '' }
+      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', ink: 'white', outline: true, footer: false, note: { text: '', icon: '', corner: 'topRight' }, date: true, weather: '', calendars: [], message: '' }
     };
   }
   return { id: newId(), title: 'New screen', enabled: true, kind: 'sections', template: 'sidebar', columns: [[], []] };
@@ -987,8 +987,12 @@ function FrameEditor({ screen, setScreen }) {
       ${(f.ink || 'white') === 'auto'
         ? html`<p class="hint">Black where the photo is light under the text, white where it's dark, with no edge: worked out for each photo as it comes up.</p>`
         : html`<${Toggle} checked=${f.outline !== false} onChange=${(v) => set({ ...f, outline: v })} label="Outline" />
-          <p class="hint">A thin edge round the text and icons in the other colour (black round white, white round black), so they read on any photo. Off: plain, cleaner where the photo suits it.</p>`}
-      <p class="hint">The caption (where and when the photo was taken) goes last, small. The footer is left off, so nothing else covers the photo; the battery shows only when it's low.</p>
+          <p class="hint">A thin edge round the text and icons in the other colour (black round white, white round black), so they read on any photo: the lines, the corner note and the footer. Off: plain, cleaner where the photo suits it.</p>`}
+      <p class="hint">The caption (where and when the photo was taken) goes last, small.</p>
+      <${Toggle} checked=${!!f.footer} onChange=${(v) => set({ ...f, footer: v })} label="Show the battery, time and screen icons" />
+      <p class="hint">${f.footer
+        ? 'The footer in the bottom right, in the text colour, with the outline when it’s on (contrasting: whichever suits the photo there).'
+        : 'Off, nothing else covers the photo, and the battery shows only when it’s low.'}</p>
     <//>
   </div>`;
 }

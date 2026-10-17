@@ -564,25 +564,29 @@ function RoomFinder({ d, title }) {
 // Scales the 800×480 panel to the width available.
 // A photo frame: the photo filling the screen, a few lines over it in white
 // or black (with an edge in the other colour unless it's off, as the panel
-// draws them), in one corner; the caption last, small.
+// draws them), in one corner; the caption last, small. Its footer, when it
+// has one, the same way (ViewportPreview draws it).
 // Where the corner note goes: a corner of its own.
-function noteStyle(corner) {
+// (In the bottom right, above the footer when it shows.)
+const frameEdge = (corner, footer) => (corner === 'bottomRight' && footer ? '44px' : '14px');
+function noteStyle(corner, footer) {
   const top = corner === 'topLeft' || corner === 'topRight';
   const right = corner === 'bottomRight' || corner === 'topRight';
-  return { [top ? 'top' : 'bottom']: '14px', [right ? 'right' : 'left']: '16px', alignItems: right ? 'flex-end' : 'flex-start' };
+  return { [top ? 'top' : 'bottom']: frameEdge(corner, footer), [right ? 'right' : 'left']: '16px', alignItems: right ? 'flex-end' : 'flex-start' };
 }
 function PhotoFrame({ d, W, H }) {
   const big = d.size === 'large';
   const top = d.corner === 'topLeft' || d.corner === 'topRight';
   const right = d.corner === 'bottomRight' || d.corner === 'topRight';
+  const edge = frameEdge(d.corner, d.footer);
   return html`<div class="vp-frame" style=${{ width: `${W}px`, height: `${H}px` }}>
     ${d.src && html`<${ArtImg} cls="vp-bg-img" src=${d.src} w=${W} h=${H} />`}
     ${!d.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${d.empty}</span></div>`}
-    <div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''} ${d.ink === 'black' ? 'ink-black' : ''}`} style=${{ [top ? 'top' : 'bottom']: '14px', [right ? 'right' : 'left']: '16px', textAlign: right ? 'right' : 'left', alignItems: right ? 'flex-end' : 'flex-start' }}>
+    <div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''} ${d.ink === 'black' ? 'ink-black' : ''}`} style=${{ [top ? 'top' : 'bottom']: edge, [right ? 'right' : 'left']: '16px', textAlign: right ? 'right' : 'left', alignItems: right ? 'flex-end' : 'flex-start' }}>
       ${d.lines.map((l) => html`<div class=${l.big ? 'vp-frame-big' : 'vp-frame-line'}>${l.icon && html`<${Icon} name=${l.icon} size=${big ? 32 : 24} />`}<span>${l.text}</span></div>`)}
       ${d.caption && html`<div class="vp-frame-cap">${d.caption}</div>`}
     </div>
-    ${d.note && html`<div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''} ${d.ink === 'black' ? 'ink-black' : ''}`} style=${noteStyle(d.note.corner)}>
+    ${d.note && html`<div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''} ${d.ink === 'black' ? 'ink-black' : ''}`} style=${noteStyle(d.note.corner, d.footer)}>
       <div class="vp-frame-line">${d.note.icon && html`<${Icon} name=${d.note.icon} size=${big ? 32 : 24} />`}${d.note.text && html`<span>${d.note.text}</span>`}</div>
     </div>`}
   </div>`;
@@ -619,6 +623,8 @@ export function ViewportPreview({ screen, state, error, loading, highlight, caro
           : html`<${SectionsScreen} key=${screen} d=${d} highlight=${highlight} portrait=${portrait} W=${W} H=${H} />`
         : html`<div class="vp-empty">${error ? error : loading ? 'Loading…' : 'No preview'}</div>`}
       ${d && d.kind === 'sections' && html`<${DashFooter} generatedAt=${state.generatedAt} quiet=${state.quiet} carousel=${carousel} current=${screen} />`}
+      ${d && d.kind === 'photoFrame' && d.data.footer && html`<${DashFooter} generatedAt=${state.generatedAt} quiet=${state.quiet} carousel=${carousel} current=${screen}
+        cls=${`vp-frame-text vp-frame-foot ${d.data.footer.outline === false ? 'plain' : ''} ${d.data.footer.ink === 'black' ? 'ink-black' : ''}`} />`}
       ${loading && d && html`<div class="vp-loading"><${Icon} name="refresh" size=${16} /></div>`}
     </div>
   </div>`;

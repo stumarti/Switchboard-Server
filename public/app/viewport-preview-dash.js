@@ -283,10 +283,10 @@ export const DASH_SECTIONS = {
 // The footer, as the panel draws it: the carousel's screens (the one
 // showing underlined), the refresh icon and time, the device's battery; the
 // bed-and-clock while quiet hours are on.
-export function DashFooter({ generatedAt, quiet, carousel, current }) {
+export function DashFooter({ generatedAt, quiet, carousel, current, cls = '' }) {
   const t = generatedAt ? new Date(generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--';
   const marks = carousel && carousel.length > 1 ? carousel : [];
-  return html`<div class="kd-footer">
+  return html`<div class=${`kd-footer ${cls}`}>
     ${marks.map((m) => html`<span class=${`kd-mark ${m.id === current ? 'on' : ''}`}><${Icon} name=${m.icon || 'view-dashboard-outline'} size=${16} /></span>`)}
     ${marks.length > 0 && html`<span class="kd-bar"></span>`}
     ${quiet && html`<span style=${{ color: k(5) }}><${Icon} name="bed-clock" size=${16} /></span>`}

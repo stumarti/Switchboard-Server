@@ -1189,6 +1189,11 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .vp-frame-text.ink-black .icon { filter: drop-shadow(1px 1px 0 #fff) drop-shadow(-1px -1px 0 #fff) drop-shadow(1px -1px 0 #fff) drop-shadow(-1px 1px 0 #fff); }
 .vp-frame-text.plain { text-shadow: none; }
 .vp-frame-text.plain .icon { filter: none; }
+/* Its footer, in the lines' colour and edge. */
+.kd-footer.vp-frame-foot { flex-direction: row; gap: 4px; font-weight: 400; line-height: 1; z-index: 1; }
+.kd-footer.vp-frame-foot .kd-bar { border-left-color: currentColor; }
+.kd-footer.vp-frame-foot .kd-mark.on { border-bottom-color: currentColor; }
+.kd-footer.vp-frame-foot > span { color: inherit !important; } /* the battery too: red only when low */
 .vp-frame-line, .vp-frame-big { display: flex; align-items: center; gap: 8px; }
 .vp-frame-big { font-size: 32px; }
 .vp-frame-text.big { font-size: 24px; }
