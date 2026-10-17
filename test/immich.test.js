@@ -361,9 +361,10 @@ test('a frame whose lines contrast with the photo: its tone found from Immich, w
     return { ok: true, status: 200, headers: new Map(), arrayBuffer: async () => white };
   };
   try {
-    const layout = dashboard.normalizeLayout({ screens: [{ id: 'pf', kind: 'photoFrame', frame: { source: { kind: 'favorites' }, ink: 'auto', corner: 'topRight' } }] });
+    const layout = dashboard.normalizeLayout({ screens: [{ id: 'pf', kind: 'photoFrame', frame: { source: { kind: 'favorites' }, ink: 'auto', corner: 'topRight', footer: true } }] });
     const inputs = await fetchInputs(layout, {}, new Date('2026-10-07T10:00:00Z'), { immichOpts: f.opts });
     assert.equal(inputs.photos['frame:pf'].tone, 'light');
+    assert.equal(inputs.photos['frame:pf'].footerTone, 'light');
     assert.match(asked.url, /^http:\/\/photos\.lan:2283\/api\/assets\/.+\/thumbnail\?size=preview$/);
     assert.equal(asked.headers['x-api-key'], 'k-secret');
     const d = buildScreens(layout, inputs).pf.data;

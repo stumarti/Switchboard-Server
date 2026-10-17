@@ -115,3 +115,20 @@ test('a photo frame corner note: an icon and a line in a corner of its own', () 
   assert.equal(same.note, null);
   assert.deepEqual(same.lines.at(-1), { icon: 'hand-wave', text: 'Welcome', big: false });
 });
+
+test('a photo frame with the footer: in the lines\' colour and edge, or contrasting with the photo under it', () => {
+  const layout = (f) => dashboard.normalizeLayout({ screens: [{ kind: 'photoFrame', frame: f }] }).screens[0].frame;
+  assert.equal(layout({}).footer, false);
+  assert.equal(layout({ footer: true }).footer, true);
+  // Off: none.
+  assert.equal(frame({}).data.footer, null);
+  // On: the lines' own colour and edge.
+  assert.deepEqual(frame({ footer: true }).data.footer, { ink: 'white', outline: true });
+  assert.deepEqual(frame({ footer: true, ink: 'black', outline: false }).data.footer, { ink: 'black', outline: false });
+  // Contrasting: with the photo in the bottom right, whatever is under the lines.
+  const auto = (tone, footerTone) => frame({ ink: 'auto', footer: true }, { photos: { 'frame:pf': { src: 'immich:abc', tone, footerTone } } }).data;
+  assert.deepEqual(auto('light', 'dark').footer, { ink: 'white', outline: false });
+  assert.equal(auto('light', 'dark').ink, 'black');
+  assert.deepEqual(auto('dark', 'light').footer, { ink: 'black', outline: false });
+  assert.deepEqual(auto('dark', undefined).footer, { ink: 'white', outline: true });
+});
