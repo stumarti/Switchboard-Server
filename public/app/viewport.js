@@ -218,7 +218,7 @@ function newScreen(kind) {
   if (kind === 'photoFrame') {
     return {
       id: newId(), title: 'Photo frame', enabled: true, kind,
-      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', ink: 'white', outline: true, date: true, weather: '', calendars: [], message: '' }
+      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', ink: 'white', outline: true, note: { text: '', icon: '', corner: 'topRight' }, date: true, weather: '', calendars: [], message: '' }
     };
   }
   return { id: newId(), title: 'New screen', enabled: true, kind: 'sections', template: 'sidebar', columns: [[], []] };
@@ -974,6 +974,13 @@ function FrameEditor({ screen, setScreen }) {
         <${Field} label="Corner"><${Select} value=${f.corner} onChange=${(v) => set({ ...f, corner: v })} options=${FRAME_CORNERS} /><//>
         <${Field} label="Text size"><${Select} value=${f.size} onChange=${(v) => set({ ...f, size: v })} options=${[{ value: 'normal', label: 'Normal' }, { value: 'large', label: 'Large' }]} /><//>
       </div>
+      <${Field} label="Corner note" hint="An icon and a line of your own, in a corner of its own: a name, a welcome, a reminder. {entity_id} shows its state. Blank: none.">
+        <div class="row" style="align-items:center">
+          <${IconPicker} value=${(f.note || {}).icon} title="The note's icon (optional)" onChange=${(icon) => set({ ...f, note: { ...(f.note || {}), icon } })} />
+          <input type="text" value=${(f.note || {}).text || ''} placeholder="The Murphys" onInput=${(e) => set({ ...f, note: { ...(f.note || {}), text: e.target.value } })} style="flex:1" />
+          <${Select} value=${(f.note || {}).corner || 'topRight'} onChange=${(v) => set({ ...f, note: { ...(f.note || {}), corner: v } })} options=${FRAME_CORNERS} />
+        </div>
+      <//>
       <div class="row">
         <${Field} label="Text colour"><${Select} value=${f.ink || 'white'} onChange=${(v) => set({ ...f, ink: v })} options=${FRAME_INKS} /><//>
       </div>

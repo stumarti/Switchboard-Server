@@ -565,6 +565,12 @@ function RoomFinder({ d, title }) {
 // A photo frame: the photo filling the screen, a few lines over it in white
 // or black (with an edge in the other colour unless it's off, as the panel
 // draws them), in one corner; the caption last, small.
+// Where the corner note goes: a corner of its own.
+function noteStyle(corner) {
+  const top = corner === 'topLeft' || corner === 'topRight';
+  const right = corner === 'bottomRight' || corner === 'topRight';
+  return { [top ? 'top' : 'bottom']: '14px', [right ? 'right' : 'left']: '16px', alignItems: right ? 'flex-end' : 'flex-start' };
+}
 function PhotoFrame({ d, W, H }) {
   const big = d.size === 'large';
   const top = d.corner === 'topLeft' || d.corner === 'topRight';
@@ -576,6 +582,9 @@ function PhotoFrame({ d, W, H }) {
       ${d.lines.map((l) => html`<div class=${l.big ? 'vp-frame-big' : 'vp-frame-line'}>${l.icon && html`<${Icon} name=${l.icon} size=${big ? 32 : 24} />`}<span>${l.text}</span></div>`)}
       ${d.caption && html`<div class="vp-frame-cap">${d.caption}</div>`}
     </div>
+    ${d.note && html`<div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''} ${d.ink === 'black' ? 'ink-black' : ''}`} style=${noteStyle(d.note.corner)}>
+      <div class="vp-frame-line">${d.note.icon && html`<${Icon} name=${d.note.icon} size=${big ? 32 : 24} />`}${d.note.text && html`<span>${d.note.text}</span>`}</div>
+    </div>`}
   </div>`;
 }
 
