@@ -563,7 +563,8 @@ function RoomFinder({ d, title }) {
 
 // Scales the 800×480 panel to the width available.
 // A photo frame: the photo filling the screen, a few lines over it in white
-// (outlined, as the panel draws them), in one corner; the caption last, small.
+// or black (with an edge in the other colour unless it's off, as the panel
+// draws them), in one corner; the caption last, small.
 function PhotoFrame({ d, W, H }) {
   const big = d.size === 'large';
   const top = d.corner === 'topLeft' || d.corner === 'topRight';
@@ -571,7 +572,7 @@ function PhotoFrame({ d, W, H }) {
   return html`<div class="vp-frame" style=${{ width: `${W}px`, height: `${H}px` }}>
     ${d.src && html`<${ArtImg} cls="vp-bg-img" src=${d.src} w=${W} h=${H} />`}
     ${!d.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${d.empty}</span></div>`}
-    <div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''}`} style=${{ [top ? 'top' : 'bottom']: '14px', [right ? 'right' : 'left']: '16px', textAlign: right ? 'right' : 'left', alignItems: right ? 'flex-end' : 'flex-start' }}>
+    <div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''} ${d.ink === 'black' ? 'ink-black' : ''}`} style=${{ [top ? 'top' : 'bottom']: '14px', [right ? 'right' : 'left']: '16px', textAlign: right ? 'right' : 'left', alignItems: right ? 'flex-end' : 'flex-start' }}>
       ${d.lines.map((l) => html`<div class=${l.big ? 'vp-frame-big' : 'vp-frame-line'}>${l.icon && html`<${Icon} name=${l.icon} size=${big ? 32 : 24} />`}<span>${l.text}</span></div>`)}
       ${d.caption && html`<div class="vp-frame-cap">${d.caption}</div>`}
     </div>

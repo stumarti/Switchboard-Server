@@ -349,3 +349,26 @@ test('colour strength: chosen per photo, carried in its src, used by /api/art', 
     global.fetch = realFetch;
   }
 });
+
+test('a frame whose lines contrast with the photo: its tone found from Immich, with the key', async () => {
+  immich._lists.clear();
+  const f = fakeImmich();
+  const white = await sharp({ create: { width: 320, height: 240, channels: 3, background: { r: 250, g: 250, b: 245 } } }).jpeg().toBuffer();
+  const realFetch = global.fetch;
+  let asked;
+  global.fetch = async (url, init) => {
+    asked = { url, headers: init.headers };
+    return { ok: true, status: 200, headers: new Map(), arrayBuffer: async () => white };
+  };
+  try {
+    const layout = dashboard.normalizeLayout({ screens: [{ id: 'pf', kind: 'photoFrame', frame: { source: { kind: 'favorites' }, ink: 'auto', corner: 'topRight' } }] });
+    const inputs = await fetchInputs(layout, {}, new Date('2026-10-07T10:00:00Z'), { immichOpts: f.opts });
+    assert.equal(inputs.photos['frame:pf'].tone, 'light');
+    assert.match(asked.url, /^http:\/\/photos\.lan:2283\/api\/assets\/.+\/thumbnail\?size=preview$/);
+    assert.equal(asked.headers['x-api-key'], 'k-secret');
+    const d = buildScreens(layout, inputs).pf.data;
+    assert.deepEqual([d.ink, d.outline], ['black', false]);
+  } finally {
+    global.fetch = realFetch;
+  }
+});

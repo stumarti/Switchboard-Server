@@ -60,3 +60,40 @@ test('a photo frame is outlined in black unless that is turned off', () => {
   assert.equal(frame({ source: { kind: 'favorites' } }).data.outline, true);
   assert.equal(frame({ source: { kind: 'favorites' }, outline: false }).data.outline, false);
 });
+
+test('a photo frame in black, or contrasting with the photo under its lines', () => {
+  const layout = (f) => dashboard.normalizeLayout({ screens: [{ kind: 'photoFrame', frame: f }] }).screens[0].frame;
+  assert.equal(layout({}).ink, 'white');
+  assert.equal(layout({ ink: 'auto' }).ink, 'auto');
+  assert.equal(layout({ ink: 'pink' }).ink, 'white');
+  // Black, with its (white) edge unless that's off.
+  assert.deepEqual([frame({ ink: 'black' }).data.ink, frame({ ink: 'black' }).data.outline], ['black', true]);
+  assert.equal(frame({ ink: 'black', outline: false }).data.outline, false);
+  // Contrasting: black on a light photo, white on a dark one, no edge either way.
+  const auto = (tone) => frame({ ink: 'auto', outline: true }, { photos: { 'frame:pf': { src: 'immich:abc', tone } } }).data;
+  assert.deepEqual([auto('light').ink, auto('light').outline], ['black', false]);
+  assert.deepEqual([auto('dark').ink, auto('dark').outline], ['white', false]);
+  // Not known (Immich didn't answer in time): white with an edge, readable anywhere.
+  assert.deepEqual([auto(undefined).ink, auto(undefined).outline], ['white', true]);
+});
+
+test('how light a photo is in the corner a frame writes in', async () => {
+  const sharp = require('sharp');
+  const art = require('../lib/art');
+  // Top half white, bottom half black: light at the top, dark at the bottom.
+  const W = 400, H = 240;
+  const raw = Buffer.alloc(W * H * 3);
+  for (let y = 0; y < H; y++) raw.fill(y < H / 2 ? 255 : 0, y * W * 3, (y + 1) * W * 3);
+  const jpeg = await sharp(raw, { raw: { width: W, height: H, channels: 3 } }).jpeg().toBuffer();
+  const realFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, status: 200, headers: new Map(), arrayBuffer: async () => jpeg });
+  try {
+    const tone = (corner) => art.toneUnder(`http://photos.lan/half-${corner}.jpg`, { width: 800, height: 480, corner }, {});
+    assert.equal(await tone('topLeft'), 'light');
+    assert.equal(await tone('topRight'), 'light');
+    assert.equal(await tone('bottomLeft'), 'dark');
+    assert.equal(await tone('bottomRight'), 'dark');
+  } finally {
+    global.fetch = realFetch;
+  }
+});

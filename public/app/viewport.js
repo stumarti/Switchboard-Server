@@ -218,7 +218,7 @@ function newScreen(kind) {
   if (kind === 'photoFrame') {
     return {
       id: newId(), title: 'Photo frame', enabled: true, kind,
-      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', outline: true, date: true, weather: '', calendars: [], message: '' }
+      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', ink: 'white', outline: true, date: true, weather: '', calendars: [], message: '' }
     };
   }
   return { id: newId(), title: 'New screen', enabled: true, kind: 'sections', template: 'sidebar', columns: [[], []] };
@@ -940,6 +940,11 @@ const FRAME_CORNERS = [
   { value: 'topLeft', label: 'Top left' },
   { value: 'topRight', label: 'Top right' }
 ];
+const FRAME_INKS = [
+  { value: 'white', label: 'White' },
+  { value: 'black', label: 'Black' },
+  { value: 'auto', label: 'Contrasting (black on light photos, white on dark)' }
+];
 function FrameEditor({ screen, setScreen }) {
   const f = screen.frame;
   const set = (next) => setScreen({ ...screen, frame: next });
@@ -969,8 +974,13 @@ function FrameEditor({ screen, setScreen }) {
         <${Field} label="Corner"><${Select} value=${f.corner} onChange=${(v) => set({ ...f, corner: v })} options=${FRAME_CORNERS} /><//>
         <${Field} label="Text size"><${Select} value=${f.size} onChange=${(v) => set({ ...f, size: v })} options=${[{ value: 'normal', label: 'Normal' }, { value: 'large', label: 'Large' }]} /><//>
       </div>
-      <${Toggle} checked=${f.outline !== false} onChange=${(v) => set({ ...f, outline: v })} label="Black outline" />
-      <p class="hint">A thin black edge round the text and icons, so they read on light photos. Off: plain white, cleaner on dark ones.</p>
+      <div class="row">
+        <${Field} label="Text colour"><${Select} value=${f.ink || 'white'} onChange=${(v) => set({ ...f, ink: v })} options=${FRAME_INKS} /><//>
+      </div>
+      ${(f.ink || 'white') === 'auto'
+        ? html`<p class="hint">Black where the photo is light under the text, white where it's dark, with no edge: worked out for each photo as it comes up.</p>`
+        : html`<${Toggle} checked=${f.outline !== false} onChange=${(v) => set({ ...f, outline: v })} label="Outline" />
+          <p class="hint">A thin edge round the text and icons in the other colour (black round white, white round black), so they read on any photo. Off: plain, cleaner where the photo suits it.</p>`}
       <p class="hint">The caption (where and when the photo was taken) goes last, small. The footer is left off, so nothing else covers the photo; the battery shows only when it's low.</p>
     <//>
   </div>`;
