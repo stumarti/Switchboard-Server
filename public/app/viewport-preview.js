@@ -482,7 +482,7 @@ function SectionsScreen({ d, highlight, portrait, W = portrait ? 480 : 800, H = 
           if (s.type === 'spacer') return html`<div class=${highlight === s.id ? 'vp-hl' : ''} style=${{ height: `${s.data?.height ?? 0}px` }}></div>`;
           const Dash = DASH_SECTIONS[s.type];
           const drawn = Dash && s.data != null ? Dash({ d: s.data, title: s.title, siblings: all }) : null;
-          if (drawn) return html`<div class=${`kd-section ${highlight === s.id ? 'vp-hl' : ''}`}>${drawn}</div>`;
+          if (drawn) return html`<div class=${`kd-section kd-${s.type} ${highlight === s.id ? 'vp-hl' : ''}`}>${drawn}</div>`;
           const S = SECTIONS[s.type];
           return html`<div class=${`vp-section kd-other ${highlight === s.id ? 'vp-hl' : ''}`}>
             <${Label}>${s.title}<//>
