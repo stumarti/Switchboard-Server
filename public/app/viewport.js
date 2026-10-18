@@ -218,7 +218,7 @@ function newScreen(kind) {
   if (kind === 'photoFrame') {
     return {
       id: newId(), title: 'Photo frame', enabled: true, kind,
-      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', ink: 'white', outline: true, footer: false, note: { text: '', icon: '', corner: 'topRight' }, date: true, weather: '', calendars: [], message: '' }
+      frame: { source: { kind: 'favorites', album: '', person: '' }, every: 60, caption: 'both', corner: 'bottomLeft', size: 'normal', ink: 'white', outline: true, footer: false, note: { text: '', icon: '', corner: 'topRight' }, date: true, weather: '', weatherStyle: 'line', calendars: [], message: '' }
     };
   }
   return { id: newId(), title: 'New screen', enabled: true, kind: 'sections', template: 'sidebar', columns: [[], []] };
@@ -954,8 +954,13 @@ function FrameEditor({ screen, setScreen }) {
     <//>
     <${Card} icon="format-text" title="Over the photo" subtitle="A few lines in white over the photo. Leave any off.">
       <${Toggle} checked=${f.date} onChange=${(v) => set({ ...f, date: v })} label="The date (large)" />
-      <${Field} label="Weather" hint="The temperature and the sky, with its icon.">
-        <${EntityPicker} domains=${['weather']} value=${f.weather} onChange=${(id) => set({ ...f, weather: id || '' })} />
+      <${Field} label="Weather" hint=${(f.weatherStyle || 'line') === 'full'
+        ? 'As the information screens show it: the temperature large with the sky’s icon, humidity, wind and UV, rain coming, then later and the next two days. Small, on the left: with the lines, after the date, when they’re on the left; else in the left corner on their side.'
+        : 'The temperature and the sky, with its icon, as one line.'}>
+        <div class="row">
+          <${EntityPicker} domains=${['weather']} value=${f.weather} onChange=${(id) => set({ ...f, weather: id || '' })} />
+          <${Select} value=${f.weatherStyle || 'line'} onChange=${(v) => set({ ...f, weatherStyle: v })} options=${[{ value: 'line', label: 'One line' }, { value: 'full', label: 'Full' }]} />
+        </div>
       <//>
       <${Field} label="Next event" hint="The next one today or tomorrow, from any of these calendars.">
         <${ItemList}
