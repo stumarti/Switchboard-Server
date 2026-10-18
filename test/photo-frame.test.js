@@ -132,3 +132,41 @@ test('a photo frame with the footer: in the lines\' colour and edge, or contrast
   assert.deepEqual(auto('dark', 'light').footer, { ink: 'black', outline: false });
   assert.deepEqual(auto('dark', undefined).footer, { ink: 'white', outline: true });
 });
+
+test('a photo frame with the full weather: the information screens\' own, on the left, in the lines\' colour', () => {
+  const layout = (f) => dashboard.normalizeLayout({ screens: [{ kind: 'photoFrame', frame: f }] }).screens[0].frame;
+  assert.equal(layout({}).weatherStyle, 'line');
+  assert.equal(layout({ weatherStyle: 'full' }).weatherStyle, 'full');
+  assert.equal(layout({ weatherStyle: 'huge' }).weatherStyle, 'line');
+  const states = { 'weather.home': st('rainy', { temperature: 12.6, humidity: 81, wind_speed: 22, uv_index: 1 }) };
+  const forecasts = {
+    hourly: { 'weather.home': [0, 1, 2, 3, 4].map((h) => ({ datetime: new Date(Date.parse('2026-10-07T08:00:00Z') + h * 3600000).toISOString(), condition: 'rainy', temperature: 12 + h, precipitation: h < 2 ? 1 : 0 })) },
+    daily: { 'weather.home': [0, 1, 2, 3].map((d) => ({ datetime: new Date(Date.parse('2026-10-07T12:00:00Z') + d * 86400000).toISOString(), condition: 'sunny', temperature: 15 + d, templow: 8 })) }
+  };
+  // With the lines in the bottom left: after the date, in their place.
+  const d = frame({ weather: 'weather.home', weatherStyle: 'full' }, { states, forecasts }).data;
+  assert.deepEqual(d.lines, [
+    { icon: '', text: 'Wednesday 7 October', big: true },
+    { icon: '', text: '', big: false, weather: true }
+  ]);
+  assert.equal(d.weather.corner, 'bottomLeft');
+  assert.equal(d.weather.temperatureText, '13');
+  assert.equal(d.weather.ink, 'white');
+  assert.equal(d.weather.outline, true);
+  assert.deepEqual(d.weather.forecast.map((f) => f.label), ['Later', 'Thu', 'Fri']);
+  assert.equal(d.weather.rain.text, 'Rain stops 11:00'); // 10:00 UTC, in Dublin
+  // The lines on the right: in the left corner on their side, in their colour.
+  const r = frame({ weather: 'weather.home', weatherStyle: 'full', corner: 'topRight', ink: 'black', outline: false }, { states, forecasts }).data;
+  assert.deepEqual(r.lines, [{ icon: '', text: 'Wednesday 7 October', big: true }]);
+  assert.equal(r.weather.corner, 'topLeft');
+  assert.equal(r.weather.ink, 'black');
+  assert.equal(r.weather.outline, false);
+  // Contrasting: with the photo under it there.
+  const auto = (photo) => frame({ weather: 'weather.home', weatherStyle: 'full', corner: 'bottomRight', ink: 'auto' }, { states, forecasts, photos: { 'frame:pf': { src: 'immich:abc', ...photo } } }).data.weather;
+  assert.deepEqual([auto({ tone: 'dark', weatherTone: 'light' }).ink, auto({ tone: 'dark', weatherTone: 'light' }).outline], ['black', false]);
+  assert.deepEqual([auto({ tone: 'light' }).ink, auto({ tone: 'light' }).outline], ['white', true]);
+  // No weather entity's state: nothing.
+  assert.equal(frame({ weather: 'weather.gone', weatherStyle: 'full' }, { states }).data.weather, null);
+  // One line, as before.
+  assert.equal(frame({ weather: 'weather.home' }, { states }).data.weather, null);
+});

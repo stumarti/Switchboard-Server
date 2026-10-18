@@ -1194,6 +1194,9 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .kd-footer.vp-frame-foot .kd-bar { border-left-color: currentColor; }
 .kd-footer.vp-frame-foot .kd-mark.on { border-bottom-color: currentColor; }
 .kd-footer.vp-frame-foot > span { color: inherit !important; } /* the battery too: red only when low */
+/* Its full weather: the information screens' own, its text in the lines'
+   edge (the colours its own). */
+.vp-frame-wx { display: block; gap: 0; }
 .vp-frame-line, .vp-frame-big { display: flex; align-items: center; gap: 8px; }
 .vp-frame-big { font-size: 32px; }
 .vp-frame-text.big { font-size: 24px; }

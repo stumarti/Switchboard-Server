@@ -6,7 +6,7 @@
 // shows, where, and in which colour.
 
 import { html, useState, useEffect, useRef, Icon } from './lib.js';
-import { DASH_SECTIONS, DashFooter } from './viewport-preview-dash.js';
+import { DASH_SECTIONS, DashFooter, DashWeather } from './viewport-preview-dash.js';
 
 export const PALETTE = {
   0: { name: 'White', hex: '#ffffff' },
@@ -574,6 +574,15 @@ function noteStyle(corner, footer) {
   const right = corner === 'bottomRight' || corner === 'topRight';
   return { [top ? 'top' : 'bottom']: frameEdge(corner, footer), [right ? 'right' : 'left']: '16px', alignItems: right ? 'flex-end' : 'flex-start' };
 }
+// Its full weather (the information screens' own), small, on the left: in
+// the lines' colour and edge, or its own when it has a corner of its own.
+const FRAME_WX_W = 250;
+const frameWxHeight = (w) => ((w.forecast || []).length ? 216 : 116);
+function FrameWeather({ w, style }) {
+  return html`<div class=${`vp-frame-text vp-frame-wx ${w.outline === false ? 'plain' : ''} ${w.ink === 'black' ? 'ink-black' : ''}`} style=${{ width: `${FRAME_WX_W}px`, height: `${frameWxHeight(w)}px`, ...style }}>
+    <${DashWeather} d=${w} ink=${w.ink === 'black' ? 1 : 0} />
+  </div>`;
+}
 function PhotoFrame({ d, W, H }) {
   const big = d.size === 'large';
   const top = d.corner === 'topLeft' || d.corner === 'topRight';
@@ -583,9 +592,10 @@ function PhotoFrame({ d, W, H }) {
     ${d.src && html`<${ArtImg} cls="vp-bg-img" src=${d.src} w=${W} h=${H} />`}
     ${!d.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${d.empty}</span></div>`}
     <div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''} ${d.ink === 'black' ? 'ink-black' : ''}`} style=${{ [top ? 'top' : 'bottom']: edge, [right ? 'right' : 'left']: '16px', textAlign: right ? 'right' : 'left', alignItems: right ? 'flex-end' : 'flex-start' }}>
-      ${d.lines.map((l) => html`<div class=${l.big ? 'vp-frame-big' : 'vp-frame-line'}>${l.icon && html`<${Icon} name=${l.icon} size=${big ? 32 : 24} />`}<span>${l.text}</span></div>`)}
+      ${d.lines.map((l) => l.weather ? d.weather && html`<${FrameWeather} w=${d.weather} style=${{ position: 'relative', marginLeft: '-5px', marginBottom: '4px' }} />` : html`<div class=${l.big ? 'vp-frame-big' : 'vp-frame-line'}>${l.icon && html`<${Icon} name=${l.icon} size=${big ? 32 : 24} />`}<span>${l.text}</span></div>`)}
       ${d.caption && html`<div class="vp-frame-cap">${d.caption}</div>`}
     </div>
+    ${d.weather && d.weather.corner !== d.corner && html`<${FrameWeather} w=${d.weather} style=${{ [d.weather.corner === 'topLeft' ? 'top' : 'bottom']: d.weather.corner === 'topLeft' ? '12px' : '14px', left: '11px' }} />`}
     ${d.note && html`<div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''} ${d.ink === 'black' ? 'ink-black' : ''}`} style=${noteStyle(d.note.corner, d.footer)}>
       <div class="vp-frame-line">${d.note.icon && html`<${Icon} name=${d.note.icon} size=${big ? 32 : 24} />`}${d.note.text && html`<span>${d.note.text}</span>`}</div>
     </div>`}
