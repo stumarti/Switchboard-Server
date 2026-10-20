@@ -29,6 +29,7 @@ test('battery: learning at first, then days left from the drain since the last c
   bh.addSample(e, 90, T0 + 10 * 60 * 1000); // same level, too soon: not kept
   assert.equal(e.samples.length, 1);
   assert.equal(bh.estimateFor(e, T0).daysLeft, null); // learning
+  assert.equal(bh.estimateFor(e, T0).lastChargedAt, null); // no charge seen yet
 
   const end = drain(e, 90, 2, 7); // 2% a day for a week: 90 -> 76
   const est = bh.estimateFor(e, end);
@@ -51,6 +52,8 @@ test('battery: a charge starts over, and the rate learned before it answers unti
   assert.equal(soon.basis, 'learned'); // too little since the charge to measure
   assert.ok(Math.abs(soon.daysLeft - (100 - bh.EMPTY_PCT) / 3) < 1.5, soon.daysLeft);
   assert.equal(soon.sinceChargeDays, 0);
+  // When: the top of the charge.
+  assert.equal(soon.lastChargedAt, new Date(t).toISOString());
 
   // A couple of days on, at a slower 1%/day: now measured from the new data.
   t = drain(e, 100, 1, 3, t + HOUR);

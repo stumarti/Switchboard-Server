@@ -6,7 +6,7 @@
 
 import {
   html, useState, useEffect, useRef, api, go, Icon, Card, Field, TextInput, Select, Toggle, Button, Badge, Empty,
-  useFlash, moveItem, timeAgo, batteryLifeText
+  useFlash, moveItem, timeAgo, batteryLifeText, lastChargedText
 } from './lib.js';
 import { EntityPicker, IconPicker } from './pickers.js';
 import { ItemList } from './rooms.js';
@@ -455,6 +455,7 @@ function ClientEditor({ client, rooms, dashboards, reloadClients, reloadDashboar
           <${Badge} icon="ip-network-outline">${client.lastIp || '—'}<//>
           ${client.health && client.health.battery != null &&
           html`<span title=${batteryLifeText(client.batteryLife).tip}><${Badge} kind=${client.health.battery <= 15 ? 'bad' : ''} icon="battery-outline">${client.health.battery}%${batteryLifeText(client.batteryLife).short ? ` · ${batteryLifeText(client.batteryLife).short}` : ''}<//></span>`}
+          ${lastChargedText(client.batteryLife) && html`<span title=${lastChargedText(client.batteryLife).tip}><${Badge} icon="battery-charging-outline">Charged ${lastChargedText(client.batteryLife).short}<//></span>`}
           ${client.health && client.health.temperature != null && html`<${Badge} icon="thermometer">${client.health.temperature}°<//>`}
           ${client.health && client.health.humidity != null && html`<${Badge} icon="water-percent">${client.health.humidity}%<//>`}
           ${client.health && client.health.rssi != null && html`<${Badge} icon="wifi">${client.health.rssi} dBm<//>`}
