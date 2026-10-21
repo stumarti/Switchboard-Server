@@ -12,7 +12,7 @@
 // The side column's links (#/home/<view>) scroll to a part. Polled every
 // 10 s while the tab is visible.
 
-import { html, useState, useEffect, useRef, api, go, Icon, Card, Badge, Button, Empty, timeAgo, batteryLifeText, boardLabel } from './lib.js';
+import { html, useState, useEffect, useRef, api, go, Icon, Card, Badge, Button, Empty, timeAgo, batteryLifeText, lastChargedText, boardLabel } from './lib.js';
 
 const LEVEL = {
   critical: { icon: 'alert-octagon', cls: 'bad', label: 'Critical' },
@@ -236,7 +236,7 @@ function Devices({ devices, filter, setFilter }) {
       <label class="filter-box"><${Icon} name="magnify" size=${15} /><input type="text" placeholder="Filter devices" value=${q} onInput=${(e) => setQ(e.target.value)} /></label>
     </div>
     <div class="table-wrap"><table class="table table-links">
-    <thead><tr><th>Device</th><th>Status</th><th>Room / layout</th><th>Battery</th><th>Wi-Fi</th><th>Firmware</th><th>Last seen</th></tr></thead>
+    <thead><tr><th>Device</th><th>Status</th><th>Room / layout</th><th>Battery</th><th>Last charged</th><th>Wi-Fi</th><th>Firmware</th><th>Last seen</th></tr></thead>
     <tbody>
       ${rows.map((d) => {
         const [kind, label] = statusOf(d);
@@ -248,6 +248,7 @@ function Devices({ devices, filter, setFilter }) {
           <td><span class="status"><span class=${`dot ${kind ? `dot-${kind}` : ''}`}></span>${label}</span></td>
           <td>${d.assignedTo || html`<span class="hint">None</span>`}</td>
           <td><${BatteryBar} pct=${d.battery} level=${d.batteryLevel} life=${d.batteryLife} /></td>
+          <td>${lastChargedText(d.batteryLife) ? html`<span class="hint" title=${lastChargedText(d.batteryLife).tip}>${lastChargedText(d.batteryLife).short}</span>` : html`<span class="hint">—</span>`}</td>
           <td><${Signal} rssi=${d.rssi} /></td>
           <td>${d.firmware ? html`<span class="fw-cell"><code>${d.firmware}</code><${UpdateIcon} u=${d.update} /></span>` : html`<span class="hint">—</span>`}</td>
           <td class="hint">${timeAgo(d.lastSeenAt)}</td>
@@ -256,7 +257,7 @@ function Devices({ devices, filter, setFilter }) {
     </tbody>
   </table></div>
   ${!rows.length && html`<p class="hint" style="padding:14px 16px">No device matches.</p>`}
-  <div class="table-foot">Showing ${rows.length} of ${shown.length}<span class="pagebar-sp"></span>Battery, Wi-Fi and firmware come from each device on its check-ins; days left are learned from its own discharge.</div>`;
+  <div class="table-foot">Showing ${rows.length} of ${shown.length}<span class="pagebar-sp"></span>Battery, Wi-Fi and firmware come from each device on its check-ins; days left are learned from its own discharge, and a charge is spotted when the level jumps.</div>`;
 }
 
 function HomeAssistantCard({ ha, server }) {

@@ -402,6 +402,18 @@ export function batteryLifeText(life) {
   return { short, tip: `About ${short.replace('~', '')} left, falling ${life.ratePerDay}% a day, ${how}.${full}` };
 }
 
+// When the battery was last charged (lib/battery-history.js spots it in the
+// readings): "today", "yesterday", "3 days ago", the date as a tooltip.
+// Null when no charge has been seen.
+export function lastChargedText(life) {
+  if (!life || !life.lastChargedAt) return null;
+  const at = new Date(life.lastChargedAt);
+  const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(new Date()) - day(at)) / 86400000);
+  const short = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+  return { short, tip: `Last charged ${at.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` };
+}
+
 // A board (the kind of device a firmware build is for) as people call it.
 const BOARD_NAMES = { x4pro: 'X4 Pro', sticky: 'Sticky', e1002: 'reTerminal E1002', e1004: 'reTerminal E1004' };
 export function boardLabel(board) {
