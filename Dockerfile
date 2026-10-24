@@ -32,6 +32,11 @@ ENV MDNS_HOSTNAME=switchboard.local
 VOLUME ["/data"]
 EXPOSE 45678
 
+# Unraid's Docker page reads its icon and Web UI link from these, however
+# the container was made (the template, Compose Manager or `docker run`).
+LABEL net.unraid.docker.icon="https://raw.githubusercontent.com/stumarti/Switchboard-Server/main/assets/icon.png" \
+      net.unraid.docker.webui="http://[IP]:[PORT:45678]/"
+
 # Basic container healthcheck against the app's own health endpoint.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
   CMD wget -qO- "http://127.0.0.1:${PORT}/api/health" > /dev/null || exit 1
