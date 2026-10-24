@@ -212,7 +212,7 @@ function App() {
     return html`<${Message} title="Turned off"><p>This screen was revoked on Switchboard Server. Approve it again from its Viewports page to show it here.</p><code>${ID}</code><//>`;
   }
   if (pairing && pairing.status === 'error') {
-    return html`<${Message} title="Can’t pair"><p>${pairing.error === 'not accepting new devices' ? 'The server isn’t accepting new devices. Turn on Settings → Security → Accept new devices.' : pairing.error}</p><p class="hint">Trying again…</p><//>`;
+    return html`<${Message} title="Can’t pair"><p>${pairing.error === 'not accepting new devices' ? 'The server isn’t accepting new devices. Turn on Settings → Pairing → New devices.' : pairing.error}</p><p class="hint">Trying again…</p><//>`;
   }
   return html`<${Message} title="SWITCHBOARD">
     <p>Approve this screen on Switchboard Server (<b>Home</b> or <b>Viewports</b>) and pick its layout. It’s listed as</p>
