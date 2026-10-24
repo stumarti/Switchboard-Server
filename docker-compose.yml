@@ -36,3 +36,8 @@ services:
       # you intend to commit. See README.md "Secrets & .gitignore".
       - ./data:/data
     restart: unless-stopped
+    # Unraid's Docker page (with the Compose Manager plugin): its icon and Web
+    # UI link. The image carries them too; these keep them if you build your own.
+    labels:
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/stumarti/Switchboard-Server/main/assets/icon.png"
+      net.unraid.docker.webui: "http://[IP]:[PORT:45678]/"
