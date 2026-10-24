@@ -221,7 +221,7 @@ app.post('/api/auth/logout', (req, res) => {
 // No auth: this is a device's very first-ever contact, before it has a
 // token. Also polled (still unauthenticated) while pending/revoked.
 app.post('/api/pairing/register', (req, res) => {
-  const result = pairing.register(req.body && req.body.mac, req.ip, req.body && req.body.type);
+  const result = pairing.register(req.body && req.body.mac, req.ip, req.body && req.body.type, req.body && req.body.name);
   if (result.error) return res.status(result.status || 400).json({ error: result.error });
   res.json(result);
 });
@@ -1407,6 +1407,18 @@ app.get('/api/health', (req, res) => {
     mdnsServiceType: require('./lib/mdns').normalizeServiceType(MDNS_SERVICE_TYPE),
     dataDir: store.DATA_DIR
   });
+});
+
+// A TV's display page (public/app/display.js): a viewport in a browser.
+app.get('/display', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'display.html'));
+});
+// Its token as a cookie too, so its photos (<img>s, which can't send a
+// header) load.
+app.post('/api/display/session', auth.requireAdminOrDevice, (req, res) => {
+  if (!req.device) return res.status(400).json({ error: 'for a paired display' });
+  auth.setDeviceCookie(res, auth.bearerFromRequest(req));
+  res.json({ ok: true });
 });
 
 // SPA fallback for the admin UI (any non-API GET that isn't a missing

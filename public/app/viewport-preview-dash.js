@@ -6,6 +6,7 @@
 
 import { html, Icon } from './lib.js';
 import { builtInArt } from './viewport-art.js';
+import { useTv } from './viewport-display.js';
 
 export const KD = {
   0: '#ffffff',
@@ -286,6 +287,7 @@ export const DASH_SECTIONS = {
 // showing underlined), the refresh icon and time, the device's battery; the
 // bed-and-clock while quiet hours are on.
 export function DashFooter({ generatedAt, quiet, carousel, current, cls = '' }) {
+  const tv = useTv();
   const t = generatedAt ? new Date(generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--';
   const marks = carousel && carousel.length > 1 ? carousel : [];
   return html`<div class=${`kd-footer ${cls}`}>
@@ -294,8 +296,8 @@ export function DashFooter({ generatedAt, quiet, carousel, current, cls = '' }) 
     ${quiet && html`<span style=${{ color: k(5) }}><${Icon} name="bed-clock" size=${16} /></span>`}
     <${Icon} name="refresh" size=${16} />
     <span>${t}</span>
-    <span class="kd-bar"></span>
+    ${!tv && html`<span class="kd-bar"></span>
     <span style=${{ color: k(4) }}><${Icon} name="battery" size=${24} /></span>
-    <span style=${{ color: k(4) }}>100%</span>
+    <span style=${{ color: k(4) }}>100%</span>`}
   </div>`;
 }

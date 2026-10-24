@@ -1222,3 +1222,35 @@ code.dev-mac { background: none; border: 0; padding: 0; color: var(--faint); fon
 .json-suggest button span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .json-suggest button.on, .json-suggest button:hover { background: var(--accent-soft); }
 .text-warn { color: var(--warn); }
+
+/* --- A TV's display page (public/display.html) ------------------------------- */
+
+html.display, html.display body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; cursor: none; }
+.display-root { position: fixed; inset: 0; }
+.vp-wrap.vp-wrap-fill { width: 100%; height: 100%; }
+.vp-wrap-fill > .vp-panel { border: 0; box-sizing: border-box; }
+/* Photos at the TV's own resolution, smooth; the new one fading in over the last. */
+.vp-art.vp-art-tv { image-rendering: auto; }
+.vp-art-layer { position: absolute; inset: 0; overflow: hidden; }
+.vp-art-layer.vp-fade-in { animation: vp-fade 1.6s ease-out both; }
+@keyframes vp-fade { from { opacity: 0; } to { opacity: 1; } }
+/* Slow movement (a photo's Motion setting): one of six, a minute each way. */
+.vp-motion { animation-duration: 60s; animation-timing-function: ease-in-out; animation-iteration-count: infinite; animation-direction: alternate; will-change: transform; }
+.vp-motion-0 { animation-name: vp-zoom-in; }
+.vp-motion-1 { animation-name: vp-zoom-out; }
+.vp-motion-2 { animation-name: vp-pan-right; }
+.vp-motion-3 { animation-name: vp-pan-left; }
+.vp-motion-4 { animation-name: vp-zoom-tl; transform-origin: 25% 30%; }
+.vp-motion-5 { animation-name: vp-zoom-br; transform-origin: 75% 70%; }
+@keyframes vp-zoom-in { from { transform: scale(1); } to { transform: scale(1.12); } }
+@keyframes vp-zoom-out { from { transform: scale(1.12); } to { transform: scale(1); } }
+@keyframes vp-pan-right { from { transform: scale(1.1) translateX(-3.5%); } to { transform: scale(1.1) translateX(3.5%); } }
+@keyframes vp-pan-left { from { transform: scale(1.1) translate(3.5%, 1%); } to { transform: scale(1.1) translate(-3.5%, -1%); } }
+@keyframes vp-zoom-tl { from { transform: scale(1.02); } to { transform: scale(1.14) translate(1%, 1%); } }
+@keyframes vp-zoom-br { from { transform: scale(1.14) translate(-1%, -1%); } to { transform: scale(1.02); } }
+@media (prefers-reduced-motion: reduce) { .vp-motion { animation: none !important; } }
+/* Pairing and errors, before there's a screen to show. */
+.display-msg { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; color: #eee; font: 400 28px/1.4 'Atkinson Hyperlegible', system-ui, sans-serif; text-align: center; padding: 48px; }
+.display-msg h1 { font-size: 48px; margin: 0; letter-spacing: .06em; }
+.display-msg code { font-size: 40px; letter-spacing: .12em; color: #fff; background: #222; padding: 8px 20px; border-radius: 10px; }
+.display-msg .hint { color: #999; font-size: 22px; max-width: 900px; }

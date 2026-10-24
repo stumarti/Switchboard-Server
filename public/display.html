@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" class="display">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- A TV's whole screen: a viewport layout, live (public/app/display.js). -->
+  <title>Switchboard display</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiByeD0iNSIgZmlsbD0iIzRmOGNmZiIvPjxwYXRoIGZpbGw9IiNmZmZmZmYiIGQ9Ik0xMiwwQzguOTYsMCA2LjIxLDEuMjMgNC4yMiwzLjIyTDUuNjMsNC42M0M3LjI2LDMgOS41LDIgMTIsMkMxNC41LDIgMTYuNzQsMyAxOC4zNiw0LjY0TDE5Ljc3LDMuMjNDMTcuNzksMS4yMyAxNS4wNCwwIDEyLDBNNy4wNSw2LjA1TDguNDYsNy40NkM5LjM3LDYuNTYgMTAuNjIsNiAxMiw2QzEzLjM4LDYgMTQuNjMsNi41NiAxNS41NCw3LjQ2TDE2Ljk1LDYuMDVDMTUuNjgsNC43OCAxMy45Myw0IDEyLDRDMTAuMDcsNCA4LjMyLDQuNzggNy4wNSw2LjA1TTEyLDE1QTIsMiAwIDAsMSAxMCwxM0EyLDIgMCAwLDEgMTIsMTFBMiwyIDAgMCwxIDE0LDEzQTIsMiAwIDAsMSAxMiwxNU0xNSw5SDlBMSwxIDAgMCwwIDgsMTBWMjJBMSwxIDAgMCwwIDksMjNIMTVBMSwxIDAgMCwwIDE2LDIyVjEwQTEsMSAwIDAsMCAxNSw5WiIvPjwvc3ZnPg==" />
+  <!-- The admin's typefaces, and the wall panel's for its layout previews (all fall back offline). -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="/style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "preact": "/vendor/preact/dist/preact.module.js",
+        "preact/hooks": "/vendor/preact/hooks/dist/hooks.module.js",
+        "htm": "/vendor/htm/htm.module.js"
+      }
+    }
+  </script>
+  <script type="module" src="/app/display.js"></script>
+</head>
+<body>
+  <div id="root" class="display-root"></div>
+  <noscript>The Switchboard display needs JavaScript.</noscript>
+</body>
+</html>

@@ -170,3 +170,18 @@ test('a photo frame with the full weather: the information screens\' own, on the
   // One line, as before.
   assert.equal(frame({ weather: 'weather.home' }, { states }).data.weather, null);
 });
+
+test('photos: slow motion on a TV when the layout asks, still by default', () => {
+  const layout = (f) => dashboard.normalizeLayout({ screens: [{ kind: 'photoFrame', frame: f }] }).screens[0].frame;
+  assert.equal(layout({}).motion, false);
+  assert.equal(layout({ motion: true }).motion, true);
+  assert.equal(frame({ motion: true }, { photos: { 'frame:pf': { src: 'immich:abc' } } }).data.motion, true);
+  assert.equal(frame({}, { photos: { 'frame:pf': { src: 'immich:abc' } } }).data.motion, false);
+  // A photo section and a screen's background carry their own.
+  const l = dashboard.normalizeLayout({
+    screens: [{ id: 's', kind: 'sections', template: 'single', background: { enabled: true, motion: true }, columns: [[{ id: 'p', type: 'photo', motion: true }]] }]
+  });
+  const s = buildScreens(l, { states: {}, timeZone: TZ, now: new Date('2026-10-07T08:30:00Z'), photos: { 'bg:s': { src: 'immich:b' }, 'photo:p': { src: 'immich:c' } } }).s;
+  assert.equal(s.background.motion, true);
+  assert.equal(s.columns[0][0].data.motion, true);
+});

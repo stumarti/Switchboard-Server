@@ -921,7 +921,9 @@ function PhotoFields({ p, set }) {
       <${Field} label="Colour" hint="How strong the colours come out on the panel. The six inks lose some; Standard makes up for it, Vivid and Extra vivid go further.">
         <${Select} value=${p.strength || 'standard'} onChange=${(v) => set({ ...p, strength: v })} options=${PHOTO_STRENGTHS} />
       <//>
-    </div>`;
+    </div>
+    <${Toggle} checked=${!!p.motion} onChange=${(v) => set({ ...p, motion: v })} label="Slow motion on a TV" />
+    <p class="hint">On a TV showing this layout (the Switchboard TV app), the photo slowly zooms and drifts, a different way for each photo. An e-ink panel shows it still.</p>`;
 }
 
 function PhotoEditor({ s, set }) {
@@ -1487,7 +1489,7 @@ function HangCard({ layout, onChange, previewOn, setPreviewOn }) {
     <div class="row" style="align-items:center">
       <span class="hint">Preview on</span>
       <div class="seg">
-        ${[['e1002', '7.3” E1002'], ['e1004', '13.3” E1004']].map(([v, l]) => html`<button type="button" class=${previewOn === v ? 'on' : ''} onClick=${() => setPreviewOn(v)}>${l}</button>`)}
+        ${[['e1002', '7.3” E1002'], ['e1004', '13.3” E1004'], ['tv', 'TV']].map(([v, l]) => html`<button type="button" class=${previewOn === v ? 'on' : ''} onClick=${() => setPreviewOn(v)}>${l}</button>`)}
       </div>
     </div>
     <p class="hint">${isPortrait(layout)
@@ -1637,7 +1639,7 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
   // Which display the preview shows the layout on (not saved: a layout can
   // be on both).
   const [previewOn, setPreviewOn] = useState('e1002');
-  const previewDevice = previewOn === 'e1004' ? `e1004-${layout.boardSize || 'large'}` : 'e1002';
+  const previewDevice = previewOn === 'e1004' ? `e1004-${layout.boardSize || 'large'}` : previewOn === 'tv' ? 'tv' : 'e1002';
   useEffect(() => {
     api('/api/clients/schema').then((s) => setPresets(s.dashboard && s.dashboard.iconPresets)).catch(() => {});
   }, []);

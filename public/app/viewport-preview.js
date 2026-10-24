@@ -7,6 +7,7 @@
 
 import { html, useState, useEffect, useRef, Icon } from './lib.js';
 import { DASH_SECTIONS, DashFooter, DashWeather } from './viewport-preview-dash.js';
+import { display, TvContext, useTv } from './viewport-display.js';
 
 export const PALETTE = {
   0: { name: 'White', hex: '#ffffff' },
@@ -368,14 +369,29 @@ const AirQuality = ({ d }) =>
 
 // A photo from Immich, as the panel shows it (the server's six-colour
 // picture), with its caption underneath. `w`: the column's width.
-const artUrl = (src, w, h) => `/api/art?src=${encodeURIComponent(src)}&w=${w}&h=${h}&fmt=png`;
+// (On a TV: in full colour, at the screen's resolution.)
+const artUrl = (src, w, h, tv = false) =>
+  tv
+    ? `/api/art?src=${encodeURIComponent(src)}&w=${Math.round(w * display.scale)}&h=${Math.round(h * display.scale)}&fmt=jpeg`
+    : `/api/art?src=${encodeURIComponent(src)}&w=${w}&h=${h}&fmt=png`;
+
+// Which of the slow movements a photo gets: always the same one for the
+// same photo, a different one for the next.
+const MOTIONS = 6;
+const motionOf = (src) => {
+  let h = 0;
+  for (let i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) >>> 0;
+  return h % MOTIONS;
+};
 
 // A photo as the panel gets it. The last one stays up while the next loads
 // (an edit re-draws the preview); it says so while it loads, and why when
 // it can't (Immich too slow, the photo too big...), after one more try.
-function ArtImg({ src, w, h, cls = '' }) {
-  const url = artUrl(src, w, h);
+function ArtImg({ src, w, h, cls = '', motion = false }) {
+  const tv = useTv();
+  const url = artUrl(src, w, h, tv);
   const [shown, setShown] = useState(null);
+  const [before, setBefore] = useState(null);
   const [err, setErr] = useState('');
   useEffect(() => {
     let live = true;
@@ -383,7 +399,13 @@ function ArtImg({ src, w, h, cls = '' }) {
     setErr('');
     const load = (tries) => {
       const im = new Image();
-      im.onload = () => live && setShown(url);
+      im.onload = () => {
+        if (!live) return;
+        setShown((old) => {
+          if (tv && old && old !== url) setBefore(old);
+          return url;
+        });
+      };
       im.onerror = () => {
         if (!live) return;
         if (tries > 0) {
@@ -403,8 +425,16 @@ function ArtImg({ src, w, h, cls = '' }) {
       clearTimeout(retry);
     };
   }, [url]);
-  return html`<div class=${`vp-art ${cls}`} style=${{ width: `${w}px`, height: `${h}px` }}>
-    ${shown && html`<img src=${shown} width=${w} height=${h} alt="" />`}
+  const moving = tv && motion;
+  // On a TV: each photo in a layer of its own (the new one fading in over
+  // the last), moving inside it if it's set to.
+  const layer = (u, fade) =>
+    html`<div key=${u} class=${`vp-art-layer ${fade ? 'vp-fade-in' : ''}`}>
+      <img src=${u} width=${w} height=${h} alt="" class=${moving ? `vp-motion vp-motion-${motionOf(u)}` : ''} />
+    </div>`;
+  return html`<div class=${`vp-art ${cls} ${tv ? 'vp-art-tv' : ''}`} style=${{ width: `${w}px`, height: `${h}px` }}>
+    ${tv && before && before !== shown && layer(before, false)}
+    ${shown && (tv ? layer(shown, true) : html`<img src=${shown} width=${w} height=${h} alt="" />`)}
     ${!shown && !err && html`<div class="vp-art-msg"><${Icon} name="image-outline" size=${24} /><span>Loading the photo…</span></div>`}
     ${err && html`<div class="vp-art-msg vp-art-err"><${Icon} name="image-broken-variant" size=${24} /><span>Couldn’t load the photo: ${err}</span></div>`}
   </div>`;
@@ -417,7 +447,7 @@ function Photo({ d, w }) {
   const ph = d.caption ? h - PHOTO_CAPTION_H : h;
   return html`<div>
     ${d.src
-      ? html`<${ArtImg} cls="vp-photo" src=${d.src} w=${w} h=${ph} />`
+      ? html`<${ArtImg} cls="vp-photo" src=${d.src} w=${w} h=${ph} motion=${d.motion} />`
       : html`<div class="vp-photo vp-photo-empty" style=${{ width: `${w}px`, height: `${ph}px` }}><${Icon} name="image-off-outline" size=${32} /><span>${d.empty}</span></div>`}
     ${d.caption && html`<div class="vp-tiny vp-photo-cap">${d.caption}</div>`}
   </div>`;
@@ -472,7 +502,7 @@ function SectionsScreen({ d, highlight, portrait, W = portrait ? 480 : 800, H = 
   // Portrait: the columns as bands one under the other.
   const style = portrait ? { gridTemplateColumns: `${W}px`, gridAutoRows: 'min-content', alignContent: 'start', height: `${H}px` } : { gridTemplateColumns: colsFor(d.template, W), height: `${H}px` };
   return html`<div class=${`vp-cols kd-${d.template} ${bg ? 'vp-photo-bg' : ''} ${bg && bg.cards === 'none' ? 'vp-clear' : ''} ${portrait ? 'vp-portrait' : ''}`} style=${style}>
-    ${bg && bg.src && html`<${ArtImg} cls="vp-bg-img" src=${bg.src} w=${W} h=${H} />`}
+    ${bg && bg.src && html`<${ArtImg} cls="vp-bg-img" src=${bg.src} w=${W} h=${H} motion=${bg.motion} />`}
     ${bg && !bg.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${bg.empty}</span></div>`}
     ${bg && bg.caption && html`<div class="vp-bg-cap">${bg.caption}</div>`}
     ${d.columns.map(
@@ -589,7 +619,7 @@ function PhotoFrame({ d, W, H }) {
   const right = d.corner === 'bottomRight' || d.corner === 'topRight';
   const edge = frameEdge(d.corner, d.footer);
   return html`<div class="vp-frame" style=${{ width: `${W}px`, height: `${H}px` }}>
-    ${d.src && html`<${ArtImg} cls="vp-bg-img" src=${d.src} w=${W} h=${H} />`}
+    ${d.src && html`<${ArtImg} cls="vp-bg-img" src=${d.src} w=${W} h=${H} motion=${d.motion} />`}
     ${!d.src && html`<div class="vp-photo-bg-empty"><${Icon} name="image-off-outline" size=${32} /><span>${d.empty}</span></div>`}
     <div class=${`vp-frame-text ${big ? 'big' : ''} ${d.outline === false ? 'plain' : ''} ${d.ink === 'black' ? 'ink-black' : ''}`} style=${{ [top ? 'top' : 'bottom']: edge, [right ? 'right' : 'left']: '16px', textAlign: right ? 'right' : 'left', alignItems: right ? 'flex-end' : 'flex-start' }}>
       ${d.lines.map((l) => l.weather ? d.weather && html`<${FrameWeather} w=${d.weather} style=${{ position: 'relative', marginLeft: '-5px', marginBottom: '4px' }} />` : html`<div class=${l.big ? 'vp-frame-big' : 'vp-frame-line'}>${l.icon && html`<${Icon} name=${l.icon} size=${big ? 32 : 24} />`}<span>${l.text}</span></div>`)}
@@ -603,26 +633,37 @@ function PhotoFrame({ d, W, H }) {
 }
 
 // The screen's size: a viewport (E1002) 800x480; an E1004 800x600 when it
-// shows the layout large, 1600x1200 when small. Portrait: turned.
+// shows the layout large, 1600x1200 when small; a TV 16:9 at the E1002's
+// height. Portrait: turned.
 export function screenSize(device, portrait) {
-  const [w, h] = device === 'e1004-small' ? [1600, 1200] : device === 'e1004-large' ? [800, 600] : [800, 480];
+  const [w, h] = device === 'e1004-small' ? [1600, 1200] : device === 'e1004-large' ? [800, 600] : device === 'tv' ? [854, 480] : [800, 480];
   return portrait ? [h, w] : [w, h];
 }
 
-export function ViewportPreview({ screen, state, error, loading, highlight, carousel, portrait = false, device = 'e1002' }) {
+// `fill`: as big as the box it's in, both ways (a TV's whole screen), not
+// at most its own size.
+export function ViewportPreview({ screen, state, error, loading, highlight, carousel, portrait = false, device = 'e1002', fill = false }) {
   const wrap = useRef(null);
   const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState([0, 0]);
   const [W, H] = screenSize(device, portrait);
   useEffect(() => {
     if (!wrap.current) return undefined;
     // A portrait panel is shown at most 600 px tall.
-    const ro = new ResizeObserver(([e]) => setScale(Math.min(1, e.contentRect.width / W, portrait ? 600 / H : 1)));
+    const ro = new ResizeObserver(([e]) => {
+      const { width, height } = e.contentRect;
+      if (!fill) return setScale(Math.min(1, width / W, portrait ? 600 / H : 1));
+      // Filling: centred, with bars where the shapes differ.
+      const s = Math.min(width / W, height / H);
+      setScale(s);
+      setOffset([(width - W * s) / 2, (height - H * s) / 2]);
+    });
     ro.observe(wrap.current);
     return () => ro.disconnect();
-  }, [W, H, portrait]);
+  }, [W, H, portrait, fill]);
   const d = state && state.screens && state.screens[screen];
-  return html`<div class="vp-wrap" ref=${wrap} style=${{ height: `${H * scale}px` }}>
-    <div class=${`vp-panel ${portrait ? 'vp-panel-portrait' : ''}`} style=${{ transform: `scale(${scale})`, width: `${W}px`, height: `${H}px` }}>
+  return html`<${TvContext.Provider} value=${device === 'tv'}><div class=${`vp-wrap ${fill ? 'vp-wrap-fill' : ''}`} ref=${wrap} style=${fill ? null : { height: `${H * scale}px` }}>
+    <div class=${`vp-panel ${portrait ? 'vp-panel-portrait' : ''}`} style=${{ transform: `translate(${offset[0]}px, ${offset[1]}px) scale(${scale})`, width: `${W}px`, height: `${H}px` }}>
       ${d
         ? d.kind === 'meetingRoom'
           ? html`<${MeetingRoom} d=${d.data} />`
@@ -637,5 +678,5 @@ export function ViewportPreview({ screen, state, error, loading, highlight, caro
         cls=${`vp-frame-text vp-frame-foot ${d.data.footer.outline === false ? 'plain' : ''} ${d.data.footer.ink === 'black' ? 'ink-black' : ''}`} />`}
       ${loading && d && html`<div class="vp-loading"><${Icon} name="refresh" size=${16} /></div>`}
     </div>
-  </div>`;
+  </div><//>`;
 }
