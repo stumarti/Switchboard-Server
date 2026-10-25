@@ -465,11 +465,13 @@ app.get('/api/viewports/:mac/bundle', auth.requireAdminOrDevice, (req, res) => {
 async function viewportScreens(layout, slug) {
   const inputs = await dashboardState.fetchInputs(layout, store.getGlobals());
   const screens = dashboardState.buildScreens(layout, inputs);
+  // A screen that takes over by itself (switchWhen): which, if any.
+  const { switchTo, checkSec } = dashboardState.switchPlan(layout, inputs);
   if (slug && inputs.states && Object.keys(inputs.states).length) {
     const missing = dashboardState.missingEntities(layout, inputs.states);
     haMonitor.noteEntities({ kind: 'layout', slug }, Object.fromEntries(missing.map((id) => [id, 'HTTP 404'])));
   }
-  return { screens, errors: inputs.errors, generatedAt: inputs.now.toISOString() };
+  return { screens, errors: inputs.errors, generatedAt: inputs.now.toISOString(), switchTo, checkSec };
 }
 
 function haError(res, e) {
@@ -491,25 +493,29 @@ app.get('/api/viewports/:mac/state', auth.requireAdminOrDevice, async (req, res)
   });
   const soonest = (list) => Math.min(interval, ...list.filter((n) => n != null && n > 0));
   try {
-    const { screens, errors, generatedAt } = await viewportScreens(layout, device.dashboard || '');
+    const { screens, errors, generatedAt, switchTo, checkSec } = await viewportScreens(layout, device.dashboard || '');
+    // The screen to switch to by itself ('' for none), in a header too so a
+    // 304 carries it: the display goes there, and back when it's ''.
+    res.set('X-Switch-To', switchTo);
     const wanted = req.query.screen ? String(req.query.screen) : '';
     if (wanted) {
       const screen = screens[wanted];
       if (!screen) return res.status(404).json({ error: 'no such screen' });
       const etag = dashboardState.screenEtag(screen);
+      const refreshInSec = soonest([screen.nextChangeInSec, checkSec]);
       res.set('ETag', etag);
       res.set('Cache-Control', 'no-cache');
-      res.set('X-Refresh-In', String(soonest([screen.nextChangeInSec])));
+      res.set('X-Refresh-In', String(refreshInSec));
       res.set('X-Quiet', quiet ? '1' : '0');
       if (req.get('If-None-Match') === etag) return res.status(304).end();
-      return res.json({ screen: wanted, etag, refreshInSec: soonest([screen.nextChangeInSec]), quiet, generatedAt, data: screen });
+      return res.json({ screen: wanted, etag, refreshInSec, quiet, generatedAt, switchTo, data: screen });
     }
     const out = {};
     for (const sc of layout.screens.filter((x) => x.enabled)) {
       out[sc.id] = { etag: dashboardState.screenEtag(screens[sc.id]), data: screens[sc.id] };
     }
     const next = layout.screens.filter((x) => x.enabled).map((x) => screens[x.id].nextChangeInSec);
-    res.json({ refreshInSec: soonest(next), quiet, generatedAt, errors, screens: out });
+    res.json({ refreshInSec: soonest([...next, checkSec]), quiet, generatedAt, errors, switchTo, screens: out });
   } catch (e) {
     haError(res, e);
   }

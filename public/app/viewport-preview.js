@@ -255,12 +255,53 @@ const People = ({ d }) =>
     ${d.people.map((p) => html`<span class="vp-med" style=${{ color: p.home ? c(p.color) : GREY }}><${Icon} name=${p.home ? 'account' : 'account-outline'} size=${20} /> ${p.name}</span>`)}
   </div>`;
 
-const Media = ({ d }) =>
-  d.players.length
+// A player's cover, small (a list line): as the panel dithers it, or on a
+// TV in its own colours.
+function ArtSmall({ src }) {
+  const tv = useTv();
+  return html`<img class="vp-art" src=${artUrl(src, 72, 72, tv)} width="72" height="72" alt="" />`;
+}
+
+// Large: the one playing, its cover as wide as the column, the track, and
+// how far into it.
+const clockOf = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+function MediaLarge({ d, w }) {
+  const tv = useTv();
+  const m = d.players[0];
+  if (!m) return html`<${Missing} what="Nothing playing" />`;
+  // The cover: as wide as the column, but leaving the panel's height room
+  // for the track under it. A column wide enough has it beside the track.
+  const cw = Math.max(76, (w || 300) - 16);
+  const wide = cw >= 520;
+  // (Under it: where, the title, artist, album and the bar, as the panel
+  // leaves them 180 px of its 480.)
+  const side = wide ? Math.min(300, Math.round(cw * 0.5)) : Math.min(cw, 290, 480 - 30 - 26 - 180);
+  const cover = m.art
+      ? html`<img class="vp-art" src=${artUrl(m.art, side, side, tv)} width=${side} height=${side} alt="" />`
+      : html`<div class="vp-media-noart" style=${{ width: `${side}px`, height: `${side}px`, color: c(5) }}><${Icon} name=${m.icon || 'music'} size=${Math.round(side / 3)} /></div>`;
+  return html`<div class=${`vp-media-large ${wide ? 'vp-media-wide' : ''}`} style=${{ width: `${cw}px` }}>
+    ${cover}
+    <div class="vp-media-text">
+    <div class="vp-tiny">${m.room}${m.app ? ` · ${m.app}` : ''}${m.playing ? '' : ' · Paused'}</div>
+    <div class="vp-big vp-media-title">${m.title}</div>
+    <div class="vp-med">${m.artist}</div>
+    ${m.album && html`<div class="vp-small" style=${{ color: GREY }}>${m.album}</div>`}
+    ${m.duration
+      ? html`<div class="vp-media-bar"><i style=${{ width: `${Math.min(100, (100 * (m.position || 0)) / m.duration)}%` }}></i></div>
+        <div class="vp-tiny vp-media-times"><span>${clockOf(m.position || 0)}</span><span>${clockOf(m.duration)}</span></div>`
+      : null}
+    </div>
+  </div>`;
+}
+
+const Media = ({ d, w }) =>
+  d.style === 'large'
+    ? html`<${MediaLarge} d=${d} w=${w} />`
+    : d.players.length
     ? html`<div>${d.players.map(
         (m) => html`<div class="vp-row" style="align-items:flex-start;margin-bottom:4px">
           ${m.art
-            ? html`<img class="vp-art" src=${`/api/art?src=${encodeURIComponent(m.art)}&w=72&h=72&fmt=png`} width="72" height="72" alt="" />`
+            ? html`<${ArtSmall} src=${m.art} />`
             : html`<span style=${{ color: c(5) }}><${Icon} name=${m.icon || 'music'} size=${24} /></span>`}
           <div><div class="vp-tiny">${m.room}${m.app ? ` · ${m.app}` : ''}</div><div class="vp-med">${m.title}</div><div class="vp-small">${m.artist}</div></div>
         </div>`

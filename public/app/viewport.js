@@ -1041,7 +1041,10 @@ const EDITORS = {
   roomList: (p) => html`<${RoomsEditor} ...${p} />`,
   people: ({ s, set }) => html`<${NamedList} items=${s.people} onChange=${(l) => set({ ...s, people: l })} domains=${['person', 'device_tracker']} max=${8} addLabel="Add person" />`,
   media: ({ s, set }) =>
-    html`<${NamedList} items=${s.players} onChange=${(l) => set({ ...s, players: l })} domains=${['media_player']} max=${3} addLabel="Add player"
+    html`<div class="row"><${Field} label="Style" hint=${(s.style || 'list') === 'large' ? 'The first player playing, its cover as wide as the column, the track and how far into it: on its own in a column (the right of a screen) it fills it.' : 'A line for each player that’s playing.'}>
+        <${Select} value=${s.style || 'list'} onChange=${(v) => set({ ...s, style: v })} options=${[{ value: 'list', label: 'List' }, { value: 'large', label: 'Large (album art)' }]} />
+      <//></div>
+      <${NamedList} items=${s.players} onChange=${(l) => set({ ...s, players: l })} domains=${['media_player']} max=${3} addLabel="Add player"
       extra=${(it, upd) => html`<${IconPicker} value=${it.icon} onChange=${(icon) => upd({ ...it, icon })} />`} />`,
   transport: TransportEditor,
   alarm: AlarmEditor,
@@ -1093,6 +1096,40 @@ function ShowWhenEditor({ s, set }) {
       <${Select} value=${String(w.liveMin ?? 3)} onChange=${(v) => put({ liveMin: Number(v) })} options=${LIVE_CHOICES} />
     <//>`}
   </div>`;
+}
+
+// When the display switches to a screen by itself (lib/dashboard.js
+// switchWhen): never, while this screen's Now playing plays, or while an
+// entity matches; and how often it looks.
+const CHECK_CHOICES = [0, 1, 2, 3, 5, 10, 15, 30].map((n) => ({ value: String(n), label: n ? `Every ${n} min` : 'Only when the display wakes anyway' }));
+function SwitchCard({ screen, setScreen }) {
+  const w = screen.switchWhen || { mode: 'never', entity: '', cond: 'eq', value: '', checkMin: 0 };
+  const put = (patch) => {
+    const next = { ...w, ...patch };
+    if (patch.mode && patch.mode !== 'never' && w.mode === 'never' && !w.checkMin) next.checkMin = 5;
+    setScreen({ ...screen, switchWhen: next });
+  };
+  const hasMedia = screen.kind === 'sections' && (screen.columns || []).flat().some((s) => s.type === 'media');
+  const modes = [
+    { value: 'never', label: 'Never: only when chosen' },
+    ...(hasMedia || w.mode === 'playing' ? [{ value: 'playing', label: 'While this screen’s Now playing is playing' }] : []),
+    { value: 'entity', label: 'While an entity…' }
+  ];
+  return html`<${Card} icon="swap-horizontal" title="Switch to this screen" subtitle="The display shows this screen by itself while something is true, then goes back to the screen it was on.">
+    <div class="row">
+      <${Field} label="Switch here"><${Select} value=${w.mode} onChange=${(v) => put({ mode: v })} options=${modes} /><//>
+      ${w.mode !== 'never' && html`<${Field} label="Look" hint="How often the display wakes to check, and to keep this screen current while it shows. More often costs battery.">
+        <${Select} value=${String(w.checkMin ?? 5)} onChange=${(v) => put({ checkMin: Number(v) })} options=${CHECK_CHOICES} />
+      <//>`}
+    </div>
+    ${w.mode === 'entity' &&
+    html`<div class="row" style="align-items:flex-end">
+      <${Field} label="Entity"><${EntityPicker} value=${w.entity} onChange=${(id) => put({ entity: id })} /><//>
+      <div style="width:130px"><${Field} label="Is"><${CondSelect} value=${w.cond} onChange=${(v) => put({ cond: v })} /><//></div>
+      <div style="width:160px"><${Field} label="Value"><${TextInput} value=${w.value} placeholder="on" onInput=${(v) => put({ value: v })} /><//></div>
+    </div>`}
+    <p class="hint">For example: Now playing while music plays (a <b>media_player</b> is <b>playing</b>), or a detailed weather screen while a weather warning is on (a <b>binary_sensor</b> is <b>on</b>). If several screens want the display, the first in the list wins. A button press stays where you put it until the condition ends.</p>
+  <//>`;
 }
 
 // --- A section, as a collapsible card ---------------------------------------------------------------
@@ -1688,6 +1725,7 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
           ${preview.loading && html`<${Badge} icon="refresh">Updating<//>`}
           ${errors.length > 0 && html`<span title=${errors.map(([k, v]) => `${k}: ${v}`).join('\n')}><${Badge} kind="warn" icon="alert-outline">${errors.length} couldn't load<//></span>`}
           ${!screen.enabled && html`<${Badge} icon="eye-off-outline">Off<//>`}
+          ${screen.switchWhen && screen.switchWhen.mode !== 'never' && html`<${Badge} kind="accent" icon="swap-horizontal">Switches here by itself<//>`}
         </div>
         <${ViewportPreview} screen=${screen.id} state=${preview.state} error=${preview.error} loading=${preview.loading} highlight=${openId} portrait=${isPortrait(layout)} device=${previewDevice}
           carousel=${layout.screens.filter((s) => s.enabled).map((s) => ({ id: s.id, icon: s.icon }))} />
@@ -1700,6 +1738,7 @@ export function DashboardBuilder({ layout, onChange, rooms, useDragOrder, part }
         : screen.kind === 'roomFinder'
         ? html`<${FinderEditor} screen=${screen} setScreen=${setScreen} layout=${layout} />`
         : html`<${SectionsScreenEditor} screen=${screen} setScreen=${setScreen} ctx=${ctx} openId=${openId} setOpenId=${setOpenId} useDragOrder=${useDragOrder} portrait=${isPortrait(layout)} />`}
+      <${SwitchCard} screen=${screen} setScreen=${setScreen} />
     </div>`}
   </div>`;
 }

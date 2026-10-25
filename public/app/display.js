@@ -13,6 +13,10 @@
 //   the remote's arrows   previous / next screen, OK the first one;
 //   the carousel          the layout's own: stay, advance, or back to the
 //                         first screen, every N minutes;
+//   switching             a screen whose rule holds (the server's switchTo)
+//                         takes over, and the one before comes back after;
+//                         a button press stays where it's put until the
+//                         rule ends;
 //   burn-in               the whole picture shifts a few pixels now and then.
 // ?app=<version> is the TV app (it says so as X-Board androidtv); ?id= an id
 // of its own; ?name= what to call it at first.
@@ -102,6 +106,9 @@ function Screens({ token, onLost }) {
   const [at, setAt] = useState(0);
   const [shift, setShift] = useState([0, 0]);
   const lastKey = useRef(Date.now());
+  // A screen that took over by itself: which, the one to go back to, and one
+  // a button press dismissed (until its rule ends).
+  const takeover = useRef({ active: '', returnTo: 0, dismissed: '' });
 
   const load = useCallback(async (what) => {
     try {
@@ -131,8 +138,33 @@ function Screens({ token, onLost }) {
   const n = screens.length;
   const go = (i) => {
     lastKey.current = Date.now();
+    const t = takeover.current;
+    if (t.active) {
+      t.dismissed = t.active;
+      t.active = '';
+    }
     setAt(((i % n) + n) % n);
   };
+
+  // The server's switchTo: there while it says so, then back.
+  const switchTo = (state && state.switchTo) || '';
+  useEffect(() => {
+    if (!n) return;
+    const t = takeover.current;
+    const target = screens.findIndex((s) => s.id === switchTo);
+    if (!switchTo || target < 0) {
+      t.dismissed = '';
+      if (t.active) {
+        t.active = '';
+        setAt(Math.min(t.returnTo, n - 1));
+      }
+      return;
+    }
+    if (switchTo === t.dismissed || switchTo === t.active) return;
+    if (!t.active) t.returnTo = at;
+    t.active = switchTo;
+    setAt(target);
+  }, [switchTo, n]);
 
   // The remote: arrows page, OK goes home.
   useEffect(() => {
@@ -154,6 +186,7 @@ function Screens({ token, onLost }) {
     const { mode, everyMin } = layout.carousel || {};
     if (mode !== 'advance' && mode !== 'returnFirst') return undefined;
     const t = setInterval(() => {
+      if (takeover.current.active) return; // (a screen that took over stays)
       if (Date.now() - lastKey.current < everyMin * 60000) return;
       lastKey.current = Date.now();
       setAt((i) => (mode === 'advance' ? (i + 1) % n : 0));
