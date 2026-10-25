@@ -705,8 +705,10 @@ app.get('/api/art', auth.requireAdminOrDevice, async (req, res) => {
       height: Number(req.query.h) || size || 120,
       format: String(req.query.fmt || 'mask1'),
       fit: req.query.fit === 'contain' ? 'contain' : 'cover',
-      // A photo is cropped around what matters in it, not its middle.
-      position: src.startsWith('immich:') ? 'attention' : 'centre',
+      // A photo, or an album cover (Home Assistant's media_player_proxy:
+      // cropped hard for a Now playing cover), around what matters in it,
+      // not its middle.
+      position: src.startsWith('immich:') || src.includes('/api/media_player_proxy/') ? 'attention' : 'centre',
       // How strong a photo's colours come out (its section's choice).
       strength: immich.strengthOf(src)
     }, store.getGlobals(), (s, side) => immich.resolveSrc(s, undefined, side) || enigma2.resolvePiconSrc(s, store.getProfile));

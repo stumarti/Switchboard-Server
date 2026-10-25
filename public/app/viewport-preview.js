@@ -294,6 +294,28 @@ function MediaLarge({ d, w }) {
   </div>`;
 }
 
+// Cover: the cover filling its column edge to edge, the track over its lower
+// part in white with a black edge (as a photo frame's lines). `h`: its height.
+function MediaCover({ d, w, h }) {
+  const tv = useTv();
+  const m = d.players[0];
+  if (!m) return html`<${Missing} what="Nothing playing" />`;
+  return html`<div class="vp-media-cover" style=${{ width: `${w}px`, height: `${h}px` }}>
+    ${m.art
+      ? html`<img src=${artUrl(m.art, w, h, tv)} width=${w} height=${h} alt="" />`
+      : html`<div class="vp-media-cover-none"><${Icon} name=${m.icon || 'music'} size=${48} /></div>`}
+    <div class="vp-frame-text vp-media-cover-text">
+      <div class="vp-media-cover-where">${m.room}${m.app ? ` · ${m.app}` : ''}${m.playing ? '' : ' · Paused'}</div>
+      <div class="vp-media-cover-title">${m.title}</div>
+      ${m.artist && html`<div class="vp-media-cover-artist">${m.artist}</div>`}
+      ${m.duration
+        ? html`<div class="vp-media-cover-bar"><i style=${{ width: `${Math.min(100, (100 * (m.position || 0)) / m.duration)}%` }}></i></div>
+          <div class="vp-media-times vp-media-cover-artist"><span>${clockOf(m.position || 0)}</span><span>${clockOf(m.duration)}</span></div>`
+        : null}
+    </div>
+  </div>`;
+}
+
 const Media = ({ d, w }) =>
   d.style === 'large'
     ? html`<${MediaLarge} d=${d} w=${w} />`
@@ -551,6 +573,12 @@ function SectionsScreen({ d, highlight, portrait, W = portrait ? 480 : 800, H = 
         ${col.map((s) => {
           if (s.type === 'message' && !(s.data && s.data.lines.length)) return null;
           if (s.type === 'spacer') return html`<div class=${highlight === s.id ? 'vp-hl' : ''} style=${{ height: `${s.data?.height ?? 0}px` }}></div>`;
+          // Now playing, cover: the rest of the column, edge to edge; in the
+          // left-hand column to the panel's foot (the footer's on the right).
+          if (s.type === 'media' && s.data && s.data.style === 'cover') {
+            const cw = portrait ? W : ci === 0 ? colWFor(d.template, W)[0] : colWFor(d.template, W)[ci] || 400;
+            return html`<div class=${`kd-media-cover-wrap ${highlight === s.id ? 'vp-hl' : ''}`}><${MediaCover} d=${s.data} w=${cw} h=${ci === 0 && !portrait ? H : H - 30} /></div>`;
+          }
           const Dash = DASH_SECTIONS[s.type];
           const drawn = Dash && s.data != null ? Dash({ d: s.data, title: s.title, siblings: all }) : null;
           if (drawn) return html`<div class=${`kd-section kd-${s.type} ${highlight === s.id ? 'vp-hl' : ''}`}>${drawn}</div>`;
