@@ -18,7 +18,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -32,6 +32,18 @@ jobs:
             exit 1
           }
 
+      # vX.Y.Z (or X.Y.Z-something): anything else (v.3.2.0, v3.2) stops
+      # here with what to do, rather than as a bad image tag in the build.
+      - name: Derive version from the tag
+        id: meta
+        run: |
+          v="${GITHUB_REF_NAME#[vV]}"
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} isn't vX.Y.Z (e.g. v3.2.0). Delete it (git push origin :refs/tags/${GITHUB_REF_NAME}) and tag again."
+            exit 1
+          fi
+          echo "version=${v}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -41,12 +53,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Derive version from the tag
-        id: meta
-        run: |
-          v="${GITHUB_REF_NAME#[vV]}"
-          echo "version=${v}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -60,6 +66,6 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/switchboard-server:${{ steps.meta.outputs.version }}
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
