@@ -415,7 +415,7 @@ export function lastChargedText(life) {
 }
 
 // A board (the kind of device a firmware build is for) as people call it.
-const BOARD_NAMES = { x4pro: 'X4 Pro', sticky: 'Sticky', e1002: 'reTerminal E1002', e1004: 'reTerminal E1004' };
+const BOARD_NAMES = { x4pro: 'X4 Pro', sticky: 'Sticky', e1002: 'reTerminal E1002', e1004: 'reTerminal E1004', androidtv: 'Android TV', browser: 'Web browser' };
 export function boardLabel(board) {
   return BOARD_NAMES[board] || board || '';
 }

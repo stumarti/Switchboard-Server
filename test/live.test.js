@@ -146,3 +146,22 @@ test('spectra: no white dots in the dark, no black ones in the light; greys keep
   assert.equal(count(flat([255, 255, 0]), 0), 0);
   assert.ok(count(flat([255, 255, 0]), 3) > 64 * 64 * 0.9);
 });
+
+test('mask1: dithered like the photos: no smear after a dark run, no stray dots in flat black or white', () => {
+  const art = require('../lib/art');
+  const ones = (bits, n) => {
+    let c = 0;
+    for (let x = 0; x < n; x++) if (bits[x >> 3] & (0x80 >> (x & 7))) c++;
+    return c;
+  };
+  // Flat near-black and near-white: all ink, all paper.
+  assert.equal(ones(art.toMask1(Buffer.alloc(64, 15), 64, 1), 64), 0);
+  assert.equal(ones(art.toMask1(Buffer.alloc(64, 240), 64, 1), 64), 64);
+  // A long run of dark grey then mid grey: the mid grey comes out about half
+  // paper, not swamped by error carried from the dark run.
+  const row = Buffer.concat([Buffer.alloc(400, 40), Buffer.alloc(200, 128)]);
+  const bits = art.toMask1(row, 600, 1);
+  let paper = 0;
+  for (let x = 400; x < 600; x++) if (bits[x >> 3] & (0x80 >> (x & 7))) paper++;
+  assert.ok(paper > 80 && paper < 120, `${paper} of 200`);
+});

@@ -122,10 +122,10 @@ test('a photo section and a screen background in the state; the key never in it'
   assert.equal(photo.height, 300);
   assert.equal(photo.empty, '');
   assert.ok(['Dublin, Ireland', 'Galway, Ireland'].includes(photo.caption));
-  assert.deepEqual(s.background, { src: `immich:${FAVS[0].id}`, caption: '7 October 2019', empty: '', cards: 'white' });
+  assert.deepEqual(s.background, { src: `immich:${FAVS[0].id}`, caption: '7 October 2019', empty: '', motion: false, cards: 'white' });
   // No Immich: the screen still builds, saying why there's no photo.
   const none = buildScreens(layout, { states: {}, photos: {} }).pics;
-  assert.deepEqual(none.background, { src: '', caption: '', empty: 'No photo', cards: 'white' });
+  assert.deepEqual(none.background, { src: '', caption: '', empty: 'No photo', motion: false, cards: 'white' });
   // The layout a display gets has the sources, never the connection.
   assert.ok(!JSON.stringify(deviceLayout(layout)).includes('k-secret'));
   assert.ok(!JSON.stringify(s).includes('k-secret'));
