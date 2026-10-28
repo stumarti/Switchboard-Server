@@ -1265,3 +1265,12 @@ html.display, html.display body { margin: 0; width: 100%; height: 100%; overflow
 .vp-media-bar { height: 6px; border: 1px solid #111; margin-top: 8px; position: relative; }
 .vp-media-bar > i { position: absolute; left: 0; top: 0; bottom: 0; background: #111; }
 .vp-media-times { display: flex; justify-content: space-between; }
+/* Now playing, cover: edge to edge, the track over its foot. */
+.vp-media-cover { position: relative; overflow: hidden; background: #111; flex: none; }
+.vp-media-cover > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.vp-media-cover-none { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; }
+.vp-media-cover-text { left: 12px; right: 12px; bottom: 12px; gap: 2px; }
+.vp-media-cover-where, .vp-media-cover-artist { font-weight: 400; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vp-media-cover-title { font-size: 22px; line-height: 1.15; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.vp-media-cover-bar { height: 8px; margin-top: 6px; border: 1px solid #fff; outline: 1px solid #111; position: relative; }
+.vp-media-cover-bar > i { position: absolute; left: 0; top: 0; bottom: 0; background: #fff; }

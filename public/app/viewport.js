@@ -1041,8 +1041,8 @@ const EDITORS = {
   roomList: (p) => html`<${RoomsEditor} ...${p} />`,
   people: ({ s, set }) => html`<${NamedList} items=${s.people} onChange=${(l) => set({ ...s, people: l })} domains=${['person', 'device_tracker']} max=${8} addLabel="Add person" />`,
   media: ({ s, set }) =>
-    html`<div class="row"><${Field} label="Style" hint=${(s.style || 'list') === 'large' ? 'The first player playing, its cover as wide as the column, the track and how far into it: on its own in a column (the right of a screen) it fills it.' : 'A line for each player that’s playing.'}>
-        <${Select} value=${s.style || 'list'} onChange=${(v) => set({ ...s, style: v })} options=${[{ value: 'list', label: 'List' }, { value: 'large', label: 'Large (album art)' }]} />
+    html`<div class="row"><${Field} label="Style" hint=${MEDIA_STYLE_HINTS[s.style || 'list']}>
+        <${Select} value=${s.style || 'list'} onChange=${(v) => set({ ...s, style: v })} options=${[{ value: 'list', label: 'List' }, { value: 'large', label: 'Large (album art)' }, { value: 'cover', label: 'Cover (fills the column)' }]} />
       <//></div>
       <${NamedList} items=${s.players} onChange=${(l) => set({ ...s, players: l })} domains=${['media_player']} max=${3} addLabel="Add player"
       extra=${(it, upd) => html`<${IconPicker} value=${it.icon} onChange=${(icon) => upd({ ...it, icon })} />`} />`,
@@ -1056,6 +1056,12 @@ const EDITORS = {
   airQuality: AirQualityEditor,
   photo: PhotoEditor,
   cameras: ({ s, set }) => html`<${NamedList} items=${s.cameras} onChange=${(l) => set({ ...s, cameras: l })} domains=${['binary_sensor', 'sensor', 'camera', 'event']} max=${10} addLabel="Add camera" />`
+};
+
+const MEDIA_STYLE_HINTS = {
+  list: 'A line for each player that’s playing.',
+  large: 'The first player playing, its cover as wide as the column, the track and how far into it: on its own in a column (the right of a screen) it fills it.',
+  cover: 'The first player playing, its cover filling the column edge to edge with the track over it in white. Put it in a sidebar’s left column (first, on its own) and it fills the whole left of the screen.'
 };
 
 // Sections whose content changes on its own. A viewport runs on battery,

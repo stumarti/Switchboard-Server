@@ -48,6 +48,10 @@ test('media: large, the one playing, with how far into the track', () => {
   const p = d.players[0];
   assert.deepEqual([p.title, p.artist, p.album, p.duration, p.position], ['Song', 'Band', 'Album', 200, 70]); // 30 s + the 40 since
   assert.ok(!p.art.includes('token='));
+  // Cover: the same, as its own style.
+  const c = dashboard.normalizeLayout({ screens: [{ id: 'a', kind: 'sections', template: 'sidebar', columns: [[{ type: 'media', style: 'cover', players: [{ entity: 'media_player.kitchen' }] }], []] }] });
+  const cd = buildScreens(c, { states, now }).a.columns[0][0].data;
+  assert.deepEqual([cd.style, cd.players[0].position, cd.players[0].album], ['cover', 70, 'Album']);
   // A list (the default) has none of that.
   const l = dashboard.normalizeLayout({ screens: [{ id: 'a', kind: 'sections', template: 'single', columns: [[{ type: 'media', players: [{ entity: 'media_player.kitchen' }] }]] }] });
   const ld = buildScreens(l, { states, now }).a.columns[0][0].data;
