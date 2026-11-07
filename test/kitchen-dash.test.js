@@ -390,3 +390,22 @@ test('heating zones can have an icon: in the state, and in the icons a display f
   const h = buildScreens(l, { states: house(), forecasts, calendars, now: NOW, timeZone: TZ }).heating.columns[0][0].data;
   assert.deepEqual(h.zones.map((z) => z.icon), ['stove', '', '', '', '']);
 });
+
+test('weather: high and low, today and each day, only when asked', () => {
+  const layout = (highLow) => {
+    const l = dashboard.defaultLayout();
+    for (const sc of l.screens) for (const s of (sc.columns || []).flat()) if (s.type === 'weather') s.highLow = highLow;
+    return l;
+  };
+  assert.equal(data(screens().status, 'status-weather').highLow, null);
+  let w = data(buildScreens(layout(true), { states: house(), forecasts, calendars, now: NOW, timeZone: TZ }).status, 'status-weather');
+  assert.deepEqual(w.highLow, { high: 15, low: 9 });
+  assert.deepEqual(w.forecast.map((f) => [f.high, f.low]), [[16.4, 8], [18, 10], [12.5, 7]]);
+  // A daily forecast from tomorrow: what's left of today, hour by hour.
+  const fromTomorrow = {
+    daily: { 'weather.home': forecasts.daily['weather.home'].slice(1) },
+    hourly: { 'weather.home': [{ datetime: '2026-09-28T12:00:00Z', temperature: 17.2 }, { datetime: '2026-09-28T18:00:00Z', temperature: 11.4 }, { datetime: '2026-09-29T03:00:00Z', temperature: 4 }] }
+  };
+  w = data(buildScreens(layout(true), { states: house(), forecasts: fromTomorrow, calendars, now: NOW, timeZone: TZ }).status, 'status-weather');
+  assert.deepEqual(w.highLow, { high: 17.2, low: 11.4 });
+});
