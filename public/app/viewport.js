@@ -141,7 +141,7 @@ function newSection(type) {
   const base = { id: newId(), type, title: '' };
   switch (type) {
     case 'weather':
-      return { ...base, entity: '', later: true, days: 2, hourlyEntity: '', rain: false, rainHours: 12, rainThresholdMm: 0.1, solarForecast: '' };
+      return { ...base, entity: '', later: true, days: 2, highLow: false, hourlyEntity: '', rain: false, rainHours: 12, rainThresholdMm: 0.1, solarForecast: '' };
     case 'energyGraph':
       return {
         ...base,
@@ -332,6 +332,7 @@ function WeatherEditor({ s, set }) {
     <div class="row" style="align-items:center">
       <${Toggle} checked=${s.later} onChange=${(v) => set({ ...s, later: v })} label="“Later” (about 3 hours out)" />
       <div style="width:130px"><${Field} label="Days ahead"><${NumberInput} min="0" max="5" value=${s.days} onChange=${(v) => set({ ...s, days: v })} /><//></div>
+      <${Toggle} checked=${s.highLow} onChange=${(v) => set({ ...s, highLow: v })} label="High and low temperatures" />
     </div>
     <div class="row" style="align-items:flex-end">
       <${Toggle} checked=${s.rain} onChange=${(v) => set({ ...s, rain: v })} label="Rain outlook (“Rain at 14:00”)" />
