@@ -676,7 +676,7 @@ function noteStyle(corner, footer) {
 // Its full weather (the information screens' own), small, on the left: in
 // the lines' colour and edge, or its own when it has a corner of its own.
 const FRAME_WX_W = 250;
-const frameWxHeight = (w) => ((w.forecast || []).length ? 216 : 116);
+const frameWxHeight = (w) => ((w.forecast || []).length ? 216 : 116) + (w.today ? 26 : 0);
 function FrameWeather({ w, style }) {
   return html`<div class=${`vp-frame-text vp-frame-wx ${w.outline === false ? 'plain' : ''} ${w.ink === 'black' ? 'ink-black' : ''}`} style=${{ width: `${FRAME_WX_W}px`, height: `${frameWxHeight(w)}px`, ...style }}>
     <${DashWeather} d=${w} ink=${w.ink === 'black' ? 1 : 0} />

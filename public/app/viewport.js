@@ -141,7 +141,7 @@ function newSection(type) {
   const base = { id: newId(), type, title: '' };
   switch (type) {
     case 'weather':
-      return { ...base, entity: '', later: true, days: 2, hourlyEntity: '', rain: false, rainHours: 12, rainThresholdMm: 0.1, solarForecast: '' };
+      return { ...base, entity: '', later: true, days: 2, minMax: false, hourlyEntity: '', rain: false, rainHours: 12, rainThresholdMm: 0.1, solarForecast: '' };
     case 'energyGraph':
       return {
         ...base,
@@ -330,6 +330,7 @@ const sensorField = (s, set, key, label, domains = ['sensor']) =>
 function WeatherEditor({ s, set }) {
   return html`<div class="row">${sensorField(s, set, 'entity', 'Weather entity', ['weather'])}${sensorField(s, set, 'hourlyEntity', 'Hourly forecast from (optional)', ['weather'])}</div>
     <div class="row" style="align-items:center">
+      <${Toggle} checked=${s.minMax} onChange=${(v) => set({ ...s, minMax: v })} label="Today’s high and low" />
       <${Toggle} checked=${s.later} onChange=${(v) => set({ ...s, later: v })} label="“Later” (about 3 hours out)" />
       <div style="width:130px"><${Field} label="Days ahead"><${NumberInput} min="0" max="5" value=${s.days} onChange=${(v) => set({ ...s, days: v })} /><//></div>
     </div>
