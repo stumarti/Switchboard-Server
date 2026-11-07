@@ -88,24 +88,26 @@ export function DashWeather({ d, ink = 1 }) {
   const tCol = t < 0 ? 5 : t > 20 ? 2 : ink;
   const cell = 80;
   const rain = d.rain && d.rain.state !== 'dry' ? d.rain : null;
-  // Today's high and low under the temperature push the rest down a line.
-  const dy = d.today ? 26 : 0;
-  const deg = (v) => (v == null ? '--' : html`${Math.round(v)}<span class="kd-deg kd-deg-sm" style=${{ borderColor: k(ink) }}></span>`);
+  // Today's high and low under the temperature move the rest down 24.
+  const hl = d.highLow;
+  const o = hl ? 24 : 0;
+  const deg = (v) => (v == null ? '--' : html`${Math.round(v)}<span class="kd-deg-sm"></span>`);
   return html`<div class="kd-block" style="height:262px">
     <${T} x=${5} y=${70} size=${82} bold color=${tCol}>${d.temperatureText}<span class="kd-deg" style=${{ borderColor: k(tCol) }}></span><//>
     <${Art} x=${152} y=${2} slot=${wxSlot(d.icon)} name=${wxIcon(d.icon)} size=${88} color=${ink} />
-    ${d.today &&
-    html`<${T} x=${10} y=${100} bold color=${ink}>▲ ${deg(d.today.high)}<//><${T} x=${10 + cell} y=${100} bold color=${ink}>▼ ${deg(d.today.low)}<//>`}
-    <${I} x=${10} y=${88 + dy} name="water-percent" size=${24} color=${ink} /><${T} x=${36} y=${106 + dy} color=${ink}>${d.humidityText}%<//>
-    <${I} x=${10 + cell} y=${88 + dy} name="weather-windy" size=${24} color=${ink} /><${T} x=${36 + cell} y=${106 + dy} color=${ink}>${d.windText}<${Icon} name=${windIcon(d.bearing)} size=${18} /><//>
-    <${I} x=${10 + cell * 2} y=${88 + dy} name="sun-wireless" size=${24} color=${ink} /><${T} x=${36 + cell * 2} y=${106 + dy} color=${ink}>${d.uvText}<//>
+    ${hl && html`<${T} x=${10} y=${98} color=${ink}>High ${deg(hl.high)}<span style="margin-left:16px">Low </span>${deg(hl.low)}<//>`}
+    <${I} x=${10} y=${88 + o} name="water-percent" size=${24} color=${ink} /><${T} x=${36} y=${106 + o} color=${ink}>${d.humidityText}%<//>
+    <${I} x=${10 + cell} y=${88 + o} name="weather-windy" size=${24} color=${ink} /><${T} x=${36 + cell} y=${106 + o} color=${ink}>${d.windText}<${Icon} name=${windIcon(d.bearing)} size=${18} /><//>
+    <${I} x=${10 + cell * 2} y=${88 + o} name="sun-wireless" size=${24} color=${ink} /><${T} x=${36 + cell * 2} y=${106 + o} color=${ink}>${d.uvText}<//>
     ${rain
-      ? html`<${I} x=${5} y=${116 + dy} name="water" size=${24} color=${5} /><${T} x=${33} y=${132 + dy} bold color=${5}>${rain.text}<//>`
-      : d.solar && html`<${I} x=${5} y=${116 + dy} name="solar-panel" size=${24} color=${ink} /><${T} x=${33} y=${132 + dy} bold color=${ink}>${d.solar.text}<//>`}
+      ? html`<${I} x=${5} y=${116 + o} name="water" size=${24} color=${5} /><${T} x=${33} y=${132 + o} bold color=${5}>${rain.text}<//>`
+      : d.solar && html`<${I} x=${5} y=${116 + o} name="solar-panel" size=${24} color=${ink} /><${T} x=${33} y=${132 + o} bold color=${ink}>${d.solar.text}<//>`}
     ${(d.forecast || []).slice(0, 3).map(
-      (f, i) => html`<${T} x=${5 + i * cell} w=${cell} center y=${163 + dy} bold color=${ink}>${f.label}<//>
-        <${Art} x=${5 + i * cell + 24} y=${166 + dy} slot=${wxSlot(f.condition, true)} name=${wxIcon(f.condition)} size=${32} color=${ink} />
-        <${T} x=${5 + i * cell} w=${cell} center y=${210 + dy} bold color=${ink}>${f.high == null ? '--' : Math.round(f.high)}<//>`
+      (f, i) => html`<${T} x=${5 + i * cell} w=${cell} center y=${163 + o} bold color=${ink}>${f.label}<//>
+        <${Art} x=${5 + i * cell + 24} y=${166 + o} slot=${wxSlot(f.condition, true)} name=${wxIcon(f.condition)} size=${32} color=${ink} />
+        ${hl && f.low != null
+          ? html`<${T} x=${5 + i * cell} w=${cell} center y=${210 + o} color=${ink}>${deg(f.high)}<span style="margin-left:8px">${deg(f.low)}</span><//>`
+          : html`<${T} x=${5 + i * cell} w=${cell} center y=${210 + o} bold color=${ink}>${f.high == null ? '--' : Math.round(f.high)}<//>`}`
     )}
   </div>`;
 }
