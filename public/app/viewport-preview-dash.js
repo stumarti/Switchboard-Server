@@ -88,14 +88,20 @@ export function DashWeather({ d, ink = 1 }) {
   const tCol = t < 0 ? 5 : t > 20 ? 2 : ink;
   const cell = 80;
   const rain = d.rain && d.rain.state !== 'dry' ? d.rain : null;
-  // Today's high and low ("▲15° ▼9°") under the temperature move the rest down 20.
+  // Today's high and low ("15° / 9°") under the temperature move the rest
+  // down 20. Each in the big temperature's colours.
   const hl = d.highLow;
   const o = hl ? 20 : 0;
-  const deg = (v) => (v == null ? '--' : html`${Math.round(v)}<span class="kd-deg-sm"></span>`);
+  const deg = (v) => {
+    if (v == null) return '--';
+    const r = Math.round(v);
+    return html`<span style=${{ color: k(r < 0 ? 5 : r > 20 ? 2 : ink) }}>${r}<span class="kd-deg-sm"></span></span>`;
+  };
+  const slash = (hi, lo, gap) => html`${deg(hi)}<span style=${{ margin: `0 ${gap}px` }}>/</span>${deg(lo)}`;
   return html`<div class="kd-block" style="height:262px">
     <${T} x=${5} y=${70} size=${82} bold color=${tCol}>${d.temperatureText}<span class="kd-deg" style=${{ borderColor: k(tCol) }}></span><//>
     <${Art} x=${152} y=${2} slot=${wxSlot(d.icon)} name=${wxIcon(d.icon)} size=${88} color=${ink} />
-    ${hl && html`<${T} x=${10} y=${96} color=${ink}><span class="kd-arrow up"></span>${deg(hl.high)}<span class="kd-arrow down" style="margin-left:12px"></span>${deg(hl.low)}<//>`}
+    ${hl && html`<${T} x=${10} y=${96} color=${ink}>${slash(hl.high, hl.low, 6)}<//>`}
     <${I} x=${10} y=${88 + o} name="water-percent" size=${24} color=${ink} /><${T} x=${36} y=${106 + o} color=${ink}>${d.humidityText}%<//>
     <${I} x=${10 + cell} y=${88 + o} name="weather-windy" size=${24} color=${ink} /><${T} x=${36 + cell} y=${106 + o} color=${ink}>${d.windText}<${Icon} name=${windIcon(d.bearing)} size=${18} /><//>
     <${I} x=${10 + cell * 2} y=${88 + o} name="sun-wireless" size=${24} color=${ink} /><${T} x=${36 + cell * 2} y=${106 + o} color=${ink}>${d.uvText}<//>
@@ -106,7 +112,7 @@ export function DashWeather({ d, ink = 1 }) {
       (f, i) => html`<${T} x=${5 + i * cell} w=${cell} center y=${163 + o} bold color=${ink}>${f.label}<//>
         <${Art} x=${5 + i * cell + 24} y=${166 + o} slot=${wxSlot(f.condition, true)} name=${wxIcon(f.condition)} size=${32} color=${ink} />
         ${hl && f.low != null
-          ? html`<${T} x=${5 + i * cell} w=${cell} center y=${210 + o} color=${ink}>${deg(f.high)}<span style="margin-left:8px">${deg(f.low)}</span><//>`
+          ? html`<${T} x=${5 + i * cell} w=${cell} center y=${210 + o} color=${ink}>${slash(f.high, f.low, 1)}<//>`
           : html`<${T} x=${5 + i * cell} w=${cell} center y=${210 + o} bold color=${ink}>${f.high == null ? '--' : Math.round(f.high)}<//>`}`
     )}
   </div>`;
