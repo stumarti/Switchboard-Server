@@ -430,6 +430,18 @@ const AirQuality = ({ d }) =>
       </div>`)}</div>`
     : html`<${Missing} what=${d.empty} />`;
 
+const Batteries = ({ d }) =>
+  d.items.length
+    ? html`<div>
+        ${d.items.map((it) => html`<div class="vp-row vp-rowline">
+          <span style=${{ color: c(it.color) }}><${Icon} name=${it.icon} size=${24} /></span>
+          <span class="vp-med" style="flex:1">${it.name}</span>
+          <span class="vp-med" style=${{ color: c(it.color) }}>${it.value}</span>
+        </div>`)}
+        ${d.more > 0 && html`<div class="vp-small vp-muted">and ${d.more} more</div>`}
+      </div>`
+    : html`<${Missing} what=${d.empty} />`;
+
 // A photo from Immich, as the panel shows it (the server's six-colour
 // picture), with its caption underneath. `w`: the column's width.
 // (On a TV: in full colour, at the screen's resolution.)
@@ -539,7 +551,8 @@ const SECTIONS = {
   guestWifi: GuestWifi,
   message: Message,
   bins: Bins,
-  airQuality: AirQuality
+  airQuality: AirQuality,
+  batteries: Batteries
 };
 
 // The panel's columns: a 250 px sidebar and the main column (a dotted

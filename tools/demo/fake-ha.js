@@ -100,6 +100,11 @@ const states = [
   S('sensor.grid_import_today', '0.6', { friendly_name: 'Imported today', unit_of_measurement: 'kWh' }),
   S('sensor.battery_soc', '87', { friendly_name: 'Home battery', unit_of_measurement: '%', device_class: 'battery' }),
   S('sensor.battery_status', 'charging', { friendly_name: 'Home battery status' }),
+  // Batteries around the house, for a Batteries section: two low, one gone offline.
+  S('sensor.hall_dimmer_battery', '5', { friendly_name: 'Hall Dimmer Battery', unit_of_measurement: '%', device_class: 'battery' }),
+  S('sensor.front_door_lock_battery', '14', { friendly_name: 'Front door lock battery', unit_of_measurement: '%', device_class: 'battery' }),
+  S('sensor.landing_sensor_battery', '64', { friendly_name: 'Landing sensor battery', unit_of_measurement: '%', device_class: 'battery' }),
+  S('sensor.garden_sensor_battery', 'unavailable', { friendly_name: 'Garden sensor Battery', unit_of_measurement: '%', device_class: 'battery' }),
   S('sensor.battery_time_to_full', '1h 10m', { friendly_name: 'Home battery time to full' }),
   S('sensor.solar_power', '2400', { friendly_name: 'Solar power', unit_of_measurement: 'W' }),
   S('sensor.home_power', '900', { friendly_name: 'Home power', unit_of_measurement: 'W' }),

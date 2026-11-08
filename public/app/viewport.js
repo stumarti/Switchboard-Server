@@ -125,6 +125,7 @@ export const SECTION_META = {
   message: { label: 'Message', icon: 'message-text-outline', about: 'Your own words, with live values filled in' },
   bins: { label: 'Bin collection', icon: 'trash-can-outline', about: 'Which bin goes out next, and when' },
   airQuality: { label: 'Air quality', icon: 'air-filter', about: 'CO2, particles, pollen: good, fair or poor' },
+  batteries: { label: 'Batteries', icon: 'battery-alert-variant-outline', about: 'Batteries running low, and devices gone offline' },
   photo: { label: 'Photo', icon: 'image-outline', about: 'A photo from Immich that changes on its own' }
 };
 
@@ -189,6 +190,8 @@ function newSection(type) {
       return { ...base, title: 'Bins', calendar: '', bins: [], days: 21, count: 3, tonightFrom: 16 };
     case 'airQuality':
       return { ...base, title: 'Air quality', items: [], showLevel: true };
+    case 'batteries':
+      return { ...base, title: 'Low batteries', auto: true, entities: [], exclude: [], below: 20, offline: true, count: 6, hideWhenFine: true };
     case 'heating':
       return { ...base, entity: '', zones: [], hotWater: '', callingDelta: 0.5 };
     case 'photo':
@@ -861,6 +864,34 @@ function AirQualityEditor({ s, set }) {
     <p class="hint">Each reading is green, yellow or red by its kind's usual limits, or your own. Pollen and other sensors that give words (low, moderate, high) are coloured by the word.</p>`;
 }
 
+function BatteriesEditor({ s, set }) {
+  // The leave-out list is entity ids; the list editor wants items.
+  const skip = s.exclude.map((e, i) => ({ id: `x${i}`, entity: e }));
+  return html`
+    <${Toggle} checked=${s.auto} onChange=${(v) => set({ ...s, auto: v })} label="Every battery Home Assistant has" />
+    <div class="row" style="align-items:flex-end">
+      <div style="width:150px"><${Field} label="Show at or below (%)"><${NumberInput} min="1" max="100" value=${s.below} onChange=${(v) => set({ ...s, below: v })} /><//></div>
+      <div style="width:110px"><${Field} label="At most"><${NumberInput} min="1" max="12" value=${s.count} onChange=${(v) => set({ ...s, count: v })} /><//></div>
+    </div>
+    <${Toggle} checked=${s.offline} onChange=${(v) => set({ ...s, offline: v })} label="Also show batteries that have gone offline" />
+    <${Toggle} checked=${s.hideWhenFine} onChange=${(v) => set({ ...s, hideWhenFine: v })} label="Hide while none are low" />
+    <${Field} label=${s.auto ? 'Also include' : 'Batteries'} hint=${s.auto ? 'Any other % sensor, such as a home battery’s charge.' : ''}>
+      <${NamedList} items=${s.entities} onChange=${(l) => set({ ...s, entities: l })} domains=${['sensor', 'binary_sensor']} max=${16} addLabel="Add battery" />
+    <//>
+    ${s.auto &&
+    html`<${Field} label="Leave out"><${ItemList}
+        items=${skip}
+        max=${40}
+        addLabel="Leave one out"
+        onChange=${(l) => set({ ...s, exclude: l.map((x) => x.entity) })}
+        newItem=${() => ({ id: `x${skip.length}`, entity: '' })}
+        render=${(it, upd) => html`<${EntityPicker} domains=${['sensor', 'binary_sensor']} value=${it.entity} onChange=${(id) => upd({ ...it, entity: id })} />`}
+      /><//>`}
+    <p class="hint">
+      Lowest first, red at or below the layout's critical battery level (Thresholds). Names lose a trailing “Battery”, so “Hall Dimmer Battery” reads “Hall Dimmer”; a label of your own wins. A battery binary sensor shows as Low while it's on.
+    </p>`;
+}
+
 // --- Photos from Immich (a section, or a screen's background) ------------------------------
 
 const PHOTO_KINDS = [
@@ -1055,6 +1086,7 @@ const EDITORS = {
   message: MessageEditor,
   bins: BinsEditor,
   airQuality: AirQualityEditor,
+  batteries: BatteriesEditor,
   photo: PhotoEditor,
   cameras: ({ s, set }) => html`<${NamedList} items=${s.cameras} onChange=${(l) => set({ ...s, cameras: l })} domains=${['binary_sensor', 'sensor', 'camera', 'event']} max=${10} addLabel="Add camera" />`
 };
