@@ -229,3 +229,35 @@ test('firmware: "update now" can skip the pilot: the release goes to every devic
   assert.equal(firmware.configFor(OTHER, remote('v0.1.0')).now, true);
   assert.equal(x4().now.waiting, 2);
 });
+
+test('firmware: GitHub 5xx is tried again before it is reported; other errors at once', async () => {
+  const saved = [...firmware.GH_RETRY_MS];
+  firmware.GH_RETRY_MS.splice(0, saved.length, 0, 0); // no pauses in the test
+  try {
+    const rel = [{ tag_name: 'v0.3.0', published_at: '2026-09-01T00:00:00Z', assets: [{ name: 'switchboard-sticky-app-v0.3.0.bin' }] }];
+    const answers = (...statuses) => {
+      const calls = [];
+      const fetchImpl = async (url) => {
+        const status = statuses[Math.min(calls.length, statuses.length - 1)];
+        calls.push(url);
+        return { ok: status === 200, status, json: async () => rel };
+      };
+      return { calls, fetchImpl };
+    };
+    // A 504 then a 200: the releases, after one more try.
+    let a = answers(504, 200);
+    const list = await firmware.githubReleases({ repo: 'stumarti/Switchboard', fetchImpl: a.fetchImpl });
+    assert.equal(list[0].tag, 'v0.3.0');
+    assert.equal(a.calls.length, 2);
+    // 504 every time: three tries, then reported as GitHub's.
+    a = answers(504);
+    await assert.rejects(firmware.githubReleases({ repo: 'stumarti/Switchboard', fetchImpl: a.fetchImpl }), /HTTP 504 \(a problem on GitHub's side, 3 tries\)/);
+    assert.equal(a.calls.length, 3);
+    // A 404 is not tried again.
+    a = answers(404);
+    await assert.rejects(firmware.githubReleases({ repo: 'stumarti/Switchboard', fetchImpl: a.fetchImpl }), /doesn't know that repository/);
+    assert.equal(a.calls.length, 1);
+  } finally {
+    firmware.GH_RETRY_MS.splice(0, firmware.GH_RETRY_MS.length, ...saved);
+  }
+});
