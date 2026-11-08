@@ -307,7 +307,7 @@ async function seed() {
   });
   await api('PUT', `/api/dashboards/${office.slug}`, { name: 'Reception', layout: o.layout });
 
-  // A hall panel: the bins, a reminder, the air and the pollen.
+  // A hall panel: the bins, a reminder, low batteries, the air and the pollen.
   const hall = await api('POST', '/api/dashboards', { name: 'Hall', template: 'blank' });
   const hl = await api('GET', `/api/dashboards/${hall.slug}`);
   hl.layout.screens[0].title = 'Hall';
@@ -315,7 +315,9 @@ async function seed() {
   hl.layout.screens[0].columns = [
     [
       { type: 'weather', entity: 'weather.home' },
-      { type: 'message', text: 'Keys, wallet, phone?', size: 'bold', align: 'center', icon: 'key-variant' }
+      { type: 'message', text: 'Keys, wallet, phone?', size: 'bold', align: 'center', icon: 'key-variant' },
+      // Every battery the house has, less the home battery's charge.
+      { type: 'batteries', title: 'Low batteries', exclude: ['sensor.battery_soc'] }
     ],
     [
       {
