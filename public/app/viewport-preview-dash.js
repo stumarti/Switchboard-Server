@@ -159,11 +159,14 @@ export function DashStatusIcons({ d }) {
   </div>`;
 }
 
-const NowItem = ({ icon, color, line1, line2 }) => html`<div class="kd-item">
+// `color2`: the second line's colour. Each line stops with "…" at the
+// column's edge, as the display cuts them (Bins and Batteries do).
+const CUT = { overflow: 'hidden', textOverflow: 'ellipsis', right: '4px' };
+const NowItem = ({ icon, color, line1, line2, color2 = 1, cut }) => html`<div class="kd-item">
   <${Box} x=${0} y=${0} w=${4} h=${40} color=${color} />
   <${I} x=${6} y=${8} name=${icon} size=${24} color=${color} />
-  <${T} x=${36} y=${17} size=${24} bold color=${color}>${line1}<//>
-  ${line2 && html`<${T} x=${36} y=${33}>${line2}<//>`}
+  <${T} x=${36} y=${17} size=${24} bold color=${color} style=${cut ? CUT : undefined}>${line1}<//>
+  ${line2 && html`<${T} x=${36} y=${33} color=${color2} style=${cut ? CUT : undefined}>${line2}<//>`}
 </div>`;
 
 export function DashNow({ d, title }) {
@@ -185,6 +188,30 @@ export function DashCalendar({ d, title }) {
             ${l.description && html`<${T} x=${l.time ? 82 : 26} y=${33}>${l.description}<//>`}
           </div>`
         )}
+  </div>`;
+}
+
+// Bins and Batteries, drawn as NOW's items under a heading of their own.
+const ListHeading = ({ title, word }) => html`<div class="kd-heading" style="height:24px"><${T} x=${8} y=${16}>${(title || word).toUpperCase()}<//></div>`;
+const ListEmpty = ({ text }) => html`<div class="kd-item" style="height:20px"><${T} x=${10} y=${10}>${text}<//></div>`;
+
+export function DashBins({ d, title }) {
+  return html`<div class="kd-list">
+    <${ListHeading} title=${title} word="Bins" />
+    ${d.note && html`<div class="kd-item" style="height:24px"><${T} x=${8} y=${14} color=${2}>${d.note}<//></div>`}
+    ${d.lines.length
+      ? d.lines.map((b) => html`<${NowItem} icon=${b.icon} color=${b.color} line1=${b.name} line2=${b.when} color2=${b.soon ? 2 : 1} cut />`)
+      : html`<${ListEmpty} text=${d.empty || 'No collections'} />`}
+  </div>`;
+}
+
+export function DashBatteries({ d, title }) {
+  return html`<div class="kd-list">
+    <${ListHeading} title=${title} word="Low batteries" />
+    ${d.items.length
+      ? d.items.map((it) => html`<${NowItem} icon=${it.icon} color=${it.color} line1=${it.name} line2=${it.value} cut />`)
+      : html`<${ListEmpty} text=${d.empty || 'All batteries fine'} />`}
+    ${d.more > 0 && html`<div class="kd-item" style="height:20px"><${T} x=${36} y=${12}>and ${d.more} more<//></div>`}
   </div>`;
 }
 
@@ -289,6 +316,8 @@ export const DASH_SECTIONS = {
   statusIcons: DashStatusIcons,
   now: DashNow,
   calendar: DashCalendar,
+  bins: DashBins,
+  batteries: DashBatteries,
   heating: DashHeating,
   alarm: DashAlarm,
   openings: DashOpenings,
