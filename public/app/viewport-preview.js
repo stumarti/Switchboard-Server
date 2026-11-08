@@ -408,18 +408,6 @@ const Message = ({ d }) =>
       </div>`
     : null;
 
-const Bins = ({ d }) =>
-  html`<div>
-    ${d.note && html`<div class="vp-med" style=${{ color: c(2) }}>${d.note}</div>`}
-    ${d.lines.length
-      ? d.lines.map((b) => html`<div class="vp-row vp-rowline">
-          <span style=${{ color: c(b.color) }}><${Icon} name=${b.icon} size=${24} /></span>
-          <span class="vp-med" style="flex:1">${b.name}</span>
-          <span class="vp-med" style=${{ color: b.soon ? c(2) : undefined }}>${b.when}</span>
-        </div>`)
-      : html`<${Missing} what=${d.empty} />`}
-  </div>`;
-
 const AirQuality = ({ d }) =>
   d.items.length
     ? html`<div>${d.items.map((it) => html`<div class="vp-row vp-rowline">
@@ -428,18 +416,6 @@ const AirQuality = ({ d }) =>
         <span class="vp-med" style=${{ color: c(it.color) }}>${it.value}</span>
         ${it.level && html`<span class="vp-tiny" style="width:40px;text-align:right">${it.level}</span>`}
       </div>`)}</div>`
-    : html`<${Missing} what=${d.empty} />`;
-
-const Batteries = ({ d }) =>
-  d.items.length
-    ? html`<div>
-        ${d.items.map((it) => html`<div class="vp-row vp-rowline">
-          <span style=${{ color: c(it.color) }}><${Icon} name=${it.icon} size=${24} /></span>
-          <span class="vp-med" style="flex:1">${it.name}</span>
-          <span class="vp-med" style=${{ color: c(it.color) }}>${it.value}</span>
-        </div>`)}
-        ${d.more > 0 && html`<div class="vp-small vp-muted">and ${d.more} more</div>`}
-      </div>`
     : html`<${Missing} what=${d.empty} />`;
 
 // A photo from Immich, as the panel shows it (the server's six-colour
@@ -550,9 +526,7 @@ const SECTIONS = {
   announcements: Announcements,
   guestWifi: GuestWifi,
   message: Message,
-  bins: Bins,
-  airQuality: AirQuality,
-  batteries: Batteries
+  airQuality: AirQuality
 };
 
 // The panel's columns: a 250 px sidebar and the main column (a dotted
